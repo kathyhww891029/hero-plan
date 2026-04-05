@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>🦸 英雄成长计划</title>
+<!-- PWA 支持 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffd700">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="英雄计划">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+<script>
+  // 注册 Service Worker（PWA离线支持）
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('✅ SW 注册成功'))
+        .catch(err => console.log('SW 注册失败:', err));
+    });
+  }
+</script>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<header class="app-header">
+  <div class="header-title">🦸 英雄成长计划</div>
+  <div class="header-score">
+    <span class="score-label">英雄经验值</span>
+    <span class="score-value" id="totalScore">0</span>
+    <span class="score-unit">分</span>
+  </div>
+</header>
+
+<!-- 标签页 -->
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="daily">⚡ 今日任务</button>
+  <button class="tab-btn" data-tab="cards">🎴 任务卡</button>
+  <button class="tab-btn" data-tab="shop">🏪 补给站</button>
+  <button class="tab-btn" data-tab="rope">🪢 跳绳</button>
+  <button class="tab-btn" data-tab="dad">💌 爸爸</button>
+</nav>
+
+<!-- ═══ TAB: 今日任务 ═══ -->
+<div class="tab-content active" id="tab-daily">
+  <div class="section-title">📅 <span id="todayDate"></span></div>
+
+  <!-- 每日固定 -->
+  <div class="card-section">
+    <div class="section-header blue">⭐ 每日固定任务</div>
+    <div id="dailyFixed"></div>
+  </div>
+
+  <!-- 每日可领取 -->
+  <div class="card-section">
+    <div class="section-header green">🎯 每日可领取（做了主动来拿，不做不扣分）</div>
+    <div id="dailyOptional"></div>
+  </div>
+
+  <!-- 作业独立计分 -->
+  <div class="card-section">
+    <div class="section-header purple">📝 作业独立计分（自主权给孩子）</div>
+    <div id="dailyHomework"></div>
+  </div>
+
+  <!-- 今日统计 -->
+  <div class="today-summary">
+    <div class="summary-row">
+      <span>今日已得</span>
+      <span class="summary-score" id="todayScore">0</span>
+      <span>分</span>
+    </div>
+    <div class="summary-tip">全做到可得23分 | 日常约12-16分，加油！⚡</div>
+    <button class="btn-reset" id="btnResetDay">🔄 新的一天（重置今日打卡）</button>
+  </div>
+</div>
+
+<!-- ═══ TAB: 任务卡 ═══ -->
+<div class="tab-content" id="tab-cards">
+  <div class="cards-filter">
+    <button class="filter-btn active" data-filter="all">全部</button>
+    <button class="filter-btn" data-filter="🌙 习惯养成">🌙 习惯</button>
+    <button class="filter-btn" data-filter="📚 阅读探索">📚 阅读</button>
+    <button class="filter-btn" data-filter="🎨 创造挑战">🎨 创造</button>
+    <button class="filter-btn" data-filter="💪 运动挑战">💪 运动</button>
+    <button class="filter-btn" data-filter="🧠 独立思考">🧠 思考</button>
+    <button class="filter-btn" data-filter="⚡ 数学专项">⚡ 数学</button>
+    <button class="filter-btn" data-filter="🌍 英语专项">🌍 英语</button>
+  </div>
+  <div id="cardsGrid"></div>
+</div>
+
+<!-- ═══ TAB: 补给站 ═══ -->
+<div class="tab-content" id="tab-shop">
+  <div class="shop-balance">
+    <div class="balance-label">当前积分</div>
+    <div class="balance-value" id="shopScore">0</div>
+    <div class="balance-unit">分</div>
+  </div>
+  <div id="shopContent"></div>
+</div>
+
+<!-- ═══ TAB: 跳绳 ═══ -->
+<div class="tab-content" id="tab-rope">
+  <div class="rope-header">
+    <div class="rope-title">🪢 跳绳英雄榜</div>
+    <div class="rope-current">
+      当前最高记录：<strong id="ropeCurrent">0</strong> 个
+    </div>
+  </div>
+  <div class="rope-input-area">
+    <input type="number" id="ropeInput" placeholder="今天跳了几个？" min="0" max="999">
+    <button class="btn-primary" id="btnRopeSubmit">📊 记录</button>
+  </div>
+  <div class="rope-milestones" id="ropeMilestones"></div>
+  <div class="rope-history">
+    <div class="section-header">📅 历史记录</div>
+    <div id="ropeHistory"></div>
+  </div>
+</div>
+
+<!-- ═══ TAB: 爸爸 ═══ -->
+<div class="tab-content" id="tab-dad">
+  <div id="dadGuide"></div>
+</div>
+
+<!-- 弹窗：爸爸彩蛋 -->
+<div class="modal-overlay" id="eggModal" style="display:none">
+  <div class="modal-box egg-modal">
+    <div class="egg-title">🎬 爸爸挑战模式</div>
+    <div class="egg-desc">爸爸需要看完整部电影不睡着！<br>孩子来监督 👀</div>
+    <div class="egg-timer" id="eggTimer">准备好了吗？</div>
+    <div class="egg-buttons">
+      <button class="btn-success" id="btnDadWin">✅ 爸爸撑住了！</button>
+      <button class="btn-danger" id="btnDadSleep">😴 爸爸睡着了...</button>
+      <button class="btn-secondary" id="btnEggClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹窗：积分庆祝 -->
+<div class="modal-overlay" id="celebModal" style="display:none">
+  <div class="modal-box">
+    <div class="celeb-emoji" id="celebEmoji">🎉</div>
+    <div class="celeb-title" id="celebTitle">太棒了！</div>
+    <div class="celeb-desc" id="celebDesc"></div>
+    <button class="btn-primary" onclick="closeModal('celebModal')">好的！</button>
+  </div>
+</div>
+
+<!-- 弹窗：任务卡详情 -->
+<div class="modal-overlay" id="cardModal" style="display:none">
+  <div class="modal-box">
+    <div class="card-modal-stars" id="cardModalStars"></div>
+    <div class="card-modal-name" id="cardModalName"></div>
+    <div class="card-modal-sub" id="cardModalSub"></div>
+    <div class="card-modal-desc" id="cardModalDesc"></div>
+    <div class="card-modal-score" id="cardModalScore"></div>
+    <div class="card-modal-btns">
+      <button class="btn-success" id="btnCardClaim">✅ 我完成了！领取积分</button>
+      <button class="btn-secondary" onclick="closeModal('cardModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
