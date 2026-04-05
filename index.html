@@ -76,8 +76,10 @@
 
 <!-- 标签页 -->
 <nav class="tab-nav">
-  <button class="tab-btn active" data-tab="daily">⚡ 今日任务</button>
+  <button class="tab-btn active" data-tab="daily">⚡ 今日</button>
+  <button class="tab-btn" data-tab="weekly">📅 本周</button>
   <button class="tab-btn" data-tab="cards">🎴 任务卡</button>
+  <button class="tab-btn" data-tab="achievements">🏆 成就</button>
   <button class="tab-btn" data-tab="shop">🏪 补给站</button>
   <button class="tab-btn" data-tab="rope">🪢 跳绳</button>
   <button class="tab-btn" data-tab="dad">💌 爸爸</button>
@@ -116,6 +118,99 @@
     </div>
     <div class="summary-tip">全做到可得23分 | 日常约12-16分，加油！⚡</div>
     <button class="btn-reset" id="btnResetDay">🔄 新的一天（重置今日打卡）</button>
+  </div>
+</div>
+
+<!-- ═══ TAB: 本周任务 ═══ -->
+<div class="tab-content" id="tab-weekly">
+  <!-- 本周标题 + 进度条 -->
+  <div class="weekly-header">
+    <div class="weekly-title-row">
+      <div class="weekly-title">📅 本周任务总览</div>
+      <div class="weekly-date-range" id="weeklyDateRange"></div>
+    </div>
+    <div class="weekly-score-row">
+      <div class="weekly-score-box">
+        <div class="weekly-score-num" id="weeklyTotalScore">0</div>
+        <div class="weekly-score-label">本周累计</div>
+      </div>
+      <div class="weekly-score-box">
+        <div class="weekly-score-num" id="weeklyTaskDone">0</div>
+        <div class="weekly-score-label">今日任务</div>
+      </div>
+      <div class="weekly-score-box">
+        <div class="weekly-score-num" id="weeklyCardDone">0</div>
+        <div class="weekly-score-label">任务卡</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 今日打卡情况 -->
+  <div class="weekly-section">
+    <div class="weekly-section-title">📋 今日打卡 <span class="weekly-section-sub" id="weeklyTodayDate"></span></div>
+    <div id="weeklyToday"></div>
+  </div>
+
+  <!-- 每日固定任务说明 -->
+  <div class="weekly-section">
+    <div class="weekly-section-title">⭐ 每日固定任务 <span class="weekly-section-sub">每天都要完成的</span></div>
+    <div id="weeklyFixed"></div>
+  </div>
+
+  <!-- 每日可选任务说明 -->
+  <div class="weekly-section">
+    <div class="weekly-section-title">🎯 每日可领任务 <span class="weekly-section-sub">做了来领，不做不扣</span></div>
+    <div id="weeklyOptional"></div>
+  </div>
+
+  <!-- 本周任务卡汇总 -->
+  <div class="weekly-section">
+    <div class="weekly-section-title">🎴 本周可做任务卡 <span class="weekly-section-sub">点卡片去完成</span></div>
+    <div id="weeklyCards"></div>
+  </div>
+
+  <!-- 本周兑换目标 -->
+  <div class="weekly-section">
+    <div class="weekly-section-title">🏪 本周兑换目标 <span class="weekly-section-sub">攒够分就能换</span></div>
+    <div id="weeklyShopGoal"></div>
+  </div>
+</div>
+
+<!-- ═══ TAB: 成就中心 ═══ -->
+<div class="tab-content" id="tab-achievements">
+  <!-- 英雄档案 -->
+  <div class="ach-hero-card" id="achHeroCard">
+    <div class="ach-hero-avatar" id="achHeroAvatar">🦸</div>
+    <div class="ach-hero-info">
+      <div class="ach-hero-name">英雄成长档案</div>
+      <div class="ach-hero-score">累计 <span id="achTotalScore">0</span> 分</div>
+      <div class="ach-hero-level" id="achHeroLevel">探索者</div>
+    </div>
+  </div>
+
+  <!-- 已解锁徽章 -->
+  <div class="ach-section">
+    <div class="ach-section-title">🏅 我的徽章收藏</div>
+    <div class="ach-badges-tip">完成各类任务后自动解锁</div>
+    <div class="ach-badges-grid" id="achBadges"></div>
+  </div>
+
+  <!-- 任务卡系列进度 -->
+  <div class="ach-section">
+    <div class="ach-section-title">🎯 任务卡系列进度</div>
+    <div class="ach-series-list" id="achSeriesList"></div>
+  </div>
+
+  <!-- 父子演出里程碑 -->
+  <div class="ach-section">
+    <div class="ach-section-title">🎤 演出里程碑</div>
+    <div class="ach-show-list" id="achShowList"></div>
+  </div>
+
+  <!-- 跳绳里程碑 -->
+  <div class="ach-section">
+    <div class="ach-section-title">🪢 跳绳里程碑</div>
+    <div class="ach-rope-list" id="achRopeList"></div>
   </div>
 </div>
 

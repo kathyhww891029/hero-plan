@@ -142,6 +142,8 @@ function renderAll() {
   renderShop();
   renderRope();
   renderDadGuide();
+  renderWeekly();
+  renderAchievements();
 }
 
 // ── 渲染头部 ──────────────────────────────────────────────────
@@ -648,6 +650,366 @@ function bindEvents() {
       if (e.target === overlay) overlay.style.display = 'none';
     });
   });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   📅 每周任务总览
+══════════════════════════════════════════════════════════════ */
+
+// ── 英雄等级定义 ──────────────────────────────────────────────
+const HERO_LEVELS = [
+  { min: 0,   max: 29,  name: '⭐ 小小探索者', avatar: '🌱', color: '#06D6A0',
+    desc: '勇敢踏出第一步，英雄的旅程已经开始！' },
+  { min: 30,  max: 59,  name: '⚡ 初级英雄',   avatar: '⚡', color: '#118AB2',
+    desc: '积累了30分！你的能量正在蓄积！' },
+  { min: 60,  max: 99,  name: '🔥 成长战士',   avatar: '🔥', color: '#F9A825',
+    desc: '60分！战士的光芒开始显现！' },
+  { min: 100, max: 149, name: '💫 超级英雄',    avatar: '💫', color: '#EF476F',
+    desc: '100分突破！超级英雄正式诞生！' },
+  { min: 150, max: 199, name: '🏆 传说英雄',    avatar: '🏆', color: '#7B2FBE',
+    desc: '150分！传说级别的英雄出现了！' },
+  { min: 200, max: Infinity, name: '👑 宇宙英雄', avatar: '👑', color: '#FF6B35',
+    desc: '200分！你已经是宇宙级别的英雄！' },
+];
+
+// ── 徽章定义 ──────────────────────────────────────────────────
+const BADGES = [
+  // 积分里程碑徽章
+  { id:'b_score30',  icon:'⭐', name:'初出茅庐',    desc:'累计积分达到30分',   unlockDesc:'再努力一下，累计积分到30分！', check: s => s.totalScore >= 30 },
+  { id:'b_score60',  icon:'🔥', name:'烈焰战士',    desc:'累计积分达到60分',   unlockDesc:'累计积分到60分解锁', check: s => s.totalScore >= 60 },
+  { id:'b_score100', icon:'💫', name:'超级英雄',    desc:'累计积分达到100分',  unlockDesc:'累计积分到100分解锁', check: s => s.totalScore >= 100 },
+  { id:'b_score150', icon:'🏆', name:'传说英雄',    desc:'累计积分达到150分',  unlockDesc:'累计积分到150分解锁', check: s => s.totalScore >= 150 },
+  { id:'b_score200', icon:'👑', name:'宇宙英雄',    desc:'累计积分达到200分',  unlockDesc:'累计积分到200分解锁', check: s => s.totalScore >= 200 },
+  // 跳绳徽章
+  { id:'b_rope130',  icon:'🪢', name:'跳绳初级',    desc:'跳绳达到130个',      unlockDesc:'跳绳超过130个解锁', check: s => s.ropeMax >= 130 },
+  { id:'b_rope150',  icon:'💪', name:'跳绳勇士',    desc:'跳绳达到150个',      unlockDesc:'跳绳超过150个解锁', check: s => s.ropeMax >= 150 },
+  { id:'b_rope200',  icon:'🏅', name:'跳绳宇宙英雄',desc:'跳绳达到200个',      unlockDesc:'跳绳达到200个解锁', check: s => s.ropeMax >= 200 },
+  // 任务卡系列徽章
+  { id:'b_habit3',   icon:'🛡️', name:'敖丙传人',   desc:'习惯养成系列完成3张', unlockDesc:'完成习惯养成系列任意3张任务卡', check: s => countSeriesDone(s,'🌙 习惯养成') >= 3 },
+  { id:'b_read3',    icon:'📚', name:'小书虫',      desc:'阅读探索系列完成3张', unlockDesc:'完成阅读探索系列任意3张任务卡', check: s => countSeriesDone(s,'📚 阅读探索') >= 3 },
+  { id:'b_music3',   icon:'🎵', name:'音乐小达人',  desc:'音乐探索系列完成3张', unlockDesc:'完成音乐探索系列任意3张任务卡', check: s => countSeriesDone(s,'🎵 音乐探索') >= 3 },
+  { id:'b_show1',    icon:'🎤', name:'初登舞台',    desc:'完成第一次父子演出',  unlockDesc:'完成「父子首演·小剧场版」任务卡', check: s => (s.cardClaims||{})['show1'] > 0 },
+  { id:'b_create3',  icon:'🧱', name:'创造大师',    desc:'创造挑战系列完成3张', unlockDesc:'完成创造挑战系列任意3张任务卡', check: s => countSeriesDone(s,'🎨 创造挑战') >= 3 },
+  // 特殊行为徽章
+  { id:'b_firstcard',icon:'🎴', name:'初次出手',   desc:'完成第一张任务卡',   unlockDesc:'完成任意一张任务卡后解锁', check: s => Object.values(s.cardClaims||{}).some(v=>v>0) },
+  { id:'b_math5',    icon:'⚡', name:'闪电大脑',   desc:'口算练习完成5次',    unlockDesc:'进行5次口算练习后解锁', check: () => { try { const d=JSON.parse(localStorage.getItem('heroplan_math_v1')||'{}'); return (d.history||[]).length >= 5; } catch(e){ return false; } } },
+];
+
+function countSeriesDone(s, seriesName) {
+  const claims = s.cardClaims || {};
+  return TASK_CARDS.filter(c => c.series === seriesName && claims[c.id] > 0).length;
+}
+
+// ── 渲染每周任务总览 ──────────────────────────────────────────
+function renderWeekly() {
+  // 日期范围
+  const now = new Date();
+  const dayOfWeek = now.getDay() || 7; // 1=周一
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - dayOfWeek + 1);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = d => `${d.getMonth()+1}/${d.getDate()}`;
+  const daysZh = ['周日','周一','周二','周三','周四','周五','周六'];
+
+  const drEl = document.getElementById('weeklyDateRange');
+  if (drEl) drEl.textContent = `${fmt(monday)}(周一) — ${fmt(sunday)}(周日)`;
+
+  const todayEl = document.getElementById('weeklyTodayDate');
+  if (todayEl) todayEl.textContent = `${now.getMonth()+1}月${now.getDate()}日 ${daysZh[now.getDay()]}`;
+
+  // 统计数字
+  const allDaily = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+  const checkedToday = Object.keys(state.todayChecked || {}).length;
+  const cardsDone = Object.values(state.cardClaims || {}).reduce((a,b)=>a+(b>0?1:0),0);
+
+  const wsEl = document.getElementById('weeklyTotalScore');
+  if (wsEl) wsEl.textContent = state.totalScore || 0;
+  const wdEl = document.getElementById('weeklyTaskDone');
+  if (wdEl) wdEl.textContent = checkedToday;
+  const wcEl = document.getElementById('weeklyCardDone');
+  if (wcEl) wcEl.textContent = cardsDone;
+
+  // ── 今日打卡情况 ────────────────────────────────────────────
+  const todayDiv = document.getElementById('weeklyToday');
+  if (todayDiv) {
+    const allDailyTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const items = allDailyTasks.map(t => {
+      const st = state.todayChecked[t.id];
+      let badge = '', cls = '';
+      if (st === 'approved') { badge = '<span class="wtask-badge done">✅ 已完成</span>'; cls = 'done'; }
+      else if (st === 'pending') { badge = '<span class="wtask-badge pending">⏳ 待审核</span>'; cls = 'pending'; }
+      else { badge = '<span class="wtask-badge none">未完成</span>'; }
+      return `<div class="wtask-row ${cls}">
+        <span class="wtask-icon">${t.icon}</span>
+        <span class="wtask-name">${t.name}</span>
+        <span class="wtask-score">+${t.score}</span>
+        ${badge}
+      </div>`;
+    });
+    todayDiv.innerHTML = items.join('');
+  }
+
+  // ── 每日固定任务卡片 ────────────────────────────────────────
+  const fixedDiv = document.getElementById('weeklyFixed');
+  if (fixedDiv) {
+    fixedDiv.innerHTML = DAILY_FIXED.map(t => `
+      <div class="weekly-task-card fixed">
+        <div class="wtc-left">
+          <span class="wtc-icon">${t.icon}</span>
+          <div>
+            <div class="wtc-name">${t.name}</div>
+            <div class="wtc-sub">${t.sub}</div>
+            ${t.tip ? `<div class="wtc-tip">💡 ${t.tip}</div>` : ''}
+          </div>
+        </div>
+        <div class="wtc-score">+${t.score}<span class="wtc-unit">分</span></div>
+      </div>`).join('');
+  }
+
+  // ── 每日可选任务 ────────────────────────────────────────────
+  const optDiv = document.getElementById('weeklyOptional');
+  if (optDiv) {
+    const optAll = [...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    optDiv.innerHTML = optAll.map(t => `
+      <div class="weekly-task-card optional">
+        <div class="wtc-left">
+          <span class="wtc-icon">${t.icon}</span>
+          <div>
+            <div class="wtc-name">${t.name}</div>
+            <div class="wtc-sub">${t.sub}</div>
+            ${t.tip ? `<div class="wtc-tip">💡 ${t.tip}</div>` : ''}
+          </div>
+        </div>
+        <div class="wtc-score">+${t.score}<span class="wtc-unit">分</span></div>
+      </div>`).join('');
+  }
+
+  // ── 本周可做任务卡（已解锁的）──────────────────────────────
+  const cardsDiv = document.getElementById('weeklyCards');
+  if (cardsDiv) {
+    const unlocked = TASK_CARDS.filter(c => isCardUnlocked(c));
+    const locked = TASK_CARDS.filter(c => !isCardUnlocked(c));
+
+    // 按系列分组显示已解锁
+    const groups = {};
+    unlocked.forEach(c => {
+      if (!groups[c.series]) groups[c.series] = [];
+      groups[c.series].push(c);
+    });
+
+    let html = '';
+    if (unlocked.length > 0) {
+      html += '<div class="wcard-subtitle">✅ 现在可以做的任务卡</div>';
+      Object.entries(groups).forEach(([series, cards]) => {
+        html += `<div class="wcard-series-label">${series}</div>`;
+        html += cards.map(c => {
+          const done = (state.cardClaims||{})[c.id] > 0;
+          return `<div class="wcard-row ${done?'done':''}" onclick="switchToCardsTab('${c.id}')">
+            <span class="wcard-stars">${c.stars}</span>
+            <div class="wcard-info">
+              <div class="wcard-name">${c.name}</div>
+              <div class="wcard-desc">${c.desc}</div>
+            </div>
+            <div class="wcard-right">
+              <div class="wcard-score">+${c.score}</div>
+              ${done ? '<div class="wcard-done-badge">✅</div>' : ''}
+            </div>
+          </div>`;
+        }).join('');
+      });
+    }
+
+    // 显示最近可解锁的（差多少分）
+    if (locked.length > 0) {
+      const nearLocked = locked
+        .filter(c => !c.weekUnlock && c.unlockAt > 0)
+        .sort((a,b) => a.unlockAt - b.unlockAt)
+        .slice(0, 3);
+
+      if (nearLocked.length > 0) {
+        html += '<div class="wcard-subtitle locked-tip">🔒 即将解锁（再攒一点就能用）</div>';
+        html += nearLocked.map(c => {
+          const gap = c.unlockAt - state.totalScore;
+          return `<div class="wcard-row locked">
+            <span class="wcard-stars">🔒</span>
+            <div class="wcard-info">
+              <div class="wcard-name">${c.name}</div>
+              <div class="wcard-desc">${c.desc}</div>
+            </div>
+            <div class="wcard-right">
+              <div class="wcard-score" style="color:#aaa">+${c.score}</div>
+              <div class="wcard-unlock-gap">还差${gap}分</div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    cardsDiv.innerHTML = html || '<div class="empty-tip">暂无可用任务卡</div>';
+  }
+
+  // ── 本周兑换目标 ────────────────────────────────────────────
+  const shopDiv = document.getElementById('weeklyShopGoal');
+  if (shopDiv) {
+    const score = state.totalScore || 0;
+    // 找出差距 ≤ 80分 的奖励
+    const allItems = SHOP.flatMap(g => g.items.map(i => ({ ...i, type: g.type, typeColor: g.color })));
+    const reachable = allItems.filter(i => !i.isEgg && i.cost <= score + 80).sort((a,b) => a.cost - b.cost);
+
+    if (reachable.length === 0) {
+      shopDiv.innerHTML = '<div class="empty-tip">再攒一些分，奖励就来了！⚡</div>';
+    } else {
+      shopDiv.innerHTML = reachable.map(item => {
+        const canBuy = score >= item.cost;
+        const gap = item.cost - score;
+        return `<div class="wshop-row ${canBuy?'can-buy':''}">
+          <span class="wshop-icon">${item.icon}</span>
+          <div class="wshop-info">
+            <div class="wshop-name">${item.name}</div>
+            <div class="wshop-type" style="color:${item.typeColor}">${item.type}</div>
+          </div>
+          <div class="wshop-right">
+            <div class="wshop-cost">${item.cost}分</div>
+            ${canBuy
+              ? '<div class="wshop-badge can">✅ 可兑换</div>'
+              : `<div class="wshop-badge gap">还差${gap}分</div>`}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+// 点击任务卡跳转到任务卡Tab
+function switchToCardsTab(cardId) {
+  const tabBtn = document.querySelector('[data-tab="cards"]');
+  if (tabBtn) tabBtn.click();
+  setTimeout(() => openCardModal(cardId), 200);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   🏆 成就中心
+══════════════════════════════════════════════════════════════ */
+
+function renderAchievements() {
+  const score = state.totalScore || 0;
+
+  // ── 英雄档案 ────────────────────────────────────────────────
+  const lvObj = HERO_LEVELS.slice().reverse().find(l => score >= l.min) || HERO_LEVELS[0];
+  const avatarEl = document.getElementById('achHeroAvatar');
+  const levelEl = document.getElementById('achHeroLevel');
+  const scoreEl = document.getElementById('achTotalScore');
+  const heroCard = document.getElementById('achHeroCard');
+  if (avatarEl) avatarEl.textContent = lvObj.avatar;
+  if (levelEl) { levelEl.textContent = lvObj.name; levelEl.style.color = lvObj.color; }
+  if (scoreEl) scoreEl.textContent = score;
+  if (heroCard) heroCard.style.borderColor = lvObj.color;
+
+  // ── 徽章区 ──────────────────────────────────────────────────
+  const badgesGrid = document.getElementById('achBadges');
+  if (badgesGrid) {
+    badgesGrid.innerHTML = BADGES.map(b => {
+      const unlocked = b.check(state);
+      return `<div class="ach-badge-item ${unlocked?'unlocked':'locked'}">
+        <div class="ach-badge-icon">${unlocked ? b.icon : '🔒'}</div>
+        <div class="ach-badge-name">${b.name}</div>
+        <div class="ach-badge-desc">${unlocked ? b.desc : b.unlockDesc}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── 任务卡系列进度 ──────────────────────────────────────────
+  const seriesList = document.getElementById('achSeriesList');
+  if (seriesList) {
+    // 统计各系列
+    const seriesMap = {};
+    TASK_CARDS.forEach(c => {
+      if (c.series === '🎤 演出里程碑') return; // 单独展示
+      if (!seriesMap[c.series]) seriesMap[c.series] = { total:0, done:0, color:c.color, cards:[] };
+      seriesMap[c.series].total++;
+      seriesMap[c.series].cards.push(c);
+      if ((state.cardClaims||{})[c.id] > 0) seriesMap[c.series].done++;
+    });
+
+    seriesList.innerHTML = Object.entries(seriesMap).map(([series, info]) => {
+      const pct = Math.round(info.done / info.total * 100);
+      const cardDetails = info.cards.map(c => {
+        const done = (state.cardClaims||{})[c.id] > 0;
+        const locked = !isCardUnlocked(c);
+        let statusIcon = done ? '✅' : locked ? '🔒' : '⬜';
+        return `<div class="ach-card-item ${done?'done':locked?'locked':''}">
+          <span class="ach-card-status">${statusIcon}</span>
+          <span class="ach-card-stars">${c.stars}</span>
+          <div class="ach-card-detail">
+            <div class="ach-card-name">${c.name}</div>
+            <div class="ach-card-how">${locked ? `🔒 累计${c.unlockAt}分解锁` : done ? '✅ 已完成' : `📌 ${c.desc}`}</div>
+          </div>
+          <span class="ach-card-pts">+${c.score}</span>
+        </div>`;
+      }).join('');
+
+      return `<div class="ach-series-block">
+        <div class="ach-series-header">
+          <span class="ach-series-name">${series}</span>
+          <span class="ach-series-count" style="color:${info.color}">${info.done}/${info.total}</span>
+        </div>
+        <div class="ach-series-progress">
+          <div class="ach-series-bar" style="width:${pct}%;background:${info.color}"></div>
+        </div>
+        <div class="ach-cards-list">${cardDetails}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── 父子演出里程碑 ──────────────────────────────────────────
+  const showList = document.getElementById('achShowList');
+  if (showList) {
+    const showCards = TASK_CARDS.filter(c => c.series === '🎤 演出里程碑');
+    showList.innerHTML = showCards.map((c, i) => {
+      const done = (state.cardClaims||{})[c.id] > 0;
+      const locked = !isCardUnlocked(c);
+      return `<div class="ach-show-item ${done?'done':locked?'locked':'available'}">
+        <div class="ach-show-num">${i+1}</div>
+        <div class="ach-show-content">
+          <div class="ach-show-name">${c.stars} ${c.name}</div>
+          <div class="ach-show-desc">${c.desc}</div>
+          <div class="ach-show-how">
+            ${done ? '🎉 已完成！传奇时刻' : locked
+              ? `🔒 需要累计 ${c.unlockAt} 分解锁 · 当前 ${score} 分 · 还差 ${c.unlockAt - score} 分`
+              : `✨ 已解锁！+${c.score}分等你来拿`}
+          </div>
+        </div>
+        <div class="ach-show-pts" style="color:${done?'#06D6A0':locked?'#aaa':'#F9A825'}">
+          ${done ? '✅' : '+' + c.score}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── 跳绳里程碑 ──────────────────────────────────────────────
+  const ropeList = document.getElementById('achRopeList');
+  if (ropeList) {
+    const ropeMax = state.ropeMax || 0;
+    ropeList.innerHTML = ROPE_MILESTONES.map(m => {
+      const done = (state.ropeMilestonesAchieved||[]).includes(m.target);
+      const gap = m.target - ropeMax;
+      return `<div class="ach-rope-item ${done?'done':''}">
+        <div class="ach-rope-target">${m.target}<span style="font-size:12px">个</span></div>
+        <div class="ach-rope-content">
+          <div class="ach-rope-label">${m.label}</div>
+          <div class="ach-rope-how">
+            ${done
+              ? `🏆 已达成！+${m.bonus}分`
+              : ropeMax > 0
+                ? `当前最高 ${ropeMax} 个 · 还差 ${Math.max(0,gap)} 个`
+                : `努力跳绳，达到 ${m.target} 个！`}
+          </div>
+        </div>
+        <div class="ach-rope-bonus ${done?'done':''}">${done?'✅':'+'+m.bonus}</div>
+      </div>`;
+    }).join('');
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -803,3 +803,386 @@ body {
   60% { transform: scale(1.05); }
   100%{ transform: scale(1); opacity: 1; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   📅 每周任务总览 样式
+══════════════════════════════════════════════════════════════ */
+
+/* 顶部汇总卡 */
+.weekly-header {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 16px;
+  padding: 16px;
+  margin: 12px 12px 8px;
+}
+.weekly-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.weekly-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #FFE14D;
+}
+.weekly-date-range {
+  font-size: 12px;
+  color: #aaa;
+}
+.weekly-score-row {
+  display: flex;
+  gap: 8px;
+}
+.weekly-score-box {
+  flex: 1;
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 10px 6px;
+  text-align: center;
+}
+.weekly-score-num {
+  font-size: 24px;
+  font-weight: 900;
+  color: #FFE14D;
+  line-height: 1;
+}
+.weekly-score-label {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 4px;
+}
+
+/* 分区块 */
+.weekly-section {
+  margin: 8px 12px;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.weekly-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  padding: 12px 14px 10px;
+  background: #f8f9fc;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.weekly-section-sub {
+  font-size: 11px;
+  color: #999;
+  font-weight: 400;
+}
+
+/* 今日打卡行 */
+.wtask-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f5f5f5;
+  gap: 8px;
+}
+.wtask-row:last-child { border-bottom: none; }
+.wtask-row.done { background: #f0fff6; }
+.wtask-row.pending { background: #fffbf0; }
+.wtask-icon { font-size: 18px; flex-shrink: 0; }
+.wtask-name { flex: 1; font-size: 13px; font-weight: 600; color: #333; }
+.wtask-score { font-size: 13px; font-weight: 700; color: #888; margin-right: 6px; }
+.wtask-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.wtask-badge.done { background: #d4f7e7; color: #06A96A; }
+.wtask-badge.pending { background: #fff3cd; color: #d49f00; }
+.wtask-badge.none { background: #f0f0f0; color: #aaa; }
+
+/* 任务卡片（固定/可选） */
+.weekly-task-card {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f5f5f5;
+  gap: 8px;
+}
+.weekly-task-card:last-child { border-bottom: none; }
+.weekly-task-card.fixed { background: #fff; }
+.weekly-task-card.optional { background: #fffef8; }
+.wtc-left {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.wtc-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+.wtc-name { font-size: 13px; font-weight: 700; color: #222; line-height: 1.4; }
+.wtc-sub { font-size: 12px; color: #777; margin-top: 2px; }
+.wtc-tip {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+  line-height: 1.5;
+  background: #fffde7;
+  border-left: 2px solid #FFB703;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.wtc-score {
+  font-size: 18px;
+  font-weight: 900;
+  color: #EF476F;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.wtc-unit { font-size: 11px; color: #aaa; margin-left: 1px; }
+
+/* 周任务卡列表 */
+.wcard-subtitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #06D6A0;
+  padding: 10px 14px 6px;
+}
+.wcard-subtitle.locked-tip { color: #aaa; }
+.wcard-series-label {
+  font-size: 11px;
+  color: #999;
+  padding: 4px 14px;
+  background: #f8f8f8;
+  font-weight: 600;
+}
+.wcard-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.wcard-row:active, .wcard-row:hover { background: #f9f6ff; }
+.wcard-row.done { background: #f0fff6; }
+.wcard-row.locked { opacity: 0.6; cursor: default; }
+.wcard-stars { font-size: 16px; flex-shrink: 0; }
+.wcard-info { flex: 1; }
+.wcard-name { font-size: 13px; font-weight: 700; color: #333; }
+.wcard-desc { font-size: 11px; color: #888; margin-top: 2px; }
+.wcard-right { text-align: right; flex-shrink: 0; }
+.wcard-score { font-size: 15px; font-weight: 800; color: #EF476F; }
+.wcard-done-badge { font-size: 14px; margin-top: 2px; }
+.wcard-unlock-gap { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+/* 本周兑换目标 */
+.wshop-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 10px;
+}
+.wshop-row:last-child { border-bottom: none; }
+.wshop-row.can-buy { background: #f0fff6; }
+.wshop-icon { font-size: 22px; flex-shrink: 0; }
+.wshop-info { flex: 1; }
+.wshop-name { font-size: 13px; font-weight: 700; color: #333; }
+.wshop-type { font-size: 11px; margin-top: 2px; font-weight: 600; }
+.wshop-right { text-align: right; flex-shrink: 0; }
+.wshop-cost { font-size: 15px; font-weight: 800; color: #444; }
+.wshop-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-weight: 600;
+  margin-top: 4px;
+  display: inline-block;
+}
+.wshop-badge.can { background: #d4f7e7; color: #06A96A; }
+.wshop-badge.gap { background: #f5f5f5; color: #999; }
+
+/* ══════════════════════════════════════════════════════════════
+   🏆 成就中心 样式
+══════════════════════════════════════════════════════════════ */
+
+/* 英雄档案卡 */
+.ach-hero-card {
+  margin: 12px 12px 8px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 2px solid #FFE14D;
+}
+.ach-hero-avatar {
+  font-size: 52px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.ach-hero-info { flex: 1; }
+.ach-hero-name { font-size: 13px; color: #aaa; margin-bottom: 4px; }
+.ach-hero-score { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+.ach-hero-score span { font-size: 24px; color: #FFE14D; }
+.ach-hero-level { font-size: 18px; font-weight: 900; margin-top: 2px; }
+
+/* 分区 */
+.ach-section {
+  margin: 8px 12px;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.ach-section-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #333;
+  padding: 12px 14px;
+  background: #f8f9fc;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ach-badges-tip {
+  font-size: 12px;
+  color: #aaa;
+  padding: 8px 14px 4px;
+}
+
+/* 徽章网格 */
+.ach-badges-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: #f0f0f0;
+  margin: 0 0 2px;
+}
+.ach-badge-item {
+  background: #fff;
+  padding: 12px 8px;
+  text-align: center;
+}
+.ach-badge-item.locked { opacity: 0.45; }
+.ach-badge-icon { font-size: 28px; margin-bottom: 4px; }
+.ach-badge-name { font-size: 12px; font-weight: 700; color: #333; margin-bottom: 3px; }
+.ach-badge-desc { font-size: 10px; color: #888; line-height: 1.4; }
+.ach-badge-item.unlocked .ach-badge-name { color: #EF476F; }
+.ach-badge-item.unlocked { background: #fffef8; }
+
+/* 系列进度块 */
+.ach-series-block {
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 4px;
+}
+.ach-series-block:last-child { border-bottom: none; }
+.ach-series-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px 6px;
+}
+.ach-series-name { font-size: 13px; font-weight: 700; color: #333; }
+.ach-series-count { font-size: 13px; font-weight: 800; }
+.ach-series-progress {
+  height: 5px;
+  background: #f0f0f0;
+  margin: 0 14px 6px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ach-series-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+/* 任务卡单项 */
+.ach-cards-list { padding: 0 8px 8px; }
+.ach-card-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 6px;
+  border-radius: 8px;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.ach-card-item.done { background: #f0fff6; }
+.ach-card-item.locked { opacity: 0.5; }
+.ach-card-status { font-size: 15px; flex-shrink: 0; padding-top: 1px; }
+.ach-card-stars { font-size: 13px; flex-shrink: 0; padding-top: 2px; }
+.ach-card-detail { flex: 1; }
+.ach-card-name { font-size: 13px; font-weight: 700; color: #333; }
+.ach-card-how { font-size: 11px; color: #888; margin-top: 2px; line-height: 1.5; }
+.ach-card-item.done .ach-card-how { color: #06A96A; }
+.ach-card-pts { font-size: 13px; font-weight: 800; color: #EF476F; flex-shrink: 0; }
+.ach-card-item.done .ach-card-pts { color: #06D6A0; }
+.ach-card-item.locked .ach-card-pts { color: #aaa; }
+
+/* 父子演出里程碑 */
+.ach-show-item {
+  display: flex;
+  align-items: center;
+  padding: 14px;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 12px;
+}
+.ach-show-item:last-child { border-bottom: none; }
+.ach-show-item.done { background: #fffde7; }
+.ach-show-item.locked { opacity: 0.6; }
+.ach-show-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #888;
+  flex-shrink: 0;
+}
+.ach-show-item.done .ach-show-num { background: #F9A825; color: #fff; }
+.ach-show-item.available .ach-show-num { background: #EF476F; color: #fff; }
+.ach-show-content { flex: 1; }
+.ach-show-name { font-size: 13px; font-weight: 800; color: #333; margin-bottom: 3px; }
+.ach-show-desc { font-size: 11px; color: #666; margin-bottom: 3px; line-height: 1.4; }
+.ach-show-how { font-size: 11px; color: #999; line-height: 1.5; }
+.ach-show-item.done .ach-show-how { color: #F9A825; font-weight: 700; }
+.ach-show-pts { font-size: 18px; font-weight: 900; flex-shrink: 0; }
+
+/* 跳绳里程碑 */
+.ach-rope-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 12px;
+}
+.ach-rope-item:last-child { border-bottom: none; }
+.ach-rope-item.done { background: #f0fff6; }
+.ach-rope-target {
+  font-size: 22px;
+  font-weight: 900;
+  color: #333;
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: center;
+  line-height: 1;
+}
+.ach-rope-item.done .ach-rope-target { color: #06D6A0; }
+.ach-rope-content { flex: 1; }
+.ach-rope-label { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 3px; }
+.ach-rope-how { font-size: 11px; color: #888; }
+.ach-rope-item.done .ach-rope-how { color: #06A96A; font-weight: 600; }
+.ach-rope-bonus {
+  font-size: 16px;
+  font-weight: 900;
+  color: #FF6B35;
+  flex-shrink: 0;
+}
+.ach-rope-bonus.done { color: #06D6A0; }
