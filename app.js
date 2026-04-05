@@ -97,42 +97,53 @@ function renderDaily() {
 function renderDailySection(containerId, tasks) {
   const el = document.getElementById(containerId);
   el.innerHTML = tasks.map(t => {
-    const done = !!state.todayChecked[t.id];
+    const status = state.todayChecked[t.id]; // undefined | 'pending' | 'approved'
+    const done = !!status;
+    const isPending = status === 'pending';
+    const isApproved = status === 'approved';
+    let checkIcon = '';
+    let statusClass = '';
+    if (isPending) { checkIcon = '⏳'; statusClass = 'pending'; }
+    else if (isApproved) { checkIcon = '✓'; statusClass = 'done'; }
     return `
-      <div class="daily-item ${done?'done':''}" data-id="${t.id}" data-score="${t.score}" onclick="toggleDaily('${t.id}',${t.score})">
+      <div class="daily-item ${statusClass}" data-id="${t.id}" data-score="${t.score}" onclick="toggleDaily('${t.id}',${t.score})">
         <div class="task-icon">${t.icon}</div>
         <div class="task-info">
           <div class="task-name">${t.name}</div>
           <div class="task-sub">${t.sub}</div>
           ${t.tip ? `<div class="task-tip">💡 ${t.tip}</div>` : ''}
+          ${isPending ? '<div class="task-pending-label">⏳ 等待爸妈审核</div>' : ''}
         </div>
         <div class="task-score">+${t.score}</div>
-        <div class="task-check">${done ? '✓' : ''}</div>
+        <div class="task-check">${checkIcon}</div>
       </div>`;
   }).join('');
 }
 
 function toggleDaily(id, score) {
   if (state.todayChecked[id]) {
-    // 取消打卡
-    delete state.todayChecked[id];
-    state.totalScore = Math.max(0, state.totalScore - score);
-  } else {
-    // 完成打卡
-    state.todayChecked[id] = true;
-    state.totalScore += score;
-    // 特殊检查：连续9点半（df5 = 9点半充能）
-    if (id === 'df5') {
-      state.consecutive930 = (state.consecutive930 || 0) + 1;
-      if (state.consecutive930 === 3) {
-        state.totalScore += 5;
-        saveState();
-        showCelebration('🌙', '连续3天9点半上床！', '敖丙定力加成 +5分！超级厉害！');
-      }
+    // 取消打卡（只能取消待审状态，不能取消已通过的）
+    if (state.todayChecked[id] === 'pending') {
+      delete state.todayChecked[id];
+      saveState();
+      renderAll();
+      showCelebration('↩️', '已取消申请', '打卡已撤销');
+    } else {
+      showCelebration('🔒', '已提交审核', '请等待爸爸妈妈确认哦！');
     }
+    return;
   }
+  // 标记为待审状态
+  state.todayChecked[id] = 'pending';
   saveState();
+  // 提交到 Firebase 待审队列
+  const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+  const task = allTasks.find(t => t.id === id);
+  if (task && window._firebaseReady) {
+    submitPending('daily', id, task.name, score);
+  }
   renderAll();
+  showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
 }
 
 function updateTodayScore() {
@@ -216,12 +227,15 @@ function openCardModal(id) {
 function claimCard(id) {
   const card = TASK_CARDS.find(c => c.id === id);
   if (!card || !isCardUnlocked(card)) return;
-  state.totalScore += card.score;
   state.cardClaims[id] = (state.cardClaims[id] || 0) + 1;
   saveState();
+  // 提交到待审队列
+  if (window._firebaseReady) {
+    submitPending('card', id, card.name, card.score);
+  }
   closeModal('cardModal');
   renderAll();
-  showCelebration('🎴', `「${card.name}」完成！`, `+${card.score}分！英雄经验+${card.score}！`);
+  showCelebration('⏳', `「${card.name}」已申请！`, `等爸爸妈妈审核后 +${card.score}分入账！`);
 }
 
 // ── 渲染商店 ───────────────────────────────────────────────────
@@ -307,15 +321,16 @@ document.getElementById('btnRopeSubmit').addEventListener('click', () => {
 
   if (val > prev) {
     state.ropeMax = val;
-    // 检查里程碑
+    // 检查里程碑 → 提交待审
     ROPE_MILESTONES.forEach(m => {
       if (val >= m.target && prev < m.target &&
           !state.ropeMilestonesAchieved.includes(m.target)) {
         state.ropeMilestonesAchieved.push(m.target);
-        state.totalScore += m.bonus;
         saveState();
-        const extraMsg = m.autoTrigger ? '\n🏆 爸爸颁奖典礼自动触发！告诉爸爸！' : '';
-        showCelebration('🪢', `里程碑解锁！${m.target}个！`, `${m.label}\n+${m.bonus}分！${extraMsg}`);
+        if (window._firebaseReady) {
+          submitPending('rope', 'rope_' + m.target, `跳绳里程碑 ${m.target}个`, m.bonus, m.label);
+        }
+        showCelebration('🪢', `里程碑解锁！${m.target}个！`, `${m.label}\n等爸妈审核后 +${m.bonus}分入账！`);
       }
     });
   }

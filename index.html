@@ -22,6 +22,39 @@
     });
   }
 </script>
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, onValue, push, update, remove, get }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAKUte7PgqqMRfrO8fvSOk2sw4k1Fn-yOw",
+    authDomain: "hero-plan.firebaseapp.com",
+    databaseURL: "https://hero-plan-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "hero-plan",
+    storageBucket: "hero-plan.firebasestorage.app",
+    messagingSenderId: "734472280874",
+    appId: "1:734472280874:web:589c0e7ec85e0b2e5b1c53"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  const db = getDatabase(firebaseApp);
+
+  // 挂载到全局供 app.js 使用
+  window._firebaseDB = db;
+  window._firebaseRef = ref;
+  window._firebaseSet = set;
+  window._firebaseOnValue = onValue;
+  window._firebasePush = push;
+  window._firebaseUpdate = update;
+  window._firebaseRemove = remove;
+  window._firebaseGet = get;
+  window._firebaseReady = true;
+
+  // 通知 app.js Firebase 已就绪
+  window.dispatchEvent(new Event('firebaseReady'));
+</script>
 </head>
 <body>
 
@@ -42,6 +75,7 @@
   <button class="tab-btn" data-tab="shop">🏪 补给站</button>
   <button class="tab-btn" data-tab="rope">🪢 跳绳</button>
   <button class="tab-btn" data-tab="dad">💌 爸爸</button>
+  <button class="tab-btn parent-tab-btn" data-tab="parent">🔐 审核</button>
 </nav>
 
 <!-- ═══ TAB: 今日任务 ═══ -->
@@ -127,6 +161,86 @@
   <div id="dadGuide"></div>
 </div>
 
+<!-- ═══ TAB: 父母审核 ═══ -->
+<div class="tab-content" id="tab-parent">
+  <!-- 未登录状态 -->
+  <div id="parentLogin">
+    <div class="parent-login-box">
+      <div class="parent-login-icon">🔐</div>
+      <div class="parent-login-title">父母审核中心</div>
+      <div class="parent-login-sub">请输入你的审核 PIN 码</div>
+      <div class="parent-pin-row">
+        <input type="password" id="parentPinInput" maxlength="4" placeholder="请输入4位PIN码"
+          class="parent-pin-input" inputmode="numeric" pattern="[0-9]*">
+      </div>
+      <div class="parent-who-row">
+        <button class="btn-parent-who active" id="btnWhoMom" onclick="selectWho('mom')">👩 妈妈</button>
+        <button class="btn-parent-who" id="btnWhoDad" onclick="selectWho('dad')">👨 爸爸</button>
+      </div>
+      <button class="btn-primary" onclick="parentLogin()">进入审核中心</button>
+      <div class="parent-login-hint" id="parentLoginHint"></div>
+      <div class="parent-setup-link" onclick="showPinSetup()">⚙️ 首次使用？设置PIN码</div>
+    </div>
+  </div>
+
+  <!-- 已登录状态 -->
+  <div id="parentPanel" style="display:none">
+    <div class="parent-panel-header">
+      <span id="parentWhoLabel">👩 妈妈审核中心</span>
+      <button class="btn-logout" onclick="parentLogout()">退出</button>
+    </div>
+
+    <!-- 待审列表 -->
+    <div class="parent-section">
+      <div class="section-header orange">⏳ 待审核申请</div>
+      <div id="pendingList">
+        <div class="empty-tip">暂无待审记录 🎉</div>
+      </div>
+      <div id="batchBtns" style="display:none">
+        <button class="btn-approve-all" onclick="approveAll()">✅ 全部通过</button>
+        <button class="btn-reject-all" onclick="rejectAll()">❌ 全部驳回</button>
+      </div>
+    </div>
+
+    <!-- 已审历史 -->
+    <div class="parent-section">
+      <div class="section-header blue">📋 最近审核记录</div>
+      <div id="reviewedList">
+        <div class="empty-tip">暂无记录</div>
+      </div>
+    </div>
+
+    <!-- 积分调整 -->
+    <div class="parent-section">
+      <div class="section-header purple">🎁 手动奖励积分</div>
+      <div class="manual-bonus-area">
+        <input type="number" id="bonusInput" placeholder="输入奖励分数" min="1" max="50" class="bonus-input">
+        <input type="text" id="bonusReason" placeholder="原因（可选）" class="bonus-reason-input">
+        <button class="btn-primary" onclick="addManualBonus()">发放奖励</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIN码设置弹窗 -->
+  <div id="pinSetupArea" style="display:none">
+    <div class="parent-login-box">
+      <div class="parent-login-icon">⚙️</div>
+      <div class="parent-login-title">设置审核PIN码</div>
+      <div class="parent-who-row">
+        <button class="btn-parent-who active" id="setupWhoMom" onclick="selectSetupWho('mom')">👩 妈妈</button>
+        <button class="btn-parent-who" id="setupWhoDad" onclick="selectSetupWho('dad')">👨 爸爸</button>
+      </div>
+      <input type="password" id="newPinInput" maxlength="4" placeholder="设置新4位PIN码"
+        class="parent-pin-input" inputmode="numeric" pattern="[0-9]*">
+      <input type="password" id="confirmPinInput" maxlength="4" placeholder="再次确认PIN码"
+        class="parent-pin-input" inputmode="numeric" pattern="[0-9]*">
+      <button class="btn-primary" onclick="savePinSetup()">保存PIN码</button>
+      <div class="parent-login-hint" id="pinSetupHint"></div>
+      <div class="parent-setup-link" onclick="hidePinSetup()">← 返回登录</div>
+    </div>
+  </div>
+</div>
+
 <!-- 弹窗：爸爸彩蛋 -->
 <div class="modal-overlay" id="eggModal" style="display:none">
   <div class="modal-box egg-modal">
@@ -168,5 +282,6 @@
 
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script src="firebase-sync.js"></script>
 </body>
 </html>

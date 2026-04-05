@@ -464,3 +464,107 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+/* ══════════════════════════════════════════════════════════
+   父母审核模块样式
+══════════════════════════════════════════════════════════ */
+
+/* 审核Tab按钮 */
+.parent-tab-btn { color: #e67e22 !important; font-weight: 700; }
+
+/* 待审状态打卡项 */
+.daily-item.pending { background: #fffbe6 !important; border-left: 4px solid #f39c12; }
+.daily-item.pending .task-check { color: #f39c12; font-size: 18px; }
+.task-pending-label { font-size: 11px; color: #e67e22; margin-top: 3px; font-weight: 600; }
+
+/* 登录框 */
+.parent-login-box {
+  max-width: 360px; margin: 40px auto; padding: 30px 24px;
+  background: #fff; border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.parent-login-icon { font-size: 48px; }
+.parent-login-title { font-size: 20px; font-weight: 800; color: #2c3e50; }
+.parent-login-sub { font-size: 14px; color: #7f8c8d; }
+.parent-pin-input {
+  width: 100%; padding: 12px 16px; font-size: 22px; letter-spacing: 8px;
+  border: 2px solid #ddd; border-radius: 12px; text-align: center; outline: none;
+  transition: border-color 0.2s;
+}
+.parent-pin-input:focus { border-color: #3498db; }
+.parent-who-row { display: flex; gap: 12px; width: 100%; }
+.btn-parent-who {
+  flex: 1; padding: 10px; border: 2px solid #ddd; border-radius: 12px;
+  background: #f8f9fa; font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-parent-who.active { border-color: #3498db; background: #eaf4fb; color: #2980b9; }
+.parent-login-hint { font-size: 13px; min-height: 18px; }
+.parent-setup-link { font-size: 13px; color: #3498db; cursor: pointer; text-decoration: underline; }
+
+/* 审核面板 */
+.parent-panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; background: #fff; border-bottom: 1px solid #eee;
+  font-size: 16px; font-weight: 700; color: #2c3e50;
+}
+.btn-logout {
+  padding: 6px 14px; background: #ecf0f1; border: none; border-radius: 8px;
+  font-size: 13px; cursor: pointer; color: #7f8c8d;
+}
+.parent-section { margin: 12px; }
+
+/* 待审条目 */
+.pending-item {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border-radius: 12px; padding: 12px;
+  margin-bottom: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+}
+.pending-info { flex: 1; }
+.pending-name { font-size: 15px; font-weight: 700; color: #2c3e50; }
+.pending-meta { font-size: 12px; color: #95a5a6; margin-top: 2px; }
+.pending-extra { font-size: 12px; color: #7f8c8d; }
+.pending-score { font-size: 16px; font-weight: 800; color: #27ae60; min-width: 50px; text-align: right; }
+.pending-actions { display: flex; gap: 6px; }
+.btn-approve, .btn-reject {
+  width: 36px; height: 36px; border: none; border-radius: 50%; font-size: 16px; cursor: pointer;
+}
+.btn-approve { background: #eafaf1; }
+.btn-reject { background: #fdf2f2; }
+
+/* 批量按钮 */
+#batchBtns { display: flex; gap: 10px; margin-top: 10px; }
+.btn-approve-all, .btn-reject-all {
+  flex: 1; padding: 12px; border: none; border-radius: 12px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.btn-approve-all { background: #27ae60; color: #fff; }
+.btn-reject-all { background: #e74c3c; color: #fff; }
+
+/* 已审历史 */
+.reviewed-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 6px;
+  font-size: 13px;
+}
+.reviewed-item.approved { border-left: 3px solid #27ae60; }
+.reviewed-item.rejected { border-left: 3px solid #e74c3c; opacity: 0.6; }
+.reviewed-name { flex: 1; color: #2c3e50; font-weight: 600; }
+.reviewed-score { color: #27ae60; font-weight: 700; min-width: 45px; }
+.reviewed-by { color: #7f8c8d; min-width: 28px; }
+.reviewed-date { color: #bdc3c7; min-width: 60px; text-align: right; }
+
+/* 手动奖励 */
+.manual-bonus-area { display: flex; flex-direction: column; gap: 8px; }
+.bonus-input, .bonus-reason-input {
+  padding: 10px 14px; border: 1px solid #ddd; border-radius: 10px;
+  font-size: 15px; outline: none;
+}
+.bonus-input:focus, .bonus-reason-input:focus { border-color: #3498db; }
+
+/* 橙色 section-header */
+.section-header.orange { background: linear-gradient(135deg, #f39c12, #e67e22); color: #fff; }
+
+/* 空提示 */
+.empty-tip { text-align: center; color: #bdc3c7; padding: 20px; font-size: 14px; }
