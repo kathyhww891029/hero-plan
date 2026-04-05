@@ -326,6 +326,10 @@ function showSyncBadge() {
   badge.textContent = '☁️ 积分已同步';
   badge.style.display = 'block';
   setTimeout(() => { badge.style.display = 'none'; }, 2000);
+  // 积分入账后，尝试触发补给站激励提示
+  if (typeof tryShowShopBoost === 'function') {
+    tryShowShopBoost(1); // score变化了就检查
+  }
 }
 
 // ── Firebase 就绪后启动监听 ───────────────────────────────────

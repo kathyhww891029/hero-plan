@@ -467,6 +467,7 @@ document.getElementById('btnDadWin').addEventListener('click', () => {
   closeModal('eggModal');
   renderAll();
   showCelebration('🏆', '爸爸撑住了！', '孩子+5分奖励！爸爸真的很厉害！😄');
+  setTimeout(() => tryShowShopBoost(5), 1600);
 });
 document.getElementById('btnDadSleep').addEventListener('click', () => {
   closeModal('eggModal');
@@ -482,6 +483,54 @@ function showCelebration(emoji, title, desc) {
   document.getElementById('celebModal').style.display = 'flex';
   // 3秒自动关闭
   setTimeout(() => closeModal('celebModal'), 3000);
+}
+
+// ── 补给站激励弹窗 ─────────────────────────────────────────────
+// 在积分入账后调用，找到"差距最近且还能兑换"的商品做激励提示
+function tryShowShopBoost(scoreAdded) {
+  if (!scoreAdded || scoreAdded <= 0) return;
+  const current = state.totalScore;
+
+  // 收集所有商品（排除彩蛋），找出差距最近且还未到达门槛的
+  const allItems = [];
+  SHOP.forEach(section => {
+    section.items.forEach(item => {
+      if (!item.isEgg) {
+        const gap = item.cost - current;
+        if (gap > 0) allItems.push({ ...item, gap });
+      }
+    });
+  });
+  if (allItems.length === 0) return; // 所有东西都能兑换了
+
+  // 找差距最小的
+  allItems.sort((a, b) => a.gap - b.gap);
+  const nearest = allItems[0];
+
+  // 只在差距 ≤ 20分时弹出，避免太频繁打扰
+  if (nearest.gap > 20) return;
+
+  // 随机鼓励话术，增加趣味性
+  const phrases = [
+    `就差 <b>${nearest.gap}分</b> 了！`,
+    `只需再赚 <b>${nearest.gap}分</b>！`,
+    `加油，还差 <b>${nearest.gap}分</b>！`,
+    `差一点点，还差 <b>${nearest.gap}分</b>！`,
+  ];
+  const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+
+  document.getElementById('shopBoostIcon').textContent = nearest.icon;
+  document.getElementById('shopBoostTitle').textContent = `距离「${nearest.name}」`;
+  document.getElementById('shopBoostDesc').innerHTML =
+    `${phrase}<br>你现在有 <b>${current}分</b>，再努力一下！`;
+  document.getElementById('shopBoostHint').textContent =
+    `需要 ${nearest.cost}分 · 当前 ${current}分`;
+
+  // 延迟1.5秒弹出，让庆祝弹窗先关闭
+  setTimeout(() => {
+    closeModal('celebModal');
+    document.getElementById('shopBoostModal').style.display = 'flex';
+  }, 1500);
 }
 
 function closeModal(id) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hero-plan-v7';  // ← 每次改动这里，强制刷新缓存
+const CACHE_NAME = 'hero-plan-v8';  // ← 每次改动这里，强制刷新缓存
 const urlsToCache = [
   './',
   './index.html',
