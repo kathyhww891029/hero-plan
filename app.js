@@ -2,6 +2,67 @@
    英雄成长计划 · 主逻辑
 ══════════════════════════════════════════════════════════════ */
 
+// ── 语音朗读引擎 ───────────────────────────────────────────────
+let _currentUtterance = null;
+let _speakingBtn = null;
+
+function speakText(text, btnEl) {
+  if (!window.speechSynthesis) {
+    alert('你的浏览器不支持语音朗读，请使用 Chrome 或 Safari！');
+    return;
+  }
+
+  // 如果点的是同一个按钮且正在朗读，则停止
+  if (_speakingBtn === btnEl && window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+    setBtn(btnEl, false);
+    _speakingBtn = null;
+    return;
+  }
+
+  // 停止之前的朗读
+  if (window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+    if (_speakingBtn) setBtn(_speakingBtn, false);
+  }
+
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'zh-CN';
+  utter.rate = 0.85;   // 稍慢一点，孩子更容易跟上
+  utter.pitch = 1.1;   // 稍高音调，更活泼
+  utter.volume = 1.0;
+
+  // 尝试选择女声（更温和）
+  const voices = window.speechSynthesis.getVoices();
+  const zhVoice = voices.find(v =>
+    v.lang.startsWith('zh') && (v.name.includes('Female') || v.name.includes('female') ||
+    v.name.includes('Tingting') || v.name.includes('Meijia') || v.name.includes('女'))
+  ) || voices.find(v => v.lang.startsWith('zh'));
+  if (zhVoice) utter.voice = zhVoice;
+
+  _currentUtterance = utter;
+  _speakingBtn = btnEl;
+  setBtn(btnEl, true);
+
+  utter.onend = () => { setBtn(btnEl, false); _speakingBtn = null; };
+  utter.onerror = () => { setBtn(btnEl, false); _speakingBtn = null; };
+
+  window.speechSynthesis.speak(utter);
+}
+
+function setBtn(btnEl, speaking) {
+  if (!btnEl) return;
+  btnEl.classList.toggle('speaking', speaking);
+  btnEl.textContent = speaking ? '🔊' : '🔈';
+}
+
+// 生成小喇叭按钮 HTML（阻止事件冒泡，不触发打卡）
+function speakBtn(text) {
+  if (!text) return '';
+  const safe = text.replace(/'/g, "\'").replace(/"/g, '&quot;');
+  return `<button class="speak-btn" title="点我听任务说明" onclick="event.stopPropagation();speakText('${safe}',this)">🔈</button>`;
+}
+
 // ── 状态管理 ──────────────────────────────────────────────────
 const STATE_KEY = 'heroplan_v4';
 let state = loadState();
@@ -117,7 +178,7 @@ function renderDailySection(containerId, tasks) {
       <div class="daily-item ${statusClass}" data-id="${t.id}" data-score="${t.score}" onclick="toggleDaily('${t.id}',${t.score})">
         <div class="task-icon">${t.icon}</div>
         <div class="task-info">
-          <div class="task-name">${t.name}</div>
+          <div class="task-name">${t.name}${speakBtn(t.speech)}</div>
           <div class="task-sub">${t.sub}</div>
           ${t.tip ? `<div class="task-tip">💡 ${t.tip}</div>` : ''}
           ${isPending ? '<div class="task-pending-label">⏳ 等待爸妈审核</div>' : ''}
@@ -198,6 +259,7 @@ function renderCards() {
           <div class="card-score">+${c.score}分</div>
           ${!isUnlocked && !c.weekUnlock ? `<div class="card-unlock">累计${c.unlockAt}分解锁</div>` : ''}
           ${weekBadge}
+          ${isUnlocked ? speakBtn(c.speech) : ''}
         </div>`;
     });
   });
@@ -221,6 +283,12 @@ function openCardModal(id) {
   document.getElementById('cardModalSub').textContent = card.sub;
   document.getElementById('cardModalDesc').textContent = '✅ ' + card.desc;
   document.getElementById('cardModalScore').textContent = `+${card.score}分`;
+
+  // 注入喇叭按钮到弹窗标题区域
+  const speakContainer = document.getElementById('cardModalSpeak');
+  if (speakContainer) {
+    speakContainer.innerHTML = card.speech ? speakBtn(card.speech) : '';
+  }
 
   const btn = document.getElementById('btnCardClaim');
   btn.onclick = () => claimCard(id);
@@ -260,7 +328,7 @@ function renderShop() {
           <div class="shop-item" style="background:${section.lightColor}">
             <div class="shop-icon">${item.icon}</div>
             <div class="shop-info">
-              <div class="shop-name">${item.name}</div>
+              <div class="shop-name">${item.name}${speakBtn(item.speech)}</div>
               <div class="shop-note">${item.note}</div>
               <button class="btn-redeem ${btnClass}"
                 onclick="redeemItem('${item.id}','${item.name}',${item.cost},${!!item.isEgg})"
@@ -299,7 +367,7 @@ function renderRope() {
       <div class="milestone-item ${achieved?'achieved':''}">
         <div class="milestone-icon">${achieved?'✅':'🎯'}</div>
         <div class="milestone-info">
-          <div class="milestone-target">${m.target} 个</div>
+          <div class="milestone-target">${m.target} 个${speakBtn(m.speech)}</div>
           <div class="milestone-label">${m.label}</div>
         </div>
         <div class="milestone-bonus">+${m.bonus}分</div>

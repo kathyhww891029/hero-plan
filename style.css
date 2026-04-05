@@ -466,6 +466,60 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════
+   🔈 小喇叭语音按钮
+══════════════════════════════════════════════════════════ */
+.speak-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.85);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  font-size: 14px;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: transform 0.15s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  z-index: 2;
+}
+.speak-btn:hover {
+  background: #fff;
+  transform: scale(1.15);
+}
+.speak-btn:active {
+  transform: scale(0.92);
+}
+/* 朗读中：呼吸动画 */
+.speak-btn.speaking {
+  background: #FFD166;
+  animation: speakPulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes speakPulse {
+  from { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,209,102,0.5); }
+  to   { transform: scale(1.2); box-shadow: 0 0 0 8px rgba(255,209,102,0); }
+}
+
+/* 弹窗里的大一点的喇叭按钮 */
+#cardModalSpeak .speak-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  background: #f0f8ff;
+  border: 2px solid #118AB2;
+}
+#cardModalSpeak .speak-btn.speaking {
+  background: #FFD166;
+  border-color: #FF6B35;
+}
+
+/* ══════════════════════════════════════════════════════════
    父母审核模块样式
 ══════════════════════════════════════════════════════════ */
 
