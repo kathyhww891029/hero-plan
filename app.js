@@ -63,7 +63,50 @@ function speakBtn(text) {
   return `<button class="speak-btn" title="点我听任务说明" onclick="event.stopPropagation();speakText('${safe}',this)">🔈</button>`;
 }
 
-// ── 状态管理 ──────────────────────────────────────────────────
+// ── 温情化：欢迎语 + 每日励志语 ──────────────────────────────
+const WELCOME_MESSAGES = [
+  '你好啊，小英雄！今天也是充满可能的一天！',
+  '英雄回来了！今天准备好出发了吗？',
+  '嘿，大英雄！昨天的你已经很棒了，今天继续加油！',
+  '小英雄报到！每一个今天，都是你变强的机会！',
+  '哇，英雄出现了！今天要去完成什么冒险呢？',
+];
+const MOTTOS = [
+  '每天进步一点点，今天的你比昨天更厉害 💪',
+  '不需要完美，只需要比昨天好一点点 ⭐',
+  '英雄不是天生的，是每天练出来的 🔥',
+  '今天完成的每一件事，都是明天的超能力 ✨',
+  '你已经做得很好了，继续往前走 👊',
+];
+
+function speakWelcome() {
+  const hour = new Date().getHours();
+  let greeting = hour < 12 ? '早上好！' : hour < 18 ? '下午好！' : '晚上好！';
+  const msg = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)];
+  speakText(greeting + msg, document.querySelector('.welcome-speak-btn'));
+}
+
+function updateWelcomeArea() {
+  const nameEl = document.querySelector('.welcome-name');
+  const motto = document.getElementById('headerMotto');
+  if (nameEl) {
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? '早上好，小英雄！🌅' : hour < 18 ? '下午好，小英雄！☀️' : '晚上好，小英雄！🌙';
+    nameEl.textContent = greeting;
+  }
+  if (motto) {
+    const score = state.totalScore || 0;
+    // 根据积分给出专属激励
+    let personalMotto = MOTTOS[new Date().getDay() % MOTTOS.length];
+    if (score >= 200) personalMotto = '你是宇宙英雄！每天的坚持都被记录在星空里 👑';
+    else if (score >= 100) personalMotto = '超级英雄诞生了！继续保持，传说就在眼前 💫';
+    else if (score >= 50) personalMotto = '战士的光芒越来越强！你做到了很多事 🔥';
+    else if (score >= 20) personalMotto = '初级英雄正在成长中，每一步都算数 ⚡';
+    motto.textContent = personalMotto;
+  }
+}
+
+
 const STATE_KEY = 'heroplan_v4';
 let state = loadState();
 
@@ -82,6 +125,21 @@ function defaultState() {
     consecutive930: 0,        // 连续9点半上床天数
     weekUnlocked: false,      // 第一周是否已解锁专项卡
     weekStartDate: todayStr(),
+    // 英雄包状态
+    morningPack: {},          // { mp1:true, mp2:true, mp3:true }
+    nightPack: {},            // { np1:true, np2:true, np3:true }
+    morningPackBonus: false,  // 今日早晨英雄包全套奖励已发
+    nightPackBonus: false,    // 今日睡前英雄包全套奖励已发
+    // 写作业双钥匙
+    hwStarted: false,         // 已开始写作业（小钥匙）
+    hwCompleted: false,       // 已写完作业（大钥匙）
+    hwBlocks: 0,              // 今日已完成专注块数
+    // 周度成就
+    weeklyCardCount: 0,       // 本周已完成任务卡数
+    weeklyAchievement: null,  // 本周成就等级
+    // 当前培养阶段（爸妈设置）
+    currentPhase: 1,
+    phaseStartDate: null,
   };
 }
 function loadState() {
@@ -138,6 +196,8 @@ function checkDayReset() {
 function renderAll() {
   renderHeader();
   renderDaily();
+  renderTodayRecommended();
+  renderWeeklyAchievement();
   renderCards();
   renderShop();
   renderRope();
@@ -150,49 +210,277 @@ function renderAll() {
 function renderHeader() {
   document.getElementById('totalScore').textContent = state.totalScore;
   document.getElementById('shopScore').textContent = state.totalScore;
-  // 今日得分（含待审的分数，让孩子立刻看到进展）
   const todayPts = calcTodayScore();
   const el = document.getElementById('headerTodayScore');
   if (el) el.textContent = todayPts > 0 ? `+${todayPts}` : '+0';
-  // 日期
   const d = new Date();
   const days = ['周日','周一','周二','周三','周四','周五','周六'];
-  document.getElementById('todayDate').textContent =
-    `${d.getMonth()+1}月${d.getDate()}日 ${days[d.getDay()]}`;
+  const dateEl = document.getElementById('todayDate');
+  if (dateEl) dateEl.textContent = `${d.getMonth()+1}月${d.getDate()}日 ${days[d.getDay()]}`;
+  updateWelcomeArea();
 }
 
 // ── 渲染每日任务 ───────────────────────────────────────────────
 function renderDaily() {
-  renderDailySection('dailyFixed', DAILY_FIXED);
-  renderDailySection('dailyOptional', DAILY_OPTIONAL);
-  renderDailySection('dailyHomework', DAILY_HOMEWORK);
+  renderMorningPack();
+  renderNightPack();
+  renderHomeworkTask();
+  renderOptionalTasks();
   updateTodayScore();
 }
 
-function renderDailySection(containerId, tasks) {
-  const el = document.getElementById(containerId);
-  el.innerHTML = tasks.map(t => {
-    const status = state.todayChecked[t.id]; // undefined | 'pending' | 'approved'
-    const done = !!status;
+// 渲染早晨英雄包
+function renderMorningPack() {
+  const el = document.getElementById('dailyFixed');
+  if (!el) return;
+  const done = MORNING_PACK.filter(t => state.morningPack[t.id]).length;
+  const isFull = done === MORNING_PACK.length;
+  const pts = isFull ? MORNING_PACK_FULL : done;
+
+  el.innerHTML = `
+    <div class="hero-pack morning-pack ${isFull?'pack-complete':''}">
+      <div class="pack-header">
+        <span class="pack-icon">🌅</span>
+        <div class="pack-title-area">
+          <div class="pack-title">早晨英雄包</div>
+          <div class="pack-subtitle">${isFull?'✨ 全套完成！':'还差'+(MORNING_PACK.length-done)+'件全套奖励'}</div>
+        </div>
+        <div class="pack-score-badge ${isFull?'full':'partial'}">
+          ${isFull?`+${MORNING_PACK_FULL}分 🎉`:`+${pts}分`}
+        </div>
+      </div>
+      <div class="pack-items">
+        ${MORNING_PACK.map(t => {
+          const checked = !!state.morningPack[t.id];
+          return `<div class="pack-item ${checked?'done':''}" onclick="togglePackItem('morning','${t.id}',${t.score})">
+            <span class="pack-item-icon">${t.icon}</span>
+            <span class="pack-item-name">${t.name}${speakBtn(t.speech)}</span>
+            <span class="pack-item-check">${checked?'✅':'⬜'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      ${!isFull && done > 0 ? `<div class="pack-boost-tip">🎯 再完成${MORNING_PACK.length-done}件→全套+${MORNING_PACK_FULL}分（是现在的${Math.round(MORNING_PACK_FULL/Math.max(done,1))}倍！）</div>` : ''}
+    </div>`;
+}
+
+// 渲染睡前英雄包
+function renderNightPack() {
+  const el = document.getElementById('dailyHomework');
+  if (!el) return;
+  const done = NIGHT_PACK.filter(t => state.nightPack[t.id]).length;
+  const isFull = done === NIGHT_PACK.length;
+  const pts = isFull ? NIGHT_PACK_FULL : done;
+
+  el.innerHTML = `
+    <div class="hero-pack night-pack ${isFull?'pack-complete':''}">
+      <div class="pack-header">
+        <span class="pack-icon">🌙</span>
+        <div class="pack-title-area">
+          <div class="pack-title">睡前英雄包</div>
+          <div class="pack-subtitle">${isFull?'✨ 全套完成！':'还差'+(NIGHT_PACK.length-done)+'件全套奖励'}</div>
+        </div>
+        <div class="pack-score-badge ${isFull?'full':'partial'}">
+          ${isFull?`+${NIGHT_PACK_FULL}分 🎉`:`+${pts}分`}
+        </div>
+      </div>
+      <div class="pack-items">
+        ${NIGHT_PACK.map(t => {
+          const checked = !!state.nightPack[t.id];
+          return `<div class="pack-item ${checked?'done':''}" onclick="togglePackItem('night','${t.id}',${t.score})">
+            <span class="pack-item-icon">${t.icon}</span>
+            <span class="pack-item-name">${t.name}${t.tip?`<div class="task-tip">💡 ${t.tip}</div>`:''}${speakBtn(t.speech)}</span>
+            <span class="pack-item-check">${checked?'✅':'⬜'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      ${!isFull && done > 0 ? `<div class="pack-boost-tip">🎯 再完成${NIGHT_PACK.length-done}件→全套+${NIGHT_PACK_FULL}分！</div>` : ''}
+    </div>`;
+}
+
+// 渲染写作业（双钥匙+专注块）
+function renderHomeworkTask() {
+  const el = document.getElementById('dailyOptional');
+  if (!el) return;
+  const hw = HOMEWORK_TASK;
+  const blocks = state.hwBlocks || 0;
+  const started = !!state.hwStarted;
+  const completed = !!state.hwCompleted;
+  const blockScore = Math.min(blocks, hw.maxBlocks) * hw.scorePerBlock;
+  const totalScore = blockScore + (completed ? hw.scoreComplete : 0);
+
+  el.innerHTML = `
+    <div class="homework-card ${completed?'hw-complete':started?'hw-started':''}">
+      <div class="hw-header">
+        <span class="hw-icon">${hw.icon}</span>
+        <div class="hw-title-area">
+          <div class="hw-title">${hw.name}${speakBtn(hw.speech)}</div>
+          <div class="hw-subtitle">
+            ${completed?'✅ 作业写完啦！所有可选任务已解锁！':
+              started?'🔑 已开始写作业，兴趣任务已解锁！':
+              '⬜ 开始写作业，解锁今天的兴趣任务'}
+          </div>
+        </div>
+        <div class="hw-score">+${totalScore}分</div>
+      </div>
+
+      <div class="hw-blocks">
+        <div class="blocks-label">🍅 专注块（每10分钟不分心=+1分）</div>
+        <div class="blocks-row">
+          ${[1,2,3].map(i => `
+            <div class="block-btn ${blocks>=i?'done':''}" onclick="addFocusBlock()">
+              ${blocks>=i?'✅':'⬜'} 第${i}块
+            </div>`).join('')}
+        </div>
+        <div class="blocks-hint">最多3块，当前+${blockScore}分</div>
+      </div>
+
+      <div class="hw-keys">
+        <div class="key-item ${started?'unlocked':''}" onclick="startHomework()">
+          🔑 开始写作业 → ${started?'<span style="color:#06D6A0">✅ 兴趣任务已解锁</span>':'点击打卡'}
+        </div>
+        <div class="key-item ${completed?'unlocked':started?'':'locked'}" onclick="${started?'completeHomework()':''}">
+          🔑🔑 写完作业（+2分）→ ${completed?'<span style="color:#06D6A0">✅ 全部任务已解锁</span>':started?'点击打卡':'先开始写'}
+        </div>
+      </div>
+    </div>
+
+    <div class="optional-section">
+      <div class="optional-title">
+        🎮 今日可选任务
+        ${!started?'<span class="lock-hint">（开始写作业后解锁兴趣类）</span>':''}
+      </div>
+      ${renderOptionalList()}
+    </div>`;
+}
+
+// 渲染可选任务列表（按钥匙状态显示锁定/解锁）
+function renderOptionalList() {
+  const started = !!state.hwStarted;
+  const completed = !!state.hwCompleted;
+
+  return [...DAILY_OPTIONAL_INTEREST, ...DAILY_OPTIONAL_FUN].map(t => {
+    const isInterest = t.category === 'interest';
+    const isFun = t.category === 'fun';
+    const isLocked = isInterest ? !started : (isFun ? !completed : false);
+    const status = state.todayChecked[t.id];
     const isPending = status === 'pending';
     const isApproved = status === 'approved';
-    let checkIcon = '';
-    let statusClass = '';
-    if (isPending) { checkIcon = '⏳'; statusClass = 'pending'; }
-    else if (isApproved) { checkIcon = '✓'; statusClass = 'done'; }
-    return `
-      <div class="daily-item ${statusClass}" data-id="${t.id}" data-score="${t.score}" onclick="toggleDaily('${t.id}',${t.score})">
-        <div class="task-icon">${t.icon}</div>
-        <div class="task-info">
-          <div class="task-name">${t.name}${speakBtn(t.speech)}</div>
-          <div class="task-sub">${t.sub}</div>
-          ${t.tip ? `<div class="task-tip">💡 ${t.tip}</div>` : ''}
-          ${isPending ? '<div class="task-pending-label">⏳ 等待爸妈审核</div>' : ''}
-        </div>
-        <div class="task-score">+${t.score}</div>
-        <div class="task-check">${checkIcon}</div>
-      </div>`;
+    const clickHandler = isLocked ? 'showLockHint()' : "toggleDaily('" + t.id + "'," + t.score + ")";
+    const subText = isLocked ? (isInterest ? '先开始写作业来解锁' : '先写完作业来解锁') : t.sub;
+    const tipHtml = (t.tip && !isLocked) ? '<div class="task-tip">💡 ' + t.tip + '</div>' : '';
+    const pendingHtml = isPending ? '<div class="task-pending-label">⏳ 等待爸妈审核</div>' : '';
+
+    return '<div class="daily-item ' + (isLocked?'locked-task':'') + ' ' + (isPending?'pending':'') + ' ' + (isApproved?'done':'') + '"' +
+      ' data-id="' + t.id + '"' +
+      ' onclick="' + clickHandler + '">' +
+      '<div class="task-icon">' + (isLocked ? '🔒' : t.icon) + '</div>' +
+      '<div class="task-info">' +
+        '<div class="task-name">' + t.name + (isLocked ? '' : speakBtn(t.speech)) + '</div>' +
+        '<div class="task-sub">' + subText + '</div>' +
+        tipHtml + pendingHtml +
+      '</div>' +
+      '<div class="task-score ' + (isLocked?'locked-score':'') + '">+' + t.score + '</div>' +
+      '<div class="task-check">' + (isApproved?'✓':isPending?'⏳':'') + '</div>' +
+    '</div>';
   }).join('');
+}
+
+function renderOptionalTasks() {} // 已整合进 renderHomeworkTask
+function togglePackItem(packType, id, score) {
+  const packKey = packType === 'morning' ? 'morningPack' : 'nightPack';
+  const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
+  const fullScore = packType === 'morning' ? MORNING_PACK_FULL : NIGHT_PACK_FULL;
+  const bonusKey = packType === 'morning' ? 'morningPackBonus' : 'nightPackBonus';
+
+  if (state[packKey][id]) {
+    // 取消
+    delete state[packKey][id];
+    // 如果之前已发全套奖励，扣回差额
+    if (state[bonusKey]) {
+      const prevDone = Object.keys(state[packKey]).length + 1; // 取消前数量
+      const prevScore = prevDone >= pack.length ? fullScore : prevDone;
+      const newDone = Object.keys(state[packKey]).length;
+      const newScore = newDone >= pack.length ? fullScore : newDone;
+      state.totalScore = Math.max(0, state.totalScore - (prevScore - newScore));
+      if (newDone < pack.length) state[bonusKey] = false;
+    }
+    saveState(); renderAll();
+    return;
+  }
+
+  state[packKey][id] = true;
+  const doneCnt = Object.keys(state[packKey]).length;
+  const isFull = doneCnt >= pack.length;
+
+  // 计算本次新增分：全套触发时发全套分，否则发1分
+  let gain = 1;
+  if (isFull && !state[bonusKey]) {
+    // 全套触发：发全套分，减去之前单件已发的分
+    const prevPts = doneCnt - 1; // 之前已得分
+    gain = fullScore - prevPts;
+    state[bonusKey] = true;
+  }
+
+  state.totalScore += gain;
+  saveState();
+
+  // Firebase 同步
+  if (window._firebaseReady) {
+    submitPending('pack', id, (packType==='morning'?'早晨':'睡前')+'英雄包·'+id, gain);
+  }
+
+  renderAll();
+  if (isFull && gain > 1) {
+    showCelebration('🎉', `${packType==='morning'?'早晨':'睡前'}英雄包全套！`, `太棒了！全套完成+${fullScore}分！`);
+    setTimeout(() => tryShowShopBoost(gain, false), 1600);
+  } else {
+    showCelebration('✅', '完成一件！', `已完成${doneCnt}/${pack.length}件，${isFull?'全套达成！':'再完成'+(pack.length-doneCnt)+'件有惊喜！'}`);
+  }
+}
+
+// ── 写作业双钥匙 ──────────────────────────────────────────────
+function startHomework() {
+  if (state.hwStarted) return;
+  state.hwStarted = true;
+  saveState();
+  renderAll();
+  showCelebration('🔑', '小钥匙获得！', '开始写作业！兴趣任务已解锁——画画、跳舞、音乐可以做了！');
+}
+
+function completeHomework() {
+  if (!state.hwStarted || state.hwCompleted) return;
+  state.hwCompleted = true;
+  state.totalScore += HOMEWORK_TASK.scoreComplete;
+  saveState();
+  if (window._firebaseReady) {
+    submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete);
+  }
+  renderAll();
+  showCelebration('🔑🔑', '大钥匙获得！', `作业写完了！+${HOMEWORK_TASK.scoreComplete}分！游戏、零食、电影全部解锁！`);
+  setTimeout(() => tryShowShopBoost(HOMEWORK_TASK.scoreComplete, false), 1600);
+}
+
+function addFocusBlock() {
+  if (!state.hwStarted) {
+    showCelebration('⚠️', '先开始写作业', '点「开始写作业」来记录专注块！');
+    return;
+  }
+  if (state.hwBlocks >= HOMEWORK_TASK.maxBlocks) {
+    showCelebration('🏆', '专注块已满！', `已完成${HOMEWORK_TASK.maxBlocks}个专注块，太棒了！`);
+    return;
+  }
+  state.hwBlocks = (state.hwBlocks || 0) + 1;
+  state.totalScore += HOMEWORK_TASK.scorePerBlock;
+  saveState();
+  if (window._firebaseReady) {
+    submitPending('homework', 'hw_block_'+state.hwBlocks, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock);
+  }
+  renderAll();
+  showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
+}
+
+function showLockHint() {
+  showCelebration('🔒', '还没解锁', '先完成写作业的打卡，就能解锁这个任务！');
 }
 
 function toggleDaily(id, score) {
@@ -465,14 +753,25 @@ function claimCard(id) {
   const card = TASK_CARDS.find(c => c.id === id);
   if (!card || !isCardUnlocked(card)) return;
   state.cardClaims[id] = (state.cardClaims[id] || 0) + 1;
+  // 周度成就计数（每张只计一次）
+  if (state.cardClaims[id] === 1) {
+    state.weeklyCardCount = (state.weeklyCardCount || 0) + 1;
+  }
   saveState();
-  // 提交到待审队列
   if (window._firebaseReady) {
     submitPending('card', id, card.name, card.score);
   }
   closeModal('cardModal');
   renderAll();
-  showCelebration('⏳', `「${card.name}」已申请！`, `等爸爸妈妈审核后 +${card.score}分入账！`);
+  // 检查周度成就升级
+  const newAch = WEEKLY_ACHIEVEMENTS.slice().reverse().find(a => state.weeklyCardCount >= a.minCards);
+  if (newAch && newAch.id !== state.weeklyAchievement) {
+    state.weeklyAchievement = newAch.id;
+    saveState();
+    setTimeout(() => showCelebration(newAch.icon, `${newAch.level}成就！`, `本周完成${state.weeklyCardCount}张任务卡！周末结算+${newAch.bonusScore}分！`), 800);
+  } else {
+    showCelebration('⏳', `「${card.name}」已申请！`, `等爸爸妈妈审核后 +${card.score}分入账！`);
+  }
 }
 
 // ── 渲染商店 ───────────────────────────────────────────────────
@@ -879,6 +1178,68 @@ const BADGES = [
 function countSeriesDone(s, seriesName) {
   const claims = s.cardClaims || {};
   return TASK_CARDS.filter(c => c.series === seriesName && claims[c.id] > 0).length;
+}
+
+// ── 今日推荐任务卡渲染 ────────────────────────────────────────
+function renderTodayRecommended() {
+  const el = document.getElementById('todayRecommended');
+  if (!el) return;
+  const phase = state.currentPhase || 1;
+  const claimed = Object.keys(state.cardClaims || {}).filter(id => state.cardClaims[id] > 0);
+  const recommended = getTodayRecommended(phase, claimed, state.totalScore);
+  if (recommended.length === 0) {
+    el.innerHTML = '<div class="recommend-empty">🎉 今日推荐已全部完成！明天再来看看！</div>';
+    return;
+  }
+  const phaseConfig = PHASE_CONFIG[phase] || PHASE_CONFIG[1];
+  el.innerHTML = `
+    <div class="recommend-header">
+      <span class="recommend-title">🎴 今日推荐任务卡</span>
+      <span class="recommend-phase">${phaseConfig.name.split('·')[0]}</span>
+    </div>
+    <div class="recommend-desc">📌 ${phaseConfig.focusDesc}</div>
+    <div class="recommend-cards">
+      ${recommended.map(c => `
+        <div class="recommend-card" style="background:${c.lightColor};border-left:4px solid ${c.color}"
+             onclick="openCardModal('${c.id}')">
+          <div class="rec-card-stars">${c.stars}</div>
+          <div class="rec-card-info">
+            <div class="rec-card-name">${c.name}</div>
+            <div class="rec-card-desc">${c.desc}</div>
+          </div>
+          <div class="rec-card-score">+${c.score}分</div>
+          ${speakBtn(c.speech)}
+        </div>`).join('')}
+    </div>`;
+}
+
+// ── 周度成就系统 ──────────────────────────────────────────────
+function renderWeeklyAchievement() {
+  const el = document.getElementById('weeklyAchievementBanner');
+  if (!el) return;
+  const weekCardCount = state.weeklyCardCount || 0;
+  const achieved = WEEKLY_ACHIEVEMENTS.slice().reverse().find(a => weekCardCount >= a.minCards);
+  const next = WEEKLY_ACHIEVEMENTS.find(a => weekCardCount < a.minCards);
+  el.innerHTML = `<div class="weekly-ach-wrap">
+    <div class="weekly-ach-title">🏆 本周英雄成就</div>
+    <div class="weekly-ach-progress">
+      ${WEEKLY_ACHIEVEMENTS.map(a => {
+        const done = weekCardCount >= a.minCards;
+        return `<div class="ach-step ${done?'done':''}">
+          <span class="ach-step-icon">${a.icon}</span>
+          <span class="ach-step-label">${a.level}</span>
+          <span class="ach-step-cards">${a.minCards}张</span>
+        </div>`;
+      }).join('<div class="ach-arrow">→</div>')}
+    </div>
+    <div class="weekly-ach-current">
+      ${achieved
+        ? `<span style="color:#06D6A0;font-weight:700">${achieved.icon} ${achieved.level}！本周+${achieved.bonusScore}分等待结算</span>`
+        : '<span style="color:#aaa">完成任务卡，向英雄进发！</span>'}
+    </div>
+    ${next ? `<div class="weekly-ach-next">再完成${next.minCards-weekCardCount}张→「${next.level}」+${next.bonusScore}分！</div>` : ''}
+    <div class="weekly-card-count">本周已完成：<b>${weekCardCount}</b> 张任务卡</div>
+  </div>`;
 }
 
 // ── 渲染每周任务总览 ──────────────────────────────────────────
@@ -1697,3 +2058,185 @@ function mathShowSection(id) {
     mathRenderHome();
   });
 })();
+'+t.id+'
+
+function toggleDaily(id, score) {
+  if (state.todayChecked[id]) {
+    // 取消打卡（只能取消待审状态，不能取消已通过的）
+    if (state.todayChecked[id] === 'pending') {
+      delete state.todayChecked[id];
+      saveState();
+      renderAll();
+      showCelebration('↩️', '已取消申请', '打卡已撤销');
+    } else {
+      showCelebration('🔒', '已提交审核', '请等待爸爸妈妈确认哦！');
+    }
+    return;
+  }
+
+  // 固定任务：完成后弹出自律自报弹窗
+  const fixedTask = DAILY_FIXED.find(t => t.id === id);
+  if (fixedTask) {
+    // 先标记待审，再弹自报
+    state.todayChecked[id] = 'pending';
+    saveState();
+    const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const task = allTasks.find(t => t.id === id);
+    if (task && window._firebaseReady) {
+      submitPending('daily', id, task.name, score);
+    }
+    renderAll();
+    // 弹出自律自报弹窗
+    setTimeout(() => showSelfReportModal(id, task ? task.name : id, score), 400);
+    return;
+  }
+
+  // 可选/作业任务：直接提交
+  state.todayChecked[id] = 'pending';
+  saveState();
+  const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+  const task = allTasks.find(t => t.id === id);
+  if (task && window._firebaseReady) {
+    submitPending('daily', id, task.name, score);
+  }
+  renderAll();
+  showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
+  setTimeout(() => tryShowShopBoost(score, true), 1600);
+}
+
+// ── 自律自报弹窗 ───────────────────────────────────────────────
+function showSelfReportModal(taskId, taskName, score) {
+  const today = new Date().toISOString().slice(0, 10);
+  // 如果该任务今天已自报过，跳过
+  if (!state.selfReport) state.selfReport = {};
+  if (!state.selfReport[today]) state.selfReport[today] = {};
+
+  const modal = document.createElement('div');
+  modal.id = 'selfReportModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+      <div style="font-size:2rem;margin-bottom:8px;">🦸</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">「${taskName}」完成啦！</div>
+      <div style="font-size:0.95rem;color:#666;margin-bottom:20px;">今天是你自己想起来的吗？</div>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button onclick="submitSelfReport('${taskId}','${today}',true,${score})"
+          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:linear-gradient(135deg,#06D6A0,#00897B);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">
+          💪 我自己<br>想起来的！
+        </button>
+        <button onclick="submitSelfReport('${taskId}','${today}',false,${score})"
+          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:#f0f0f0;color:#555;font-size:1rem;font-weight:700;cursor:pointer;">
+          👋 爸爸/妈妈<br>提醒了我
+        </button>
+      </div>
+      <div style="font-size:0.8rem;color:#aaa;margin-top:14px;">诚实回答，不管哪个都不扣分 ✨</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function submitSelfReport(taskId, date, isSelf, score) {
+  const modal = document.getElementById('selfReportModal');
+  if (modal) modal.remove();
+  if (!state.selfReport) state.selfReport = {};
+  if (!state.selfReport[date]) state.selfReport[date] = {};
+  state.selfReport[date][taskId] = isSelf ? 'self' : 'reminded';
+  saveState();
+  // 同步到 Firebase
+  if (window._firebaseReady) {
+    window._firebaseSet(
+      window._firebaseRef(window._firebaseDB, `selfReport/${date}/${taskId}`),
+      isSelf ? 'self' : 'reminded'
+    );
+  }
+  const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
+  showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
+  setTimeout(() => tryShowShopBoost(score, true), 1600);
+}
+
+// ── 月度自律率计算 ─────────────────────────────────────────────
+function calcMonthlyDisciplineRate(year, month) {
+  if (!state.selfReport) return { rate: 0, selfDays: 0, totalDays: 0 };
+  const prefix = `${year}-${String(month).padStart(2,'0')}`;
+  let selfDays = 0, totalDays = 0;
+
+  Object.entries(state.selfReport).forEach(([date, tasks]) => {
+    if (!date.startsWith(prefix)) return;
+    // 判断当天固定任务完成率是否达到80%
+    const fixedIds = DAILY_FIXED.map(t => t.id);
+    const totalFixed = fixedIds.length;
+    // 当天有自报记录的固定任务数（说明完成了）
+    const reportedFixed = fixedIds.filter(id => tasks[id]).length;
+    if (totalFixed === 0 || reportedFixed / totalFixed < 0.8) return; // 固定任务不达标，不计入
+
+    // 自律判断：当天所有自报的固定任务都是'self'
+    const reportedEntries = Object.values(tasks).filter(v => v === 'self' || v === 'reminded');
+    if (reportedEntries.length === 0) return;
+    totalDays++;
+    const allSelf = reportedEntries.every(v => v === 'self');
+    if (allSelf) selfDays++;
+  });
+
+  const rate = totalDays > 0 ? Math.round(selfDays / totalDays * 100) : 0;
+  return { rate, selfDays, totalDays };
+}
+
+// ── B类奖励解锁判断 ───────────────────────────────────────────
+function isBRewardUnlocked() {
+  const now = new Date();
+  const { rate } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
+  return rate >= 85;
+}
+
+// ── 自律能量条渲染 ────────────────────────────────────────────
+function renderDisciplineBar() {
+  const el = document.getElementById('disciplineBar');
+  if (!el) return;
+  const now = new Date();
+  const { rate, selfDays, totalDays } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const remainDays = daysInMonth - now.getDate();
+  const unlocked = rate >= 85;
+  const filled = Math.round(rate / 10);
+  const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+  el.innerHTML = `
+    <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条</span>
+        <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
+      </div>
+      <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};letter-spacing:2px;">${bar}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.82rem;color:#888;">
+        <span>自律天数：${selfDays}/${totalDays}天</span>
+        <span>剩余：${remainDays}天</span>
+      </div>
+      ${unlocked
+        ? '<div style="margin-top:8px;font-size:0.88rem;color:#06D6A0;font-weight:700;">✨ 本月自律达标！大奖已解锁！</div>'
+        : rate > 0
+          ? `<div style="margin-top:8px;font-size:0.85rem;color:#F9A825;">还差${85-rate}%解锁本月大奖，加油！💪</div>`
+          : '<div style="margin-top:8px;font-size:0.85rem;color:#aaa;">开始打卡，积累自律能量！</div>'
+      }
+    </div>
+  `;
+}
+
+function calcTodayScore() {
+  return Object.keys(state.todayChecked).reduce((sum, id) => {
+    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const t = all.find(x => x.id === id);
+    return sum + (t ? t.score : 0);
+  }, 0);
+}
+
+function updateTodayScore() {
+  const today = calcTodayScore();
+  document.getElementById('todayScore').textContent = today;
+  // 同步顶部今日得分
+  const el = document.getElementById('headerTodayScore');
+  if (el) el.textContent = today > 0 ? `+${today}` : '+0';
+}
+
+// ── 渲染任务卡 ─────────────────────────────────────────────────

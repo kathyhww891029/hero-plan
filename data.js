@@ -2,92 +2,419 @@
 // 英雄成长计划 · 数据配置
 // ══════════════════════════════════════════════════════════════
 
-// ── 每日固定任务 ──────────────────────────────────────────────
-const DAILY_FIXED = [
-  { id:'df1', icon:'💃', name:'奥特曼舞蹈训练', sub:'跟着音乐跳，身体是最强的武器 💪', score:3, type:'fixed',
-    tip:'每天跟着音乐跳一段舞，哪怕只有5分钟！\n连续7天：额外+5分🔥\n连续30天：解锁「舞蹈小达人」彩虹徽章⭐\n连续100天：和爸爸一起登台演出🎤',
-    speech:'奥特曼舞蹈训练！跟着音乐跳起来，身体是你最强的武器！连续坚持7天还能额外加5分！完成就能得3分！' },
-  { id:'df2', icon:'🍽️', name:'补充英雄能量', sub:'好好吃饭，不挑食(shí) 🥦', score:2, type:'fixed',
-    speech:'补充英雄能量！好好吃饭，不挑食，英雄需要燃料才能战斗！完成得2分！' },
-  { id:'df3', icon:'🎒', name:'出征前的准备', sub:'书包我来搞定 ✅', score:2, type:'fixed',
-    speech:'出征前的准备！自己整理书包，出发前的准备我来搞定，完成得2分！' },
-  { id:'df4', icon:'💛', name:'今日侠义时刻', sub:'帮家人做一件事 🤝', score:3, type:'fixed',
-    speech:'今日侠义时刻！今天帮家人做一件事，哪怕一件小事也算，真正的英雄心里装着别人，完成得3分！' },
-  { id:'df5', icon:'🌙', name:'英雄9点半充能', sub:'9点半前主动上床，不用大人催！💤', score:3, type:'fixed',
-    tip:'10点上床=0分，9点半上床=+3分，连续3天9点半上床额外+5分！',
-    speech:'英雄9点半充能！9点半之前自己主动上床，不用大人催！连续3天还能额外加5分！完成得3分！' },
+// ══════════════════════════════════════════════════════════════
+// 英雄包 · 套餐式固定任务（阶梯积分：1件+1, 2件+2, 全套×2）
+// ══════════════════════════════════════════════════════════════
+
+// 早晨英雄包（3件，全套+6分）
+const MORNING_PACK = [
+  { id:'mp1', icon:'👕', name:'自己穿好衣服', sub:'英雄出征，先穿战甲！⚔️', score:1,
+    speech:'自己穿好衣服！英雄出征要先穿战甲，自己搞定，得1分！' },
+  { id:'mp2', icon:'🦷', name:'洗脸刷牙', sub:'英雄的笑容最闪亮 ✨', score:1,
+    speech:'洗脸刷牙！英雄的笑容最闪亮，快去刷干净，得1分！' },
+  { id:'mp3', icon:'🍳', name:'好好吃早饭', sub:'能量充满，准备出发！⚡', score:1,
+    speech:'好好吃早饭！英雄需要能量才能战斗，把早饭吃完，得1分！' },
+];
+// 早晨英雄包全套奖励分值（3件×1分×2倍=6分）
+const MORNING_PACK_FULL = 6;
+
+// 睡前英雄包（3件，全套+6分）
+const NIGHT_PACK = [
+  { id:'np1', icon:'🛁', name:'洗澡+洗脸+刷牙', sub:'三合一清洁，英雄归营！🌙', score:1,
+    speech:'洗澡洗脸刷牙三合一！英雄归营要清洁干净，搞定得1分！' },
+  { id:'np2', icon:'🎒', name:'收拾书包+课本', sub:'明天出征准备好 ✅', score:1,
+    speech:'收拾书包和课本！明天出征的装备要提前准备好，得1分！' },
+  { id:'np3', icon:'🌛', name:'按时上床', sub:'9点半前自己上床，不用催 💤', score:1,
+    tip:'9点半前主动上床=得分！连续3天=额外+3分奖励！',
+    speech:'按时上床！9点半之前自己主动上床，不用大人催，英雄要好好充电，得1分！连续三天还有额外奖励！' },
+];
+const NIGHT_PACK_FULL = 6;
+
+// ── 写作业（独立固定任务，双钥匙机制）────────────────────────
+// 专注块：每完成10分钟不分心=+1分，最多3块，写完+2分，合计最高+5分
+const HOMEWORK_TASK = {
+  id:'hw_main', icon:'📚', name:'今日作业', sub:'写作业，解锁精彩的一天 🔑',
+  scorePerBlock: 1,  // 每个专注块得分
+  maxBlocks: 3,      // 最多几块
+  scoreComplete: 2,  // 写完额外得分
+  blockMinutes: 10,  // 每块多少分钟（第一阶段）
+  speech:'今日作业！每专注10分钟得1分，最多3块，写完全部作业再加2分，最高5分！开始写作业就能解锁画画和跳舞！'
+};
+
+// ══════════════════════════════════════════════════════════════
+// 🏆 周度成就系统（每周任务卡完成数量对应等级）
+// ══════════════════════════════════════════════════════════════
+const WEEKLY_ACHIEVEMENTS = [
+  {
+    id:'w1', level:'小英雄', icon:'🥉', minCards:1,
+    bonusScore:10, badge:'小英雄徽章',
+    desc:'本周完成1张任务卡',
+    speech:'小英雄成就！本周完成了1张任务卡，获得小英雄徽章和10分奖励！'
+  },
+  {
+    id:'w2', level:'真英雄', icon:'🥈', minCards:3,
+    bonusScore:20, badge:'真英雄专属徽章',
+    desc:'本周完成3张任务卡',
+    speech:'真英雄成就！本周完成了三张任务卡，获得真英雄专属徽章和20分！'
+  },
+  {
+    id:'w3', level:'超级英雄', icon:'🥇', minCards:5,
+    bonusScore:35, badge:'本周最强英雄称号',
+    unlockNextPhase:true,
+    desc:'本周完成5张任务卡',
+    speech:'超级英雄成就！本周完成了五张任务卡！获得35分加上本周最强英雄称号，还能解锁下周新卡！'
+  },
 ];
 
-// ── 每日可领取任务 ─────────────────────────────────────────────
-const DAILY_OPTIONAL = [
-  { id:'do1', icon:'⚡', name:'闪电侠速算训练', sub:'口算做完了，来领分！⚡', score:3, type:'optional',
-    tip:'做完口算主动来贴星星，不做不扣分',
+// ── 阶段配置（爸妈手动切换）───────────────────────────────────
+const PHASE_CONFIG = {
+  1: {
+    name:'第一阶段·行为稳定+专注萌芽',
+    duration:'0~3个月',
+    focusDesc:'建立节奏感，让每天有可预期的结构',
+    recommendRatio:{ focus:70, interest:30 },
+    recommendTypes:['focus', 'interest'],
+    primaryType:'focus',
+    blockMinutes:10,  // 专注块时长
+  },
+  2: {
+    name:'第二阶段·时间感知+主动选择',
+    duration:'3~6个月',
+    focusDesc:'把执行权交给孩子，让他感受到选择的力量',
+    recommendRatio:{ plan:40, challenge:40, creative:20 },
+    recommendTypes:['plan', 'challenge', 'creative'],
+    primaryType:'plan',
+    blockMinutes:12,
+  },
+  3: {
+    name:'第三阶段·自我觉察+目标设定',
+    duration:'6个月后',
+    focusDesc:'开始向内看，培养元认知和主动设定目标的能力',
+    recommendRatio:{ reflect:30, custom:30, challenge:40 },
+    recommendTypes:['reflect', 'custom', 'challenge'],
+    primaryType:'reflect',
+    blockMinutes:15,
+  },
+};
+
+// ── 今日推荐任务卡（按阶段返回推荐卡）────────────────────────
+function getTodayRecommended(phase, claimedIds, totalScore) {
+  const config = PHASE_CONFIG[phase] || PHASE_CONFIG[1];
+  const types = config.recommendTypes;
+
+  // 过滤：已解锁、未完成、是当前阶段推荐类型
+  const candidates = TASK_CARDS.filter(c => {
+    const unlocked = c.unlockAt === 0 || totalScore >= c.unlockAt;
+    const notClaimed = !(claimedIds || []).includes(c.id);
+    const isRecommendType = types.includes(c.recommendType);
+    const isCurrentPhase = !c.phase || c.phase <= phase;
+    return unlocked && notClaimed && isRecommendType && isCurrentPhase;
+  });
+
+  // 主推类型优先取1张，其他类型取1张，共推荐2张
+  const primary = candidates.filter(c => c.recommendType === config.primaryType);
+  const others = candidates.filter(c => c.recommendType !== config.primaryType);
+
+  const result = [];
+  if (primary.length > 0) result.push(primary[Math.floor(Math.random() * primary.length)]);
+  if (others.length > 0) result.push(others[Math.floor(Math.random() * others.length)]);
+  return result.slice(0, 2);
+}
+
+// ── 每日固定任务（保留兼容旧逻辑，供审核Tab使用）─────────────
+const DAILY_FIXED = [
+  { id:'mp1', icon:'👕', name:'自己穿好衣服', sub:'英雄出征，先穿战甲！⚔️', score:1, type:'fixed', pack:'morning',
+    speech:'自己穿好衣服！英雄出征要先穿战甲，自己搞定，得1分！' },
+  { id:'mp2', icon:'🦷', name:'洗脸刷牙', sub:'英雄的笑容最闪亮 ✨', score:1, type:'fixed', pack:'morning',
+    speech:'洗脸刷牙！英雄的笑容最闪亮，快去刷干净，得1分！' },
+  { id:'mp3', icon:'🍳', name:'好好吃早饭', sub:'能量充满，准备出发！⚡', score:1, type:'fixed', pack:'morning',
+    speech:'好好吃早饭！英雄需要能量才能战斗，把早饭吃完，得1分！' },
+  { id:'np1', icon:'🛁', name:'洗澡+洗脸+刷牙', sub:'三合一清洁，英雄归营！🌙', score:1, type:'fixed', pack:'night',
+    speech:'洗澡洗脸刷牙三合一！英雄归营要清洁干净，搞定得1分！' },
+  { id:'np2', icon:'🎒', name:'收拾书包+课本', sub:'明天出征准备好 ✅', score:1, type:'fixed', pack:'night',
+    speech:'收拾书包和课本！明天出征的装备要提前准备好，得1分！' },
+  { id:'np3', icon:'🌛', name:'按时上床', sub:'9点半前自己上床，不用催 💤', score:1, type:'fixed', pack:'night',
+    tip:'9点半前主动上床=得分！连续3天=额外+3分奖励！',
+    speech:'按时上床！9点半之前自己主动上床，不用大人催，英雄要好好充电，得1分！' },
+  { id:'hw_main', icon:'📚', name:'今日作业', sub:'写作业，解锁精彩的一天 🔑', score:5, type:'fixed', pack:'homework',
+    tip:'每专注10分钟+1分（最多3块），写完+2分，最高5分\n开始写→解锁兴趣可选任务\n写完→解锁娱乐可选任务',
+    speech:'今日作业！专注写作业，最高5分！写完才能玩游戏！' },
+];
+
+// ── 可选任务 · 兴趣类（开始写作业即解锁）─────────────────────
+// 🔑 小钥匙：开始写作业 → 解锁兴趣类
+const DAILY_OPTIONAL_INTEREST = [
+  { id:'oi1', icon:'🎨', name:'英雄画册打卡', sub:'今天画了一幅画，来领分！🖌️', score:2, type:'optional', category:'interest',
+    tip:'今天画了任何一幅画（不限内容，不评判好坏），打卡就得分',
+    speech:'英雄画册打卡！今天画了画吗？不管画什么，画了就是小画家，来打卡得2分！你的每幅画都是世界上独一无二的！' },
+  { id:'oi2', icon:'💃', name:'跳舞打卡', sub:'跟着音乐跳起来 🎵', score:2, type:'optional', category:'interest',
+    tip:'跟着音乐跳一段舞，哪怕5分钟！爸爸一起跳额外+1分！',
+    speech:'跳舞打卡！跟着音乐跳起来，身体是最强的武器！爸爸一起跳的话还能多1分，得2分！' },
+  { id:'oi3', icon:'🎵', name:'音乐欣赏时光', sub:'认真听一首曲子，说说感受！🎧', score:2, type:'optional', category:'interest',
+    tip:'闭上眼睛听一首曲子，听完说出你的感受，说了就得分',
+    speech:'音乐欣赏时光！闭上眼睛认真听一首曲子，听完说说你的感受，开心还是难过？说出来就得2分！' },
+  { id:'oi4', icon:'🎯', name:'专注时光', sub:'选一件事，定好时间，专心做完！', score:3, type:'optional', category:'interest',
+    tip:'自己选一件喜欢的事（画画/积木/看书），定好时间（5~15分钟），中途不分心做完就得分',
+    speech:'专注时光！自己选一件喜欢的事，定好时间专心做完，中途不分心就得3分！这是专注力超能力训练！' },
+];
+
+// ── 可选任务 · 娱乐类（写完作业才解锁）──────────────────────
+// 🔑🔑 大钥匙：写完作业 → 解锁娱乐类（补给站兑换）
+// 娱乐类通过商店兑换实现，这里保留口算和英语入口
+const DAILY_OPTIONAL_FUN = [
+  { id:'of1', icon:'⚡', name:'闪电侠速算训练', sub:'口算做完了，来领分！⚡', score:3, type:'optional', category:'fun',
+    tip:'做完口算主动来领分，不做不扣分',
     speech:'闪电侠速算训练！口算做完了吗？做完主动来领分，得3分！不做也不扣分，做了就是赚到！' },
-  { id:'do2', icon:'🌍', name:'蜘蛛侠秘密武器', sub:'叽里呱啦学完，来领2分！🌍', score:2, type:'optional',
+  { id:'of2', icon:'🌍', name:'蜘蛛侠秘密武器', sub:'叽里呱啦学完，来领2分！🌍', score:2, type:'optional', category:'fun',
     tip:'学完叽里呱啦来领2分；再用出来一句话额外+3分！',
     speech:'蜘蛛侠秘密武器！叽里呱啦学完了吗？学完得2分！今天学的内容能说出一句话来，再加3分！' },
-  { id:'do3', icon:'🎵', name:'音乐欣赏时光', sub:'认真听一首曲子，说说感受！🎧', score:2, type:'optional', category:'music',
-    tip:'闭上眼睛听一首曲子，听完说出你的感受（开心/难过/想跑步……），说了就得分',
-    speech:'音乐欣赏时光！闭上眼睛认真听一首曲子，听完说说你的感受，开心还是难过？想跑步还是想睡觉？说出来就得2分！' },
-  { id:'do4', icon:'🎨', name:'英雄画册打卡', sub:'今天画了一幅画，来领分！🖌️', score:2, type:'optional', category:'drawing',
-    tip:'今天画了任何一幅画（不限内容，不评判好坏），来打卡就得分',
-    speech:'英雄画册打卡！今天画了画吗？不管画什么，画了就是小画家，来打卡得2分！你的每幅画都是世界上独一无二的！' },
-  { id:'do5', icon:'🎵🎨', name:'音画故事创作', sub:'听音乐画感受，音乐家+画家二合一！✨', score:3, type:'optional', category:'music_art',
-    tip:'听一首爸爸演奏或播放的曲子，把听到的感受画出来（颜色/形状/故事都行），画完讲给大家听',
-    speech:'音画故事创作！听爸爸演奏一段曲子，把你听到的感受画出来，颜色形状故事都行，完成得3分！音乐家加画家二合一！' },
+  { id:'oi5', icon:'🎵🎨', name:'音画故事创作', sub:'听音乐画感受，二合一！✨', score:3, type:'optional', category:'fun',
+    tip:'听爸爸演奏或播放的曲子，把感受画出来，画完讲给大家听',
+    speech:'音画故事创作！听爸爸演奏一段曲子，把感受画出来，颜色形状故事都行，完成得3分！' },
 ];
 
-// ── 作业独立计分 ───────────────────────────────────────────────
-const DAILY_HOMEWORK = [
-  { id:'dh1', icon:'📝', name:'今日任务我搞定', sub:'作业当天完成来领分 📚', score:3, type:'homework',
-    speech:'今日任务我搞定！今天的作业当天完成，自己搞定，来领3分！' },
-  { id:'dh2', icon:'🏅', name:'英雄自律徽章', sub:'作业完成 + 9点半上床，两个都做到！🌟', score:2, type:'homework',
-    tip:'作业+9点半睡觉都做到，才能领这个徽章，奖励自律的英雄！',
-    speech:'英雄自律徽章！作业完成加上9点半上床，两个都做到才能领这个特别徽章，奖励最自律的英雄，得2分！' },
-];
+// 合并供旧逻辑使用
+const DAILY_OPTIONAL = [...DAILY_OPTIONAL_INTEREST, ...DAILY_OPTIONAL_FUN];
+const DAILY_HOMEWORK = []; // 作业已整合进DAILY_FIXED
 
-// ── 任务卡体系 ─────────────────────────────────────────────────
+// ── 任务卡体系（三阶段） ───────────────────────────────────────
+// phase: 1=行为稳定+专注萌芽(0~3月) / 2=时间感知+主动选择(3~6月) / 3=自我觉察+目标设定(6月后)
+// recommendType: focus=专注习惯 / interest=兴趣探索 / plan=计划主动 / challenge=挑战 / creative=创意 / reflect=反思 / custom=自定义
 const TASK_CARDS = [
-  // 习惯养成系列·敖丙主题
+
+  // ════════════════════════════════════════════════
+  // 🥉 第一阶段：行为稳定 + 专注力萌芽（0~3个月）
+  // 推荐比例：70%专注/习惯类 + 30%兴趣探索类
+  // ════════════════════════════════════════════════
+
+  // 🎯 专注挑战卡（主推）
   {
-    id:'c1', series:'🌙 习惯养成', theme:'敖丙', color:'#118AB2', lightColor:'#E8F4FD',
-    level:1, stars:'⭐',
-    name:'敖丙の定力训练',
-    sub:'冷静就是力量 💪',
-    desc:'一天不磨蹭，按时完成所有事',
-    tip:'🎯 不磨蹭的标准：\n①早上大人叫一次就起床，不赖床\n②吃饭专心吃，不超过20分钟\n③出门前书包自己整理好，一次提醒内完成\n④做作业中间不乱跑、不玩玩具\n⑤9点半前自己主动上床\n全天5件事都做到 = 不磨蹭✅',
+    id:'p1_focus1', series:'🎯 专注挑战', phase:1, recommendType:'focus',
+    color:'#118AB2', lightColor:'#E8F4FD', stars:'⭐',
+    name:'专注小勇士', sub:'10分钟，只做一件事！⏱️',
+    desc:'选一件事（画画/积木/看书），定时10分钟，中途不分心做完',
+    tip:'📌 规则：\n①自己选一件喜欢的事\n②让爸妈帮你定时10分钟\n③铃声响之前不能停下来\n④做到了来领分！',
+    score:4, unlockAt:0, unlocked:true,
+    speech:'专注小勇士！选一件事，定时10分钟，中途不分心，铃响前不停下来，做到得4分！'
+  },
+  {
+    id:'p1_focus2', series:'🎯 专注挑战', phase:1, recommendType:'focus',
+    color:'#118AB2', lightColor:'#E8F4FD', stars:'⭐⭐',
+    name:'专注升级版', sub:'10分钟×2，两轮都坚持！💪',
+    desc:'连续完成两个10分钟专注块（中间可以休息5分钟）',
+    tip:'📌 规则：\n①第一个10分钟专注完成\n②休息5分钟（喝水、伸展）\n③第二个10分钟再来一次\n④两轮都完成才得分！',
+    score:6, unlockAt:20, unlocked:false,
+    speech:'专注升级版！连续两个10分钟，中间可以休息5分钟，两轮都完成得6分！需要20分解锁！'
+  },
+  {
+    id:'p1_focus3', series:'🎯 专注挑战', phase:1, recommendType:'focus',
+    color:'#118AB2', lightColor:'#E8F4FD', stars:'⭐⭐⭐',
+    name:'专注大师', sub:'今天作业一口气写完！🏆',
+    desc:'写作业期间完成3个专注块，中间没有被别的事打断',
+    tip:'📌 标准：\n①专注块=10分钟不分心\n②完成3个专注块\n③中间只能喝水/上厕所\n④作业全部写完额外加分！',
+    score:8, unlockAt:50, unlocked:false,
+    speech:'专注大师！写作业完成三个专注块，中间不被打断，得8分！需要50分解锁！'
+  },
+
+  // 🌟 小小成就卡（辅推）
+  {
+    id:'p1_habit1', series:'🌟 小小成就', phase:1, recommendType:'focus',
+    color:'#06D6A0', lightColor:'#EDFFF9', stars:'⭐',
+    name:'早晨英雄', sub:'早晨三件事，自己全搞定！🌅',
+    desc:'今天早晨英雄包三件事全部自己完成，不用提醒',
+    tip:'📌 三件事：\n①自己穿好衣服\n②洗脸刷牙\n③好好吃早饭\n全部自己做到，来领这张卡！',
     score:5, unlockAt:0, unlocked:true,
-    speech:'敖丙の定力训练！今天一整天不磨蹭，所有事情按时完成，就像敖丙一样冷静有力量，完成得5分！'
+    speech:'早晨英雄！早晨三件事全部自己完成，穿衣洗脸吃饭都搞定，得5分！'
   },
   {
-    id:'c2', series:'🌙 习惯养成', theme:'敖丙', color:'#118AB2', lightColor:'#E8F4FD',
-    level:2, stars:'⭐⭐',
-    name:'冰莲盾修炼中',
-    sub:'连续(xù)三天，盾牌变强！🛡️',
-    desc:'连续3天不磨蹭',
-    tip:'🎯 不磨蹭的标准（同上，连续3天都做到）：\n①叫一次就起床 ②吃饭不超20分钟\n③书包一提醒就整理 ④作业专心做\n⑤9点半主动上床\n连续3天全做到，冰莲盾变强！🛡️',
-    score:8, unlockAt:30, unlocked:false,
-    speech:'冰莲盾修炼！连续3天都不磨蹭，坚持下来盾牌就变强了，得8分！需要累计30分才能解锁！'
+    id:'p1_habit2', series:'🌟 小小成就', phase:1, recommendType:'focus',
+    color:'#06D6A0', lightColor:'#EDFFF9', stars:'⭐⭐',
+    name:'睡前小英雄', sub:'睡前三件事，不等大人说！🌙',
+    desc:'今天睡前英雄包三件事全部自己做到，没等大人催',
+    score:5, unlockAt:15, unlocked:false,
+    speech:'睡前小英雄！洗澡收拾书包按时上床三件事全做到，不用催，得5分！需要15分解锁！'
   },
   {
-    id:'c3', series:'🌙 习惯养成', theme:'敖丙', color:'#118AB2', lightColor:'#E8F4FD',
-    level:3, stars:'⭐⭐⭐',
-    name:'乾坤圈觉醒',
-    sub:'一周不磨蹭，乾坤圈出现！✨',
-    desc:'一周都不磨蹭',
-    tip:'🎯 不磨蹭的标准（连续7天全做到）：\n①叫一次就起床 ②吃饭不超20分钟\n③书包一提醒就整理 ④作业专心做\n⑤9点半主动上床\n整整一周都做到，传说乾坤圈就会觉醒！✨',
-    score:12, unlockAt:60, unlocked:false,
-    speech:'乾坤圈觉醒！整整一周都不磨蹭，传说中的乾坤圈就会觉醒，得12分！需要累计60分解锁！'
+    id:'p1_habit3', series:'🌟 小小成就', phase:1, recommendType:'focus',
+    color:'#06D6A0', lightColor:'#EDFFF9', stars:'⭐⭐⭐',
+    name:'全天英雄包', sub:'早晨+睡前全套，一天都赢了！👑',
+    desc:'今天早晨英雄包和睡前英雄包全部完成',
+    score:8, unlockAt:40, unlocked:false,
+    speech:'全天英雄包！早晨和睡前两套全部完成，今天全赢了，得8分！需要40分解锁！'
+  },
+
+  // 🎨 兴趣探索卡（少量，锚定内驱力）
+  {
+    id:'p1_interest1', series:'🎨 兴趣探索', phase:1, recommendType:'interest',
+    color:'#9C27B0', lightColor:'#F3E5F5', stars:'🎨',
+    name:'英雄图鉴', sub:'画出你心目中最厉害的英雄！🦸',
+    desc:'画出你心目中最厉害的英雄，画完讲给爸爸或妈妈听',
+    tip:'📌 怎么画：\n①想一想你最喜欢的英雄\n②用画笔画出他的样子\n③画完讲给爸爸妈妈：他叫什么？有什么能力？\n每幅画都是世界上独一无二的🌟',
+    score:5, unlockAt:0, unlocked:true,
+    speech:'英雄图鉴！画出你心目中最厉害的英雄，画完讲给爸爸妈妈听，得5分！'
   },
   {
-    id:'c4', series:'🌙 习惯养成', theme:'敖丙', color:'#118AB2', lightColor:'#E8F4FD',
-    level:4, stars:'⭐⭐⭐⭐',
-    name:'敖丙·真身降临',
-    sub:'自己提醒自己，真正的英雄 👑',
-    desc:'自己提醒自己睡觉，不用大人催',
-    score:15, unlockAt:100, unlocked:false,
-    speech:'敖丙真身降临！自己提醒自己睡觉，不用大人催，这才是真正的英雄！得15分！需要累计100分解锁！'
+    id:'p1_interest2', series:'🎨 兴趣探索', phase:1, recommendType:'interest',
+    color:'#9C27B0', lightColor:'#F3E5F5', stars:'🎨🎨',
+    name:'我的恐龙世界', sub:'画一幅恐龙世界，越大越好！🦕',
+    desc:'画一幅恐龙世界的画，至少有3只不同的恐龙',
+    score:6, unlockAt:20, unlocked:false,
+    speech:'我的恐龙世界！画一幅有三只不同恐龙的世界，得6分！需要20分解锁！'
   },
+  {
+    id:'p1_interest3', series:'🎨 兴趣探索', phase:1, recommendType:'interest',
+    color:'#FF6B9D', lightColor:'#FFF0F7', stars:'🎵',
+    name:'音乐小侦探', sub:'听完说出你的感受！🎧',
+    desc:'闭上眼睛听一首曲子，说出至少3个感受词',
+    tip:'📌 怎么玩：\n①爸爸播放一首曲子\n②闭上眼睛认真听\n③说出你的感受，越具体越好！\n比如：这首曲子让我想到了恐龙在奔跑！',
+    score:4, unlockAt:0, unlocked:true,
+    speech:'音乐小侦探！闭上眼睛听一首曲子，说出三个感受，越具体越好，得4分！'
+  },
+
+  // ════════════════════════════════════════════════
+  // 🥈 第二阶段：时间感知 + 主动选择（3~6个月）
+  // 推荐比例：40%计划类 + 40%挑战类 + 20%创意类
+  // ════════════════════════════════════════════════
+
+  // 📅 小小计划卡（主推）
+  {
+    id:'p2_plan1', series:'📅 小小计划', phase:2, recommendType:'plan',
+    color:'#F9A825', lightColor:'#FFFDE7', stars:'📅',
+    name:'我来定时间', sub:'自己报告计划时间，然后做到！⏰',
+    desc:'今天选一件事，告诉爸妈你打算几点做，然后在那个时间自己做到',
+    tip:'📌 怎么做：\n①选一件今天要做的事（可以是作业/洗澡/收拾书包）\n②告诉爸爸或妈妈你打算几点做\n③在你说的时间自己去做，不等大人提醒\n④做到了来领分！',
+    score:5, unlockAt:60, unlocked:false,
+    speech:'我来定时间！选一件事告诉爸妈你打算几点做，然后自己在那个时间做到，得5分！需要60分解锁！'
+  },
+  {
+    id:'p2_plan2', series:'📅 小小计划', phase:2, recommendType:'plan',
+    color:'#F9A825', lightColor:'#FFFDE7', stars:'📅📅',
+    name:'今日计划官', sub:'早上说出今天的三件事，晚上看完成了几件！',
+    desc:'早上说出今天打算完成的三件事，睡前对照看完成了几件',
+    tip:'📌 怎么做：\n①早上告诉爸妈今天打算做哪三件事\n②晚上睡前对照，说出完成了哪些\n③完成2件以上来领分！',
+    score:7, unlockAt:90, unlocked:false,
+    speech:'今日计划官！早上说出三件计划，睡前对照完成情况，完成两件以上得7分！需要90分解锁！'
+  },
+  {
+    id:'p2_plan3', series:'📅 小小计划', phase:2, recommendType:'plan',
+    color:'#F9A825', lightColor:'#FFFDE7', stars:'📅📅📅',
+    name:'一周计划师', sub:'今天定好这周想做的一件挑战！',
+    desc:'说出这周想挑战的一件事，到周末汇报结果',
+    score:10, unlockAt:120, unlocked:false,
+    speech:'一周计划师！说出这周想挑战的一件事，周末汇报结果，得10分！需要120分解锁！'
+  },
+
+  // 💪 升级挑战卡（主推）
+  {
+    id:'p2_challenge1', series:'💪 升级挑战', phase:2, recommendType:'challenge',
+    color:'#FF6B35', lightColor:'#FFF0E6', stars:'💪',
+    name:'专注升级12分钟', sub:'比上次多2分钟，你做到了！⏱️',
+    desc:'完成一个12分钟专注块，中途不分心',
+    score:5, unlockAt:70, unlocked:false,
+    speech:'专注升级12分钟！比上次多2分钟，坚持下来得5分！需要70分解锁！'
+  },
+  {
+    id:'p2_challenge2', series:'💪 升级挑战', phase:2, recommendType:'challenge',
+    color:'#FF6B35', lightColor:'#FFF0E6', stars:'💪💪',
+    name:'不被提醒的一天', sub:'今天有多少件事自己想起来做的？',
+    desc:'今天有至少3件固定任务是自己想起来做的（不需要提醒）',
+    tip:'📌 怎么算：\n①早晨英雄包/睡前英雄包/作业\n②今天有3件以上自己主动想起来\n③睡前告诉爸妈是哪几件\n诚实说，不管几件都不扣分',
+    score:8, unlockAt:100, unlocked:false,
+    speech:'不被提醒的一天！今天有三件以上自己主动想起来做，睡前告诉爸妈是哪些，得8分！需要100分解锁！'
+  },
+  {
+    id:'p2_challenge3', series:'💪 升级挑战', phase:2, recommendType:'challenge',
+    color:'#FF6B35', lightColor:'#FFF0E6', stars:'💪💪💪',
+    name:'一周早晨英雄', sub:'这周每天早晨三件事全做到！🌅',
+    desc:'连续5天早晨英雄包全套完成',
+    score:12, unlockAt:130, unlocked:false,
+    speech:'一周早晨英雄！连续五天早晨三件事全做到，得12分！需要130分解锁！'
+  },
+
+  // 🎨 创意表达卡（辅推）
+  {
+    id:'p2_creative1', series:'🎨 创意表达', phase:2, recommendType:'creative',
+    color:'#9C27B0', lightColor:'#F3E5F5', stars:'🎨',
+    name:'故事连环画', sub:'画3格漫画，讲一个完整故事！📖',
+    desc:'画3格漫画，讲一个有开始有结尾的故事',
+    tip:'📖 规则：\n①第1格：故事的开始\n②第2格：故事的经过\n③第3格：故事的结尾\n④画完讲给大家听\n画面越简单越好，故事越奇妙越好！',
+    score:8, unlockAt:80, unlocked:false,
+    speech:'故事连环画！画三格漫画，讲一个有开始有结尾的故事，画完讲给大家听，得8分！需要80分解锁！'
+  },
+  {
+    id:'p2_creative2', series:'🎨 创意表达', phase:2, recommendType:'creative',
+    color:'#9C27B0', lightColor:'#F3E5F5', stars:'🎨🎨',
+    name:'我的发明', sub:'发明一个新的玩法，教爸爸来玩！',
+    desc:'发明一个游戏或玩法，写下规则，教爸爸妈妈玩',
+    score:8, unlockAt:100, unlocked:false,
+    speech:'我的发明！发明一个新玩法，写下规则教爸妈来玩，你是规则制定者，得8分！需要100分解锁！'
+  },
+
+  // ════════════════════════════════════════════════
+  // 🥇 第三阶段：自我觉察 + 目标设定（6个月后）
+  // 推荐比例：30%反思类 + 30%自定义类 + 40%挑战类
+  // ════════════════════════════════════════════════
+
+  // 🪞 英雄复盘卡（主推）
+  {
+    id:'p3_reflect1', series:'🪞 英雄复盘', phase:3, recommendType:'reflect',
+    color:'#00897B', lightColor:'#EDFFF9', stars:'🪞',
+    name:'今日最自豪', sub:'说出今天你最满意的一件事！✨',
+    desc:'睡前说出今天你最满意的一件事，并说出为什么',
+    tip:'📌 怎么说：\n①今天有什么事你做得很好？\n②为什么你觉得做得好？\n③说出来就得分，不评判对错',
+    score:4, unlockAt:150, unlocked:false,
+    speech:'今日最自豪！睡前说出今天最满意的一件事，说出为什么，得4分！需要150分解锁！'
+  },
+  {
+    id:'p3_reflect2', series:'🪞 英雄复盘', phase:3, recommendType:'reflect',
+    color:'#00897B', lightColor:'#EDFFF9', stars:'🪞🪞',
+    name:'我想做得更好', sub:'说出明天想改进的一件事！',
+    desc:'说出明天有一件事想做得更好，说出具体怎么改进',
+    score:5, unlockAt:180, unlocked:false,
+    speech:'我想做得更好！说出明天想改进的一件事，说出怎么改进，得5分！需要180分解锁！'
+  },
+  {
+    id:'p3_reflect3', series:'🪞 英雄复盘', phase:3, recommendType:'reflect',
+    color:'#00897B', lightColor:'#EDFFF9', stars:'🪞🪞🪞',
+    name:'进步对比', sub:'和三个月前的自己比，你变了什么？',
+    desc:'和爸爸妈妈一起说出你现在会做的事，以前不会做的是哪几件',
+    score:8, unlockAt:200, unlocked:false,
+    speech:'进步对比！说出你现在会做的事，哪些是三个月前不会的，看到自己的成长，得8分！需要200分解锁！'
+  },
+
+  // 🎯 自定义挑战卡（主推）
+  {
+    id:'p3_custom1', series:'🎯 我的挑战', phase:3, recommendType:'custom',
+    color:'#EF476F', lightColor:'#FEE8EE', stars:'⭐',
+    name:'我的本周挑战', sub:'自己提出一个本周挑战！👊',
+    desc:'自己说出一个本周想挑战的事，爸妈审核通过后执行',
+    tip:'📌 怎么做：\n①想一件这周想挑战的事（可以是任何事）\n②告诉爸爸妈妈\n③爸妈觉得合理就通过\n④周末汇报结果，完成得双倍积分！',
+    score:10, unlockAt:160, unlocked:false,
+    speech:'我的本周挑战！自己提出一个想挑战的事，爸妈通过后执行，周末汇报结果，得10分！需要160分解锁！'
+  },
+  {
+    id:'p3_custom2', series:'🎯 我的挑战', phase:3, recommendType:'custom',
+    color:'#EF476F', lightColor:'#FEE8EE', stars:'⭐⭐',
+    name:'我设计一张任务卡', sub:'自己设计任务卡，爸妈来审核！🃏',
+    desc:'自己设计一张任务卡（名字+要做什么+得多少分），爸妈审核通过后加入系统',
+    score:12, unlockAt:200, unlocked:false,
+    speech:'我设计一张任务卡！自己设计名字和要做什么，爸妈审核通过加入系统，得12分！需要200分解锁！'
+  },
+
+  // 🏆 里程碑回顾卡（辅推）
+  {
+    id:'p3_milestone1', series:'🏆 里程碑回顾', phase:3, recommendType:'reflect',
+    color:'#7B2FBE', lightColor:'#F3E8FF', stars:'🏆',
+    name:'三个月英雄档案', sub:'三个月的成长，写成你的英雄故事！',
+    desc:'和爸爸妈妈一起回顾三个月来做到的所有成就，说出最骄傲的三件事',
+    score:15, unlockAt:250, unlocked:false,
+    speech:'三个月英雄档案！回顾三个月所有成就，说出最骄傲的三件事，得15分！需要250分解锁！'
+  },
+
+  // ════════════════════════════════════════════════
+  // 🎯 原有精华卡（保留，三阶段通用）
+  // ════════════════════════════════════════════════
+
   // 阅读探索系列·恐龙主题
   {
     id:'c5', series:'📚 阅读探索', theme:'恐龙', color:'#06D6A0', lightColor:'#EDFFF9',

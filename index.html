@@ -60,7 +60,10 @@
 
 <!-- 顶部导航 -->
 <header class="app-header">
-  <div class="header-title">🦸 英雄成长计划</div>
+  <div class="header-left">
+    <div class="header-title">🦸 小英雄成长计划</div>
+    <div class="header-subtitle" id="headerMotto">每天进步一点点，今天的你比昨天更厉害 💪</div>
+  </div>
   <div class="header-score">
     <div class="score-today-row">
       <span class="score-today-label">今日</span>
@@ -89,23 +92,36 @@
 
 <!-- ═══ TAB: 今日任务 ═══ -->
 <div class="tab-content active" id="tab-daily">
-  <div class="section-title">📅 <span id="todayDate"></span></div>
+  <!-- 专属欢迎语 -->
+  <div class="hero-welcome" id="heroWelcome">
+    <div class="welcome-avatar">🦸</div>
+    <div class="welcome-text">
+      <div class="welcome-name">你好，小英雄！</div>
+      <div class="welcome-date" id="todayDate"></div>
+    </div>
+    <button class="welcome-speak-btn" onclick="speakWelcome()" title="听欢迎语">🔈</button>
+  </div>
 
-  <!-- 每日固定 -->
+  <!-- 今日推荐任务卡 -->
+  <div class="card-section recommend-section">
+    <div id="todayRecommended"></div>
+  </div>
+
+  <!-- 早晨英雄包 -->
   <div class="card-section">
-    <div class="section-header blue">⭐ 每日固定任务</div>
+    <div class="section-header blue">🌅 早晨英雄包（全套+6分）</div>
     <div id="dailyFixed"></div>
   </div>
 
-  <!-- 每日可领取 -->
+  <!-- 写作业 + 可选任务 -->
   <div class="card-section">
-    <div class="section-header green">🎯 每日可领取（做了主动来拿，不做不扣分）</div>
+    <div class="section-header purple">📚 今日任务 · 双钥匙解锁</div>
     <div id="dailyOptional"></div>
   </div>
 
-  <!-- 作业独立计分 -->
+  <!-- 睡前英雄包 -->
   <div class="card-section">
-    <div class="section-header purple">📝 作业独立计分（自主权给孩子）</div>
+    <div class="section-header indigo">🌙 睡前英雄包（全套+6分）</div>
     <div id="dailyHomework"></div>
   </div>
 
@@ -116,7 +132,7 @@
       <span class="summary-score" id="todayScore">0</span>
       <span>分</span>
     </div>
-    <div class="summary-tip">全做到可得23分 | 日常约12-16分，加油！⚡</div>
+    <div class="summary-tip">全做到可得17分+ | 英雄包+作业+任务卡一起冲！⚡</div>
     <button class="btn-reset" id="btnResetDay">🔄 新的一天（重置今日打卡）</button>
   </div>
 </div>
@@ -125,6 +141,8 @@
 <div class="tab-content" id="tab-weekly">
   <!-- 阶段横幅 -->
   <div id="phaseBanner"></div>
+  <!-- 周度成就 -->
+  <div id="weeklyAchievementBanner"></div>
   <!-- 本周标题 + 进度条 -->
   <div class="weekly-header">
     <div class="weekly-title-row">
