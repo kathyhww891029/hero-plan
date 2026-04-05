@@ -153,7 +153,7 @@ function loadPendingList() {
         </div>
         <div class="pending-score">+${item.score}分</div>
         <div class="pending-actions">
-          <button class="btn-approve" onclick="approveOne('${item.key}',${item.score},'${item.name}')">✅</button>
+          <button class="btn-approve" onclick="approveOne('${item.key}',${item.score},'${item.name}','${item.taskId||''}','${item.type||'daily'}')">✅</button>
           <button class="btn-reject" onclick="rejectOne('${item.key}','${item.name}')">❌</button>
         </div>
       </div>`).join('');
@@ -167,23 +167,72 @@ function typeLabel(type) {
 }
 
 // ── 审核通过单条 ──────────────────────────────────────────────
-function approveOne(key, score, name) {
+// 固定任务地板机制：计算可选任务实际应得分数
+function calcOptionalEffectiveScore(item, score) {
+  if (item.type !== 'daily') return score; // 任务卡不受影响
+  // 判断是否是可选任务（do开头）
+  const isOptional = item.taskId && item.taskId.startsWith('do');
+  if (!isOptional) return score;
+
+  // 从 state 中读取今日固定任务完成情况
+  const st = (typeof state !== 'undefined') ? state : null;
+  if (!st) return score;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const todayDate = item.date || today;
+
+  // 统计固定任务完成数（从 reviewedList 中查当天固定任务通过数）
+  // 简化版：通过检查 todayChecked 中固定任务通过数量
+  const fixedIds = (typeof DAILY_FIXED !== 'undefined') ? DAILY_FIXED.map(t => t.id) : [];
+  const totalFixed = fixedIds.length;
+  if (totalFixed === 0) return score;
+
+  // 统计当天固定任务通过数（approved状态）
+  const approvedFixed = fixedIds.filter(id => {
+    const s = st.todayChecked && st.todayChecked[id];
+    return s === 'approved';
+  }).length;
+
+  const rate = approvedFixed / totalFixed;
+
+  if (rate >= 0.8) {
+    return score; // ✅ 全额
+  } else if (rate >= 0.5) {
+    return Math.floor(score / 2); // 🔶 减半
+  } else {
+    return 0; // ❌ 不计分
+  }
+}
+
+function approveOne(key, score, name, taskId, taskType) {
   if (!window._firebaseReady) return;
+
+  // 固定任务地板机制：可选任务检查
+  const fakeItem = { type: taskType || 'daily', taskId: taskId || '' };
+  const effectiveScore = calcOptionalEffectiveScore(fakeItem, score);
+  const scoreNote = effectiveScore < score
+    ? `（固定任务未达标，实得${effectiveScore}分）`
+    : '';
+
   // 加入已审记录
   window._firebasePush(fbRef('reviewed'), {
-    name, score, result: 'approved',
+    name, score: effectiveScore, originalScore: score, result: 'approved',
     reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
     reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10)
+    date: new Date().toISOString().slice(0, 10),
+    scoreNote
   });
-  // 更新总分（Firebase 中存一个 totalScore 供同步）
+  // 更新总分
   window._firebaseGet(fbRef('syncScore')).then(snap => {
     const cur = snap.val() || 0;
-    window._firebaseSet(fbRef('syncScore'), cur + score);
+    window._firebaseSet(fbRef('syncScore'), cur + effectiveScore);
   });
   // 删除 pending
   window._firebaseRemove(fbRef('pending/' + key));
-  showParentToast(`✅ 已通过「${name}」，+${score}分！`);
+  const msg = effectiveScore < score
+    ? `✅ 已通过「${name}」，+${effectiveScore}分${scoreNote}`
+    : `✅ 已通过「${name}」，+${score}分！`;
+  showParentToast(msg);
 }
 
 // ── 驳回单条 ──────────────────────────────────────────────────

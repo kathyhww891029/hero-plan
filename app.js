@@ -208,10 +208,27 @@ function toggleDaily(id, score) {
     }
     return;
   }
-  // 标记为待审状态
+
+  // 固定任务：完成后弹出自律自报弹窗
+  const fixedTask = DAILY_FIXED.find(t => t.id === id);
+  if (fixedTask) {
+    // 先标记待审，再弹自报
+    state.todayChecked[id] = 'pending';
+    saveState();
+    const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const task = allTasks.find(t => t.id === id);
+    if (task && window._firebaseReady) {
+      submitPending('daily', id, task.name, score);
+    }
+    renderAll();
+    // 弹出自律自报弹窗
+    setTimeout(() => showSelfReportModal(id, task ? task.name : id, score), 400);
+    return;
+  }
+
+  // 可选/作业任务：直接提交
   state.todayChecked[id] = 'pending';
   saveState();
-  // 提交到 Firebase 待审队列
   const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
   const task = allTasks.find(t => t.id === id);
   if (task && window._firebaseReady) {
@@ -219,8 +236,126 @@ function toggleDaily(id, score) {
   }
   renderAll();
   showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
-  // 打卡后立即用"预计积分"检查激励弹窗（无需等审核）
   setTimeout(() => tryShowShopBoost(score, true), 1600);
+}
+
+// ── 自律自报弹窗 ───────────────────────────────────────────────
+function showSelfReportModal(taskId, taskName, score) {
+  const today = new Date().toISOString().slice(0, 10);
+  // 如果该任务今天已自报过，跳过
+  if (!state.selfReport) state.selfReport = {};
+  if (!state.selfReport[today]) state.selfReport[today] = {};
+
+  const modal = document.createElement('div');
+  modal.id = 'selfReportModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+      <div style="font-size:2rem;margin-bottom:8px;">🦸</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">「${taskName}」完成啦！</div>
+      <div style="font-size:0.95rem;color:#666;margin-bottom:20px;">今天是你自己想起来的吗？</div>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button onclick="submitSelfReport('${taskId}','${today}',true,${score})"
+          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:linear-gradient(135deg,#06D6A0,#00897B);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">
+          💪 我自己<br>想起来的！
+        </button>
+        <button onclick="submitSelfReport('${taskId}','${today}',false,${score})"
+          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:#f0f0f0;color:#555;font-size:1rem;font-weight:700;cursor:pointer;">
+          👋 爸爸/妈妈<br>提醒了我
+        </button>
+      </div>
+      <div style="font-size:0.8rem;color:#aaa;margin-top:14px;">诚实回答，不管哪个都不扣分 ✨</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function submitSelfReport(taskId, date, isSelf, score) {
+  const modal = document.getElementById('selfReportModal');
+  if (modal) modal.remove();
+  if (!state.selfReport) state.selfReport = {};
+  if (!state.selfReport[date]) state.selfReport[date] = {};
+  state.selfReport[date][taskId] = isSelf ? 'self' : 'reminded';
+  saveState();
+  // 同步到 Firebase
+  if (window._firebaseReady) {
+    window._firebaseSet(
+      window._firebaseRef(window._firebaseDB, `selfReport/${date}/${taskId}`),
+      isSelf ? 'self' : 'reminded'
+    );
+  }
+  const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
+  showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
+  setTimeout(() => tryShowShopBoost(score, true), 1600);
+}
+
+// ── 月度自律率计算 ─────────────────────────────────────────────
+function calcMonthlyDisciplineRate(year, month) {
+  if (!state.selfReport) return { rate: 0, selfDays: 0, totalDays: 0 };
+  const prefix = `${year}-${String(month).padStart(2,'0')}`;
+  let selfDays = 0, totalDays = 0;
+
+  Object.entries(state.selfReport).forEach(([date, tasks]) => {
+    if (!date.startsWith(prefix)) return;
+    // 判断当天固定任务完成率是否达到80%
+    const fixedIds = DAILY_FIXED.map(t => t.id);
+    const totalFixed = fixedIds.length;
+    // 当天有自报记录的固定任务数（说明完成了）
+    const reportedFixed = fixedIds.filter(id => tasks[id]).length;
+    if (totalFixed === 0 || reportedFixed / totalFixed < 0.8) return; // 固定任务不达标，不计入
+
+    // 自律判断：当天所有自报的固定任务都是'self'
+    const reportedEntries = Object.values(tasks).filter(v => v === 'self' || v === 'reminded');
+    if (reportedEntries.length === 0) return;
+    totalDays++;
+    const allSelf = reportedEntries.every(v => v === 'self');
+    if (allSelf) selfDays++;
+  });
+
+  const rate = totalDays > 0 ? Math.round(selfDays / totalDays * 100) : 0;
+  return { rate, selfDays, totalDays };
+}
+
+// ── B类奖励解锁判断 ───────────────────────────────────────────
+function isBRewardUnlocked() {
+  const now = new Date();
+  const { rate } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
+  return rate >= 85;
+}
+
+// ── 自律能量条渲染 ────────────────────────────────────────────
+function renderDisciplineBar() {
+  const el = document.getElementById('disciplineBar');
+  if (!el) return;
+  const now = new Date();
+  const { rate, selfDays, totalDays } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const remainDays = daysInMonth - now.getDate();
+  const unlocked = rate >= 85;
+  const filled = Math.round(rate / 10);
+  const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+  el.innerHTML = `
+    <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条</span>
+        <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
+      </div>
+      <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};letter-spacing:2px;">${bar}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.82rem;color:#888;">
+        <span>自律天数：${selfDays}/${totalDays}天</span>
+        <span>剩余：${remainDays}天</span>
+      </div>
+      ${unlocked
+        ? '<div style="margin-top:8px;font-size:0.88rem;color:#06D6A0;font-weight:700;">✨ 本月自律达标！大奖已解锁！</div>'
+        : rate > 0
+          ? `<div style="margin-top:8px;font-size:0.85rem;color:#F9A825;">还差${85-rate}%解锁本月大奖，加油！💪</div>`
+          : '<div style="margin-top:8px;font-size:0.85rem;color:#aaa;">开始打卡，积累自律能量！</div>'
+      }
+    </div>
+  `;
 }
 
 function calcTodayScore() {
@@ -344,17 +479,57 @@ function claimCard(id) {
 function renderShop() {
   document.getElementById('shopScore').textContent = state.totalScore;
   const el = document.getElementById('shopContent');
-  el.innerHTML = SHOP.map(section => `
+  const bUnlocked = isBRewardUnlocked();
+
+  // 自律能量条
+  const now = new Date();
+  const { rate, selfDays, totalDays } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const remainDays = daysInMonth - now.getDate();
+  const filled = Math.min(10, Math.round(rate / 10));
+  const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+  const barHtml = `
+    <div style="background:${bUnlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin-bottom:16px;border:1.5px solid ${bUnlocked?'#06D6A0':'#FFD54F'};">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条</span>
+        <span style="font-size:1rem;font-weight:700;color:${bUnlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
+      </div>
+      <div style="font-family:monospace;font-size:1.15rem;color:${bUnlocked?'#00897B':'#F57F17'};letter-spacing:2px;">${bar}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#888;">
+        <span>自律天数 ${selfDays}/${totalDays}天</span>
+        <span>剩余${remainDays}天</span>
+      </div>
+      ${bUnlocked
+        ? '<div style="margin-top:6px;font-size:0.88rem;color:#06D6A0;font-weight:700;">✨ 本月自律达标！🔓 自律大奖已解锁！</div>'
+        : rate >= 50
+          ? `<div style="margin-top:6px;font-size:0.82rem;color:#F9A825;">还差${85-rate}%解锁本月自律大奖 💪</div>`
+          : '<div style="margin-top:6px;font-size:0.82rem;color:#aaa;">每天自己主动完成任务，积累自律能量！</div>'
+      }
+    </div>
+  `;
+
+  el.innerHTML = barHtml + SHOP.map(section => {
+    // 过滤：B类奖励在未达标时隐藏（但显示解锁提示占位）
+    const visibleItems = section.items.filter(item => {
+      if (!item.selfDisciplineRequired) return true;
+      return bUnlocked; // B类奖励只在自律达标时显示
+    });
+    const hiddenBCount = section.items.filter(i => i.selfDisciplineRequired && !bUnlocked).length;
+
+    return `
     <div class="shop-section">
       <div class="shop-section-header" style="background:${section.color}">${section.type}</div>
-      ${section.items.map(item => {
+      ${visibleItems.map(item => {
         const canBuy = state.totalScore >= item.cost;
         const btnClass = item.isEgg ? 'egg' : (canBuy ? 'available' : 'unavailable');
+        const tierBadge = item.tier === 'B'
+          ? '<span style="font-size:0.7rem;background:#06D6A0;color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px;">✨自律奖励</span>'
+          : '';
         return `
-          <div class="shop-item" style="background:${section.lightColor}">
+          <div class="shop-item" style="background:${section.lightColor}${item.tier==='B'?';border:1.5px solid #06D6A0':''}">
             <div class="shop-icon">${item.icon}</div>
             <div class="shop-info">
-              <div class="shop-name">${item.name}${speakBtn(item.speech)}</div>
+              <div class="shop-name">${item.name}${tierBadge}${speakBtn(item.speech)}</div>
               <div class="shop-note">${item.note}</div>
               <button class="btn-redeem ${btnClass}"
                 onclick="redeemItem('${item.id}','${item.name}',${item.cost},${!!item.isEgg})"
@@ -365,7 +540,13 @@ function renderShop() {
             <div class="shop-cost">${item.cost}分</div>
           </div>`;
       }).join('')}
-    </div>`).join('');
+      ${hiddenBCount > 0 ? `
+        <div style="text-align:center;padding:14px;color:#aaa;font-size:0.88rem;border-top:1px dashed #eee;margin-top:8px;">
+          🔒 还有 ${hiddenBCount} 个自律解锁奖励隐藏中<br>
+          <span style="color:#F9A825;font-weight:600;">本月自律率达到85%即可解锁 💪</span>
+        </div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 function redeemItem(id, name, cost, isEgg) {
@@ -702,6 +883,39 @@ function countSeriesDone(s, seriesName) {
 
 // ── 渲染每周任务总览 ──────────────────────────────────────────
 function renderWeekly() {
+  // ── 阶段横幅 ─────────────────────────────────────────────────
+  const phaseEl = document.getElementById('phaseBanner');
+  if (phaseEl) {
+    const startDate = state.phaseStartDate || new Date().toISOString().slice(0, 10);
+    const start = new Date(startDate);
+    const now2 = new Date();
+    const elapsed = Math.floor((now2 - start) / (1000 * 60 * 60 * 24));
+    const total = 90; // 第一阶段90天
+    const remain = Math.max(0, total - elapsed);
+    const progress = Math.min(100, Math.round(elapsed / total * 100));
+    const { rate } = calcMonthlyDisciplineRate(now2.getFullYear(), now2.getMonth() + 1);
+    phaseEl.innerHTML = `
+      <div style="background:linear-gradient(135deg,#667eea,#764ba2);border-radius:16px;padding:14px 16px;color:#fff;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-weight:700;font-size:1rem;">🏆 第一阶段·自律培养</span>
+          <span style="font-size:0.85rem;opacity:0.85;">剩余 ${remain} 天</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.2);border-radius:8px;height:8px;margin-bottom:8px;">
+          <div style="background:#fff;border-radius:8px;height:8px;width:${progress}%;transition:width 0.5s;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;opacity:0.9;">
+          <span>已坚持 ${elapsed} 天 / 共 ${total} 天</span>
+          <span>本月自律率 ${rate}%${rate>=85?' ✨':''}</span>
+        </div>
+      </div>
+    `;
+    // 保存开始日期
+    if (!state.phaseStartDate) {
+      state.phaseStartDate = new Date().toISOString().slice(0, 10);
+      saveState();
+    }
+  }
+
   // 日期范围
   const now = new Date();
   const dayOfWeek = now.getDay() || 7; // 1=周一
