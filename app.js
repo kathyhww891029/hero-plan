@@ -33,13 +33,21 @@ function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
 }
 function todayStr() {
-  return new Date().toISOString().slice(0,10);
+  // 使用本地时区，避免深夜 UTC 偏差导致日期错误
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 function getWeekStart() {
   const d = new Date();
   const day = d.getDay() || 7;
   d.setDate(d.getDate() - day + 1);
-  return d.toISOString().slice(0,10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 // ── 初始化 ────────────────────────────────────────────────────

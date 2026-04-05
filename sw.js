@@ -1,10 +1,11 @@
-const CACHE_NAME = 'hero-plan-v1';
+const CACHE_NAME = 'hero-plan-v5';  // ← 每次改动这里，强制刷新缓存
 const urlsToCache = [
   './',
   './index.html',
   './style.css',
   './app.js',
   './data.js',
+  './firebase-sync.js',
   './manifest.json'
 ];
 
@@ -32,19 +33,18 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// 拦截请求 - 优先走缓存（离线可用）
+// 拦截请求 - 网络优先，离线降级缓存
 self.addEventListener('fetch', event => {
   event.respondWith(
-    caches.match(event.request).then(response => {
-      if (response) return response;
-      return fetch(event.request).then(response => {
-        if (!response || response.status !== 200) return response;
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, responseClone);
-        });
-        return response;
-      }).catch(() => caches.match('./index.html'));
+    fetch(event.request).then(response => {
+      if (!response || response.status !== 200) return response;
+      const responseClone = response.clone();
+      caches.open(CACHE_NAME).then(cache => {
+        cache.put(event.request, responseClone);
+      });
+      return response;
+    }).catch(() => {
+      return caches.match(event.request).then(r => r || caches.match('./index.html'));
     })
   );
 });
