@@ -81,6 +81,7 @@
   <button class="tab-btn" data-tab="shop">🏪 补给站</button>
   <button class="tab-btn" data-tab="rope">🪢 跳绳</button>
   <button class="tab-btn" data-tab="dad">💌 爸爸</button>
+  <button class="tab-btn" data-tab="math">🔢 口算</button>
   <button class="tab-btn parent-tab-btn" data-tab="parent">🔐 审核</button>
 </nav>
 
@@ -165,6 +166,127 @@
 <!-- ═══ TAB: 爸爸 ═══ -->
 <div class="tab-content" id="tab-dad">
   <div id="dadGuide"></div>
+</div>
+
+<!-- ═══ TAB: 口算练习 ═══ -->
+<div class="tab-content" id="tab-math">
+
+  <!-- 状态：首次测试引导 -->
+  <div id="mathHome">
+    <div class="section-title">🔢 闪电侠速算训练站</div>
+
+    <!-- 当前水平显示 -->
+    <div class="math-level-card" id="mathLevelCard">
+      <div class="math-level-icon">⚡</div>
+      <div class="math-level-info">
+        <div class="math-level-name" id="mathLevelName">还没测过</div>
+        <div class="math-level-desc" id="mathLevelDesc">先做一次水平测试，我来给你定制专属题目！</div>
+      </div>
+    </div>
+
+    <!-- 历史最佳 -->
+    <div class="math-stats-row" id="mathStatsRow" style="display:none">
+      <div class="math-stat-box">
+        <div class="math-stat-num" id="statBestScore">-</div>
+        <div class="math-stat-label">最佳成绩</div>
+      </div>
+      <div class="math-stat-box">
+        <div class="math-stat-num" id="statTotalRounds">0</div>
+        <div class="math-stat-label">练习次数</div>
+      </div>
+      <div class="math-stat-box">
+        <div class="math-stat-num" id="statAvgAccuracy">-</div>
+        <div class="math-stat-label">平均正确率</div>
+      </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="math-btn-group">
+      <button class="btn-math-start" onclick="mathStartPractice()">
+        ⚡ 开始练习（1分钟）
+      </button>
+      <button class="btn-math-test" onclick="mathStartTest()">
+        📊 做一次水平测试
+      </button>
+    </div>
+
+    <!-- 最近记录 -->
+    <div class="math-history" id="mathHistory"></div>
+  </div>
+
+  <!-- 状态：倒计时准备 -->
+  <div id="mathCountdown" style="display:none">
+    <div class="math-countdown-wrap">
+      <div class="math-countdown-num" id="mathCountdownNum">3</div>
+      <div class="math-countdown-tip">准备好了吗？</div>
+    </div>
+  </div>
+
+  <!-- 状态：答题中 -->
+  <div id="mathPractice" style="display:none">
+    <!-- 顶部状态栏 -->
+    <div class="math-top-bar">
+      <div class="math-timer-box">
+        <span class="math-timer-icon">⏱️</span>
+        <span class="math-timer-val" id="mathTimer">60</span>
+      </div>
+      <div class="math-score-box">
+        ✅ <span id="mathCorrect">0</span>
+        &nbsp;&nbsp;
+        ❌ <span id="mathWrong">0</span>
+      </div>
+      <div class="math-progress-box">
+        第 <span id="mathQNum">1</span> 题
+      </div>
+    </div>
+
+    <!-- 进度条 -->
+    <div class="math-progress-bar-wrap">
+      <div class="math-progress-bar-fill" id="mathProgressFill" style="width:100%"></div>
+    </div>
+
+    <!-- 题目区 -->
+    <div class="math-question-wrap">
+      <div class="math-question" id="mathQuestion">8 + 5 = ?</div>
+    </div>
+
+    <!-- 答题键盘 -->
+    <div class="math-keyboard">
+      <div class="math-answer-display" id="mathAnswerDisplay">_</div>
+      <div class="math-keys">
+        <button class="math-key" onclick="mathKey('7')">7</button>
+        <button class="math-key" onclick="mathKey('8')">8</button>
+        <button class="math-key" onclick="mathKey('9')">9</button>
+        <button class="math-key" onclick="mathKey('4')">4</button>
+        <button class="math-key" onclick="mathKey('5')">5</button>
+        <button class="math-key" onclick="mathKey('6')">6</button>
+        <button class="math-key" onclick="mathKey('1')">1</button>
+        <button class="math-key" onclick="mathKey('2')">2</button>
+        <button class="math-key" onclick="mathKey('3')">3</button>
+        <button class="math-key math-key-del" onclick="mathKey('del')">⌫</button>
+        <button class="math-key math-key-zero" onclick="mathKey('0')">0</button>
+        <button class="math-key math-key-ok" onclick="mathKey('ok')">✓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 状态：结果展示 -->
+  <div id="mathResult" style="display:none">
+    <div class="math-result-wrap">
+      <div class="math-result-emoji" id="mathResultEmoji">🏆</div>
+      <div class="math-result-title" id="mathResultTitle">太厉害了！</div>
+      <div class="math-result-score" id="mathResultScore"></div>
+      <div class="math-result-detail" id="mathResultDetail"></div>
+      <div class="math-level-up" id="mathLevelUp" style="display:none">
+        🎉 闯过新关卡！升级了！
+      </div>
+      <div class="math-btn-group" style="margin-top:20px">
+        <button class="btn-math-start" onclick="mathStartPractice()">再来一次！⚡</button>
+        <button class="btn-math-test" onclick="mathGoHome()">返回首页</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ═══ TAB: 父母审核 ═══ -->

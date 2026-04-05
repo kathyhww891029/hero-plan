@@ -649,3 +649,475 @@ function bindEvents() {
     });
   });
 }
+
+/* ══════════════════════════════════════════════════════════════
+   🔢 口算练习引擎
+══════════════════════════════════════════════════════════════ */
+
+// ── 关卡定义（5个级别，按速度+难度自适应）────────────────────
+const MATH_LEVELS = [
+  {
+    id: 0, name: '⭐ 新手探索者', color: '#06D6A0',
+    desc: '10以内加减法，轻松热身',
+    ops: ['+', '-'], maxA: 10, maxB: 10, noNeg: true,
+    targetPerMin: 10  // 每分钟目标答题数
+  },
+  {
+    id: 1, name: '⚡ 初级闪电', color: '#118AB2',
+    desc: '20以内加减法，越来越快！',
+    ops: ['+', '-'], maxA: 20, maxB: 20, noNeg: true,
+    targetPerMin: 14
+  },
+  {
+    id: 2, name: '🔥 中级烈焰', color: '#F9A825',
+    desc: '100以内加减法，挑战中！',
+    ops: ['+', '-'], maxA: 50, maxB: 50, noNeg: true,
+    targetPerMin: 12
+  },
+  {
+    id: 3, name: '💫 高级星爆', color: '#EF476F',
+    desc: '乘法口诀+100以内加减混合',
+    ops: ['+', '-', '×'], maxA: 9, maxB: 9, noNeg: false, mixAdd: true,
+    targetPerMin: 10
+  },
+  {
+    id: 4, name: '👑 宇宙大师', color: '#7B2FBE',
+    desc: '混合四则，速度与准确并重！',
+    ops: ['+', '-', '×', '÷'], maxA: 9, maxB: 9, noNeg: false, mixAll: true,
+    targetPerMin: 10
+  }
+];
+
+// ── 状态变量 ──────────────────────────────────────────────────
+const MATH_STORAGE_KEY = 'heroplan_math_v1';
+let _mathState = null;       // 当前练习状态
+let _mathTimerInterval = null;
+let _mathCurrentInput = '';
+let _mathQuestion = null;    // { q, answer, op }
+let _mathIsTest = false;     // 是否水平测试模式（无计时限制，自适应）
+let _mathTestAnswers = [];   // 测试答案记录
+
+// ── 读写本地存储 ──────────────────────────────────────────────
+function loadMathData() {
+  try {
+    const raw = localStorage.getItem(MATH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : { levelId: null, history: [], bestScores: {} };
+  } catch(e) { return { levelId: null, history: [], bestScores: {} }; }
+}
+function saveMathData(d) {
+  try { localStorage.setItem(MATH_STORAGE_KEY, JSON.stringify(d)); } catch(e) {}
+}
+
+// ── 出题引擎 ──────────────────────────────────────────────────
+function mathGenQuestion(levelId) {
+  const lv = MATH_LEVELS[levelId];
+  let ops = lv.ops;
+  let op = ops[Math.floor(Math.random() * ops.length)];
+
+  let a, b, answer, q;
+
+  if (op === '+') {
+    a = Math.floor(Math.random() * lv.maxA) + 1;
+    b = Math.floor(Math.random() * lv.maxB) + 1;
+    // level 2 mixAdd: 偶尔用大数
+    if (lv.mixAdd) { a = Math.floor(Math.random() * 50) + 1; b = Math.floor(Math.random() * 50) + 1; }
+    answer = a + b;
+    q = `${a} + ${b} = ?`;
+  } else if (op === '-') {
+    a = Math.floor(Math.random() * lv.maxA) + 1;
+    b = Math.floor(Math.random() * a) + (lv.noNeg ? 0 : 0);
+    if (lv.noNeg) b = Math.min(b, a);
+    if (lv.mixAdd) { a = Math.floor(Math.random() * 50) + 1; b = Math.floor(Math.random() * a); }
+    answer = a - b;
+    q = `${a} - ${b} = ?`;
+  } else if (op === '×') {
+    a = Math.floor(Math.random() * 9) + 1;
+    b = Math.floor(Math.random() * 9) + 1;
+    answer = a * b;
+    q = `${a} × ${b} = ?`;
+  } else { // ÷
+    b = Math.floor(Math.random() * 9) + 1;
+    answer = Math.floor(Math.random() * 9) + 1;
+    a = b * answer;
+    q = `${a} ÷ ${b} = ?`;
+  }
+
+  return { q, answer };
+}
+
+// ── 首页渲染 ──────────────────────────────────────────────────
+function mathRenderHome() {
+  const data = loadMathData();
+  const lv = data.levelId !== null ? MATH_LEVELS[data.levelId] : null;
+
+  // 水平卡片
+  const nameEl = document.getElementById('mathLevelName');
+  const descEl = document.getElementById('mathLevelDesc');
+  if (nameEl) nameEl.textContent = lv ? lv.name : '还没测过';
+  if (descEl) descEl.textContent = lv ? lv.desc : '先做一次水平测试，我来给你定制专属题目！';
+
+  // 统计行
+  const statsRow = document.getElementById('mathStatsRow');
+  if (statsRow) {
+    if (data.history.length > 0) {
+      statsRow.style.display = 'flex';
+      const scores = data.history.map(h => h.correct);
+      const best = Math.max(...scores);
+      const acc = data.history.reduce((s, h) => s + (h.correct / Math.max(h.total,1)), 0) / data.history.length;
+      const bestEl = document.getElementById('statBestScore');
+      const roundsEl = document.getElementById('statTotalRounds');
+      const accEl = document.getElementById('statAvgAccuracy');
+      if (bestEl) bestEl.textContent = best + '题';
+      if (roundsEl) roundsEl.textContent = data.history.length;
+      if (accEl) accEl.textContent = Math.round(acc * 100) + '%';
+    } else {
+      statsRow.style.display = 'none';
+    }
+  }
+
+  // 历史记录（最近5条）
+  const histEl = document.getElementById('mathHistory');
+  if (histEl) {
+    const recent = [...data.history].reverse().slice(0, 5);
+    if (recent.length === 0) {
+      histEl.innerHTML = '<div class="empty-tip">还没有练习记录，快去挑战吧！⚡</div>';
+    } else {
+      histEl.innerHTML = '<div class="math-history-title">📊 最近练习记录</div>' +
+        recent.map(h => {
+          const acc = Math.round(h.correct / Math.max(h.total, 1) * 100);
+          return `<div class="math-history-item">
+            <div>
+              <div class="math-history-left">${h.levelName || '练习'} &nbsp; 
+                <span class="math-history-score">${h.correct}题</span>
+              </div>
+              <div class="math-history-right">正确率 ${acc}% · ${h.date}</div>
+            </div>
+          </div>`;
+        }).join('')
+    }
+  }
+}
+
+// ── 水平测试（自适应，无计时） ────────────────────────────────
+function mathStartTest() {
+  _mathIsTest = true;
+  _mathTestAnswers = [];
+  // 从 level 0 开始，答10题，根据正确率决定级别
+  _mathState = { levelId: 0, testPhase: 0, correct: 0, total: 0 };
+  mathShowSection('mathPractice');
+  // 测试模式：隐藏计时器，改标题
+  const timerBox = document.querySelector('.math-timer-box');
+  if (timerBox) timerBox.style.visibility = 'hidden';
+  const topBar = document.querySelector('.math-top-bar');
+  if (topBar) {
+    const progBox = topBar.querySelector('.math-progress-box');
+    if (progBox) progBox.textContent = '水平测试中';
+  }
+  // 清进度条
+  const fill = document.getElementById('mathProgressFill');
+  if (fill) fill.style.transition = 'none', fill.style.width = '100%';
+
+  mathNextQuestion();
+}
+
+// ── 1分钟练习 ─────────────────────────────────────────────────
+function mathStartPractice() {
+  const data = loadMathData();
+  const levelId = data.levelId !== null ? data.levelId : 0;
+  _mathIsTest = false;
+  _mathState = { levelId, correct: 0, wrong: 0, total: 0, timeLeft: 60 };
+
+  mathShowSection('mathCountdown');
+  mathRunCountdown(3, () => {
+    mathShowSection('mathPractice');
+    // 恢复顶栏可见
+    const timerBox = document.querySelector('.math-timer-box');
+    if (timerBox) timerBox.style.visibility = 'visible';
+    // 设置进度条
+    const fill = document.getElementById('mathProgressFill');
+    if (fill) { fill.style.transition = 'none'; fill.style.width = '100%'; }
+
+    mathNextQuestion();
+    mathStartTimer();
+  });
+}
+
+// ── 倒计时 ────────────────────────────────────────────────────
+function mathRunCountdown(n, cb) {
+  const el = document.getElementById('mathCountdownNum');
+  if (!el) { cb(); return; }
+  el.textContent = n;
+  if (n <= 0) { cb(); return; }
+  setTimeout(() => mathRunCountdown(n - 1, cb), 800);
+}
+
+// ── 计时器 ────────────────────────────────────────────────────
+function mathStartTimer() {
+  if (_mathTimerInterval) clearInterval(_mathTimerInterval);
+  const timerEl = document.getElementById('mathTimer');
+  const fillEl = document.getElementById('mathProgressFill');
+
+  _mathTimerInterval = setInterval(() => {
+    _mathState.timeLeft--;
+    if (timerEl) {
+      timerEl.textContent = _mathState.timeLeft;
+      timerEl.classList.toggle('danger', _mathState.timeLeft <= 10);
+    }
+    if (fillEl) {
+      fillEl.style.transition = 'width 1s linear';
+      fillEl.style.width = (_mathState.timeLeft / 60 * 100) + '%';
+    }
+    if (_mathState.timeLeft <= 0) {
+      clearInterval(_mathTimerInterval);
+      mathEndPractice();
+    }
+  }, 1000);
+}
+
+// ── 出下一题 ──────────────────────────────────────────────────
+function mathNextQuestion() {
+  const levelId = _mathState.levelId;
+  _mathQuestion = mathGenQuestion(levelId);
+  _mathCurrentInput = '';
+  mathUpdateDisplay();
+
+  const qEl = document.getElementById('mathQuestion');
+  if (qEl) {
+    qEl.className = 'math-question';
+    qEl.textContent = _mathQuestion.q;
+  }
+  const qNumEl = document.getElementById('mathQNum');
+  if (qNumEl) qNumEl.textContent = (_mathState.total || 0) + 1;
+}
+
+// ── 键盘输入 ──────────────────────────────────────────────────
+function mathKey(k) {
+  if (!_mathQuestion) return;
+
+  if (k === 'del') {
+    _mathCurrentInput = _mathCurrentInput.slice(0, -1);
+    mathUpdateDisplay();
+  } else if (k === 'ok') {
+    mathSubmitAnswer();
+  } else {
+    if (_mathCurrentInput.length >= 4) return; // 最多4位数
+    _mathCurrentInput += k;
+    mathUpdateDisplay();
+    // 如果是个位数答案（0-9），自动提交
+    const answer = parseInt(_mathCurrentInput);
+    if (!isNaN(answer) && _mathCurrentInput.length >= 1) {
+      // 自动检测：当前输入已经不可能更大时自动提交
+      // 规则：如果答案已经 >= 10位 数字，等用户按ok
+      // 对于1-9的答案：如果再追加一位不可能匹配正确答案，自动提交
+      const correct = _mathQuestion.answer;
+      if (correct >= 0 && correct <= 9 && _mathCurrentInput.length === 1) {
+        mathSubmitAnswer(); // 个位数答案自动提交
+      }
+    }
+  }
+}
+
+function mathUpdateDisplay() {
+  const el = document.getElementById('mathAnswerDisplay');
+  if (el) el.textContent = _mathCurrentInput || '_';
+}
+
+function mathSubmitAnswer() {
+  if (!_mathQuestion || _mathCurrentInput === '') return;
+  const userAns = parseInt(_mathCurrentInput);
+  const correct = userAns === _mathQuestion.answer;
+
+  _mathState.total = (_mathState.total || 0) + 1;
+  _mathCurrentInput = '';
+
+  // 反馈动画
+  const qEl = document.getElementById('mathQuestion');
+  if (qEl) {
+    qEl.className = 'math-question ' + (correct ? 'correct-flash' : 'wrong-flash');
+    setTimeout(() => { if(qEl) qEl.className = 'math-question'; }, 350);
+  }
+
+  if (correct) {
+    _mathState.correct = (_mathState.correct || 0) + 1;
+    if (_mathIsTest) _mathTestAnswers.push(true);
+  } else {
+    _mathState.wrong = (_mathState.wrong || 0) + 1;
+    if (_mathIsTest) _mathTestAnswers.push(false);
+  }
+
+  // 更新计分
+  const cEl = document.getElementById('mathCorrect');
+  const wEl = document.getElementById('mathWrong');
+  if (cEl) cEl.textContent = _mathState.correct || 0;
+  if (wEl) wEl.textContent = _mathState.wrong || 0;
+
+  // 测试模式逻辑
+  if (_mathIsTest) {
+    if (_mathTestAnswers.length >= 10) {
+      mathEndTest();
+    } else {
+      mathNextQuestion();
+    }
+    return;
+  }
+
+  mathNextQuestion();
+}
+
+// ── 结束测试，评定级别 ────────────────────────────────────────
+function mathEndTest() {
+  if (_mathTimerInterval) clearInterval(_mathTimerInterval);
+  const correctRate = _mathTestAnswers.filter(Boolean).length / _mathTestAnswers.length;
+  let newLevelId = 0;
+  // 90%+ 准确率 → 升一级，否则留当前
+  const currentLevel = _mathState.levelId || 0;
+  if (correctRate >= 0.9 && currentLevel < MATH_LEVELS.length - 1) {
+    newLevelId = currentLevel + 1;
+  } else if (correctRate < 0.6 && currentLevel > 0) {
+    newLevelId = currentLevel - 1;
+  } else {
+    newLevelId = currentLevel;
+  }
+
+  const data = loadMathData();
+  const oldLevel = data.levelId;
+  data.levelId = newLevelId;
+  saveMathData(data);
+
+  const lv = MATH_LEVELS[newLevelId];
+  const correct = _mathTestAnswers.filter(Boolean).length;
+  const total = _mathTestAnswers.length;
+  const acc = Math.round(correctRate * 100);
+
+  mathShowSection('mathResult');
+  const emojiEl = document.getElementById('mathResultEmoji');
+  const titleEl = document.getElementById('mathResultTitle');
+  const scoreEl = document.getElementById('mathResultScore');
+  const detailEl = document.getElementById('mathResultDetail');
+  const levelUpEl = document.getElementById('mathLevelUp');
+
+  if (emojiEl) emojiEl.textContent = acc >= 90 ? '🏆' : acc >= 70 ? '⚡' : '💪';
+  if (titleEl) titleEl.textContent = '水平测试完成！';
+  if (scoreEl) scoreEl.textContent = `${correct} / ${total}`;
+  if (detailEl) detailEl.innerHTML =
+    `正确率 <strong>${acc}%</strong><br>` +
+    `🎯 你的专属级别：<strong style="color:${lv.color}">${lv.name}</strong><br>` +
+    `${lv.desc}`;
+  if (levelUpEl) {
+    if (oldLevel !== null && newLevelId > oldLevel) {
+      levelUpEl.style.display = 'block';
+      levelUpEl.textContent = `🎉 恭喜升级到 ${lv.name}！`;
+    } else {
+      levelUpEl.style.display = 'none';
+    }
+  }
+}
+
+// ── 结束练习（1分钟结束） ─────────────────────────────────────
+function mathEndPractice() {
+  const data = loadMathData();
+  const levelId = _mathState.levelId;
+  const lv = MATH_LEVELS[levelId];
+  const correct = _mathState.correct || 0;
+  const wrong = _mathState.wrong || 0;
+  const total = _mathState.total || 0;
+  const acc = total > 0 ? Math.round(correct / total * 100) : 0;
+
+  // 记录历史
+  const now = new Date();
+  const dateStr = `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+  data.history = data.history || [];
+  data.history.push({ levelId, levelName: lv.name, correct, wrong, total, acc, date: dateStr });
+  if (data.history.length > 30) data.history = data.history.slice(-30);
+
+  // 自适应：如果连续2次都达到目标，自动升级
+  const recent2 = data.history.slice(-2);
+  const shouldLevelUp = recent2.length >= 2
+    && recent2.every(h => h.levelId === levelId && h.correct >= lv.targetPerMin && h.acc >= 85);
+  const shouldLevelDown = recent2.length >= 2
+    && recent2.every(h => h.levelId === levelId && h.acc < 50);
+
+  let levelChanged = false;
+  if (shouldLevelUp && levelId < MATH_LEVELS.length - 1) {
+    data.levelId = levelId + 1;
+    levelChanged = 'up';
+  } else if (shouldLevelDown && levelId > 0) {
+    data.levelId = levelId - 1;
+    levelChanged = 'down';
+  }
+  saveMathData(data);
+
+  // 结果页
+  mathShowSection('mathResult');
+  const newLv = MATH_LEVELS[data.levelId];
+  const emojiEl = document.getElementById('mathResultEmoji');
+  const titleEl = document.getElementById('mathResultTitle');
+  const scoreEl = document.getElementById('mathResultScore');
+  const detailEl = document.getElementById('mathResultDetail');
+  const levelUpEl = document.getElementById('mathLevelUp');
+
+  let emoji = '⚡', title = '继续努力！';
+  if (acc >= 95 && correct >= lv.targetPerMin) { emoji = '🏆'; title = '宇宙级表现！'; }
+  else if (acc >= 85 && correct >= lv.targetPerMin * 0.9) { emoji = '🔥'; title = '太厉害了！'; }
+  else if (acc >= 70) { emoji = '⚡'; title = '很好，再快一点！'; }
+  else { emoji = '💪'; title = '继续练，你能行！'; }
+
+  if (emojiEl) emojiEl.textContent = emoji;
+  if (titleEl) titleEl.textContent = title;
+  if (scoreEl) scoreEl.textContent = `${correct} 题`;
+  if (detailEl) detailEl.innerHTML =
+    `1分钟内答了 <strong>${total}</strong> 道题<br>` +
+    `✅ 正确 <strong>${correct}</strong> 题 &nbsp; ❌ 错误 <strong>${wrong}</strong> 题<br>` +
+    `正确率 <strong>${acc}%</strong>`;
+
+  if (levelUpEl) {
+    if (levelChanged === 'up') {
+      levelUpEl.style.display = 'block';
+      levelUpEl.textContent = `🎉 连续两次达标！升级到 ${newLv.name}！`;
+    } else if (levelChanged === 'down') {
+      levelUpEl.style.display = 'block';
+      levelUpEl.style.background = '#888';
+      levelUpEl.textContent = `💪 调整到更合适的级别：${newLv.name}`;
+    } else {
+      levelUpEl.style.display = 'none';
+    }
+  }
+}
+
+// ── 返回首页 ──────────────────────────────────────────────────
+function mathGoHome() {
+  if (_mathTimerInterval) clearInterval(_mathTimerInterval);
+  _mathQuestion = null;
+  mathShowSection('mathHome');
+  mathRenderHome();
+}
+
+// ── 显示某个子区域 ────────────────────────────────────────────
+function mathShowSection(id) {
+  ['mathHome','mathCountdown','mathPractice','mathResult'].forEach(s => {
+    const el = document.getElementById(s);
+    if (el) el.style.display = s === id ? '' : 'none';
+  });
+}
+
+// ── Tab 切换时初始化口算页 ────────────────────────────────────
+// 注入到现有的 Tab 切换逻辑
+(function patchTabMath() {
+  document.addEventListener('DOMContentLoaded', () => {
+    // 找到 Tab 按钮，监听 math tab
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.tab === 'math') {
+          setTimeout(() => {
+            mathGoHome();
+          }, 50);
+        } else {
+          // 离开口算时停计时器
+          if (_mathTimerInterval) { clearInterval(_mathTimerInterval); _mathTimerInterval = null; }
+        }
+      });
+    });
+    // 初始也检查一下
+    mathRenderHome();
+  });
+})();

@@ -626,3 +626,180 @@ body {
 
 /* 空提示 */
 .empty-tip { text-align: center; color: #bdc3c7; padding: 20px; font-size: 14px; }
+
+/* ══════════════════════════════════════════
+   口算练习页面样式
+══════════════════════════════════════════ */
+
+/* 水平卡片 */
+.math-level-card {
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  border-radius: 16px; padding: 16px 18px; margin: 12px 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+.math-level-icon { font-size: 36px; flex-shrink: 0; }
+.math-level-name { font-size: 18px; font-weight: 800; color: #FFE14D; }
+.math-level-desc { font-size: 13px; color: #aac0d6; margin-top: 4px; line-height: 1.5; }
+
+/* 统计行 */
+.math-stats-row {
+  display: flex; gap: 10px; margin: 10px 0;
+}
+.math-stat-box {
+  flex: 1; background: #fff; border-radius: 12px;
+  padding: 12px 8px; text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.math-stat-num { font-size: 22px; font-weight: 800; color: #118AB2; }
+.math-stat-label { font-size: 11px; color: #888; margin-top: 3px; }
+
+/* 按钮组 */
+.math-btn-group { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.btn-math-start {
+  background: linear-gradient(135deg, #FF6B35, #F9A825);
+  color: #fff; font-size: 17px; font-weight: 800;
+  border: none; border-radius: 14px; padding: 16px;
+  box-shadow: 0 4px 12px rgba(255,107,53,0.4);
+  cursor: pointer; letter-spacing: 0.5px;
+}
+.btn-math-start:active { transform: scale(0.97); }
+.btn-math-test {
+  background: #fff; color: #118AB2; font-size: 15px; font-weight: 700;
+  border: 2px solid #118AB2; border-radius: 14px; padding: 13px;
+  cursor: pointer;
+}
+.btn-math-test:active { background: #E8F4FD; }
+
+/* 历史记录 */
+.math-history { margin-top: 8px; }
+.math-history-title { font-size: 14px; font-weight: 700; color: #555; margin-bottom: 8px; }
+.math-history-item {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #fff; border-radius: 10px; padding: 10px 14px;
+  margin-bottom: 6px; box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+}
+.math-history-left { font-size: 14px; color: #333; }
+.math-history-right { font-size: 13px; color: #888; }
+.math-history-score { font-weight: 800; color: #FF6B35; font-size: 16px; }
+
+/* 倒计时 */
+.math-countdown-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 60vh;
+}
+.math-countdown-num {
+  font-size: 96px; font-weight: 900;
+  color: #FF6B35; line-height: 1;
+  animation: mathCountPulse 0.8s ease-in-out infinite alternate;
+}
+.math-countdown-tip { font-size: 18px; color: #888; margin-top: 12px; }
+@keyframes mathCountPulse {
+  from { transform: scale(0.9); opacity: 0.7; }
+  to   { transform: scale(1.1); opacity: 1; }
+}
+
+/* 答题顶栏 */
+.math-top-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #1a1a2e; border-radius: 14px;
+  padding: 12px 16px; margin-bottom: 10px;
+}
+.math-timer-box { display: flex; align-items: center; gap: 5px; }
+.math-timer-icon { font-size: 18px; }
+.math-timer-val {
+  font-size: 26px; font-weight: 900; color: #FFE14D; min-width: 36px;
+  font-variant-numeric: tabular-nums;
+}
+.math-timer-val.danger { color: #FF6B35; animation: timerBlink 0.5s infinite; }
+@keyframes timerBlink { 50% { opacity: 0.4; } }
+.math-score-box { font-size: 15px; color: #fff; font-weight: 700; }
+.math-progress-box { font-size: 13px; color: #aac0d6; }
+
+/* 进度条 */
+.math-progress-bar-wrap {
+  height: 6px; background: #eee; border-radius: 3px; margin-bottom: 14px; overflow: hidden;
+}
+.math-progress-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #FF6B35, #F9A825);
+  border-radius: 3px; transition: width 1s linear;
+}
+
+/* 题目 */
+.math-question-wrap {
+  text-align: center; padding: 20px 10px 10px;
+}
+.math-question {
+  font-size: 42px; font-weight: 900; color: #1a1a2e;
+  letter-spacing: 4px;
+}
+.math-question.correct-flash { animation: qCorrect 0.3s ease; }
+.math-question.wrong-flash   { animation: qWrong 0.3s ease; }
+@keyframes qCorrect {
+  0%  { color: #1a1a2e; }
+  50% { color: #06D6A0; transform: scale(1.08); }
+  100%{ color: #1a1a2e; }
+}
+@keyframes qWrong {
+  0%  { color: #1a1a2e; }
+  50% { color: #EF476F; transform: translateX(-6px); }
+  100%{ color: #1a1a2e; }
+}
+
+/* 答题显示 */
+.math-answer-display {
+  text-align: center; font-size: 34px; font-weight: 800;
+  color: #118AB2; letter-spacing: 4px;
+  border-bottom: 3px solid #118AB2; padding-bottom: 4px;
+  min-height: 46px; margin: 0 20px 14px;
+}
+
+/* 数字键盘 */
+.math-keys {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  padding: 0 4px;
+}
+.math-key {
+  background: #fff; border: 2px solid #e0e0e0; border-radius: 12px;
+  font-size: 24px; font-weight: 700; color: #333;
+  padding: 16px 0; cursor: pointer;
+  box-shadow: 0 3px 0 #c8c8c8;
+  transition: transform 0.1s, box-shadow 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.math-key:active {
+  transform: translateY(3px); box-shadow: 0 0px 0 #c8c8c8;
+}
+.math-key-del  { background: #FFF0E6; color: #FF6B35; border-color: #FF6B35; }
+.math-key-zero { }
+.math-key-ok   {
+  background: linear-gradient(135deg, #06D6A0, #118AB2);
+  color: #fff; border: none; font-size: 22px;
+  box-shadow: 0 3px 0 #0a7a5c;
+}
+.math-key-ok:active { box-shadow: 0 0px 0 #0a7a5c; }
+
+/* 结果页 */
+.math-result-wrap {
+  text-align: center; padding: 20px 10px;
+}
+.math-result-emoji { font-size: 64px; margin-bottom: 10px; }
+.math-result-title { font-size: 26px; font-weight: 900; color: #1a1a2e; margin-bottom: 8px; }
+.math-result-score {
+  font-size: 48px; font-weight: 900;
+  background: linear-gradient(135deg, #FF6B35, #F9A825);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  margin-bottom: 6px;
+}
+.math-result-detail { font-size: 15px; color: #666; line-height: 1.7; margin-bottom: 10px; }
+.math-level-up {
+  background: linear-gradient(135deg, #FFE14D, #FF6B35);
+  color: #fff; font-size: 16px; font-weight: 800;
+  border-radius: 12px; padding: 12px 16px; margin: 10px 0;
+  animation: levelUpBounce 0.5s ease;
+}
+@keyframes levelUpBounce {
+  0%  { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.05); }
+  100%{ transform: scale(1); opacity: 1; }
+}
