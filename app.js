@@ -148,6 +148,10 @@ function renderAll() {
 function renderHeader() {
   document.getElementById('totalScore').textContent = state.totalScore;
   document.getElementById('shopScore').textContent = state.totalScore;
+  // 今日得分（含待审的分数，让孩子立刻看到进展）
+  const todayPts = calcTodayScore();
+  const el = document.getElementById('headerTodayScore');
+  if (el) el.textContent = todayPts > 0 ? `+${todayPts}` : '+0';
   // 日期
   const d = new Date();
   const days = ['周日','周一','周二','周三','周四','周五','周六'];
@@ -213,15 +217,24 @@ function toggleDaily(id, score) {
   }
   renderAll();
   showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
+  // 打卡后立即用"预计积分"检查激励弹窗（无需等审核）
+  setTimeout(() => tryShowShopBoost(score, true), 1600);
 }
 
-function updateTodayScore() {
-  const today = Object.keys(state.todayChecked).reduce((sum, id) => {
+function calcTodayScore() {
+  return Object.keys(state.todayChecked).reduce((sum, id) => {
     const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
     const t = all.find(x => x.id === id);
     return sum + (t ? t.score : 0);
   }, 0);
+}
+
+function updateTodayScore() {
+  const today = calcTodayScore();
   document.getElementById('todayScore').textContent = today;
+  // 同步顶部今日得分
+  const el = document.getElementById('headerTodayScore');
+  if (el) el.textContent = today > 0 ? `+${today}` : '+0';
 }
 
 // ── 渲染任务卡 ─────────────────────────────────────────────────
@@ -283,6 +296,17 @@ function openCardModal(id) {
   document.getElementById('cardModalSub').textContent = card.sub;
   document.getElementById('cardModalDesc').textContent = '✅ ' + card.desc;
   document.getElementById('cardModalScore').textContent = `+${card.score}分`;
+
+  // 显示"不磨蹭"等任务的具体执行标准（tip字段）
+  const tipEl = document.getElementById('cardModalTip');
+  if (tipEl) {
+    if (card.tip) {
+      tipEl.textContent = card.tip;
+      tipEl.style.display = 'block';
+    } else {
+      tipEl.style.display = 'none';
+    }
+  }
 
   // 注入喇叭按钮到弹窗标题区域
   const speakContainer = document.getElementById('cardModalSpeak');
@@ -486,10 +510,15 @@ function showCelebration(emoji, title, desc) {
 }
 
 // ── 补给站激励弹窗 ─────────────────────────────────────────────
-// 在积分入账后调用，找到"差距最近且还能兑换"的商品做激励提示
-function tryShowShopBoost(scoreAdded) {
+// scoreAdded: 本次新增分数
+// usePending: true=用"当前积分+今日待审分"做预计（打卡后立即触发），false=用实际积分
+let _shopBoostText = ''; // 供语音按钮使用
+function tryShowShopBoost(scoreAdded, usePending) {
   if (!scoreAdded || scoreAdded <= 0) return;
-  const current = state.totalScore;
+  // 计算参考积分：实际已到账 + 今日待审（如果是打卡立即触发）
+  const actual = state.totalScore;
+  const pendingToday = calcTodayScore(); // 包含待审分
+  const current = usePending ? Math.max(actual, pendingToday + actual - calcApprovedTodayScore()) : actual;
 
   // 收集所有商品（排除彩蛋），找出差距最近且还未到达门槛的
   const allItems = [];
@@ -512,25 +541,69 @@ function tryShowShopBoost(scoreAdded) {
 
   // 随机鼓励话术，增加趣味性
   const phrases = [
+    `就差 ${nearest.gap}分 了！`,
+    `只需再赚 ${nearest.gap}分！`,
+    `加油，还差 ${nearest.gap}分！`,
+    `差一点点，还差 ${nearest.gap}分！`,
+  ];
+  const phrasesHTML = [
     `就差 <b>${nearest.gap}分</b> 了！`,
     `只需再赚 <b>${nearest.gap}分</b>！`,
     `加油，还差 <b>${nearest.gap}分</b>！`,
     `差一点点，还差 <b>${nearest.gap}分</b>！`,
   ];
-  const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+  const idx = Math.floor(Math.random() * phrases.length);
+  const phrase = phrases[idx];
+  const phraseHTML = phrasesHTML[idx];
+
+  // 组合语音文本
+  _shopBoostText = `距离「${nearest.name}」，${phrase}你再努力一下，需要${nearest.cost}分，你快到了！`;
 
   document.getElementById('shopBoostIcon').textContent = nearest.icon;
   document.getElementById('shopBoostTitle').textContent = `距离「${nearest.name}」`;
   document.getElementById('shopBoostDesc').innerHTML =
-    `${phrase}<br>你现在有 <b>${current}分</b>，再努力一下！`;
+    `${phraseHTML}<br>再努力一下就能兑换啦！`;
   document.getElementById('shopBoostHint').textContent =
-    `需要 ${nearest.cost}分 · 当前 ${current}分`;
+    `需要 ${nearest.cost}分 · 当前约 ${current}分`;
+
+  // 重置语音按钮状态
+  const speakBtnEl = document.getElementById('shopBoostSpeakBtn');
+  if (speakBtnEl) { speakBtnEl.textContent = '🔈 听一听'; speakBtnEl.classList.remove('speaking'); }
 
   // 延迟1.5秒弹出，让庆祝弹窗先关闭
   setTimeout(() => {
     closeModal('celebModal');
     document.getElementById('shopBoostModal').style.display = 'flex';
+    // 自动朗读！延迟0.3秒确保弹窗已显示
+    setTimeout(() => {
+      if (window.speechSynthesis) {
+        speakText(_shopBoostText, document.getElementById('shopBoostSpeakBtn'));
+      }
+    }, 300);
   }, 1500);
+}
+
+// 计算今日已通过（approved）的分数（用于预计积分计算）
+function calcApprovedTodayScore() {
+  return Object.keys(state.todayChecked).reduce((sum, id) => {
+    if (state.todayChecked[id] !== 'approved') return sum;
+    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const t = all.find(x => x.id === id);
+    return sum + (t ? t.score : 0);
+  }, 0);
+}
+
+// 激励弹窗语音按钮点击
+function shopBoostSpeak(btnEl) {
+  speakText(_shopBoostText, btnEl);
+}
+
+// 激励弹窗关闭（同时停止语音）
+function shopBoostClose() {
+  if (window.speechSynthesis && window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+  }
+  closeModal('shopBoostModal');
 }
 
 function closeModal(id) {

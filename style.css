@@ -48,10 +48,14 @@ body {
   box-shadow: 0 2px 12px rgba(255,107,53,0.3);
 }
 .header-title { font-size: 18px; font-weight: 700; }
-.header-score { display: flex; align-items: baseline; gap: 4px; }
-.score-label { font-size: 11px; opacity: 0.85; }
-.score-value { font-size: 28px; font-weight: 900; }
-.score-unit { font-size: 13px; opacity: 0.85; }
+.header-score { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.score-today-row { display: flex; align-items: baseline; gap: 3px; }
+.score-today-label { font-size: 10px; opacity: 0.75; }
+.score-today-value { font-size: 15px; font-weight: 800; color: #FFE14D; }
+.score-total-row { display: flex; align-items: baseline; gap: 3px; }
+.score-label { font-size: 10px; opacity: 0.75; }
+.score-value { font-size: 26px; font-weight: 900; }
+.score-unit { font-size: 12px; opacity: 0.85; }
 
 /* ── 标签导航 ── */
 .tab-nav {
