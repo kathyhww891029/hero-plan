@@ -2107,54 +2107,234 @@ function renderMaze() {
   // 构建SVG
   let svg = `<svg class="maze-svg" viewBox="0 0 800 900" xmlns="http://www.w3.org/2000/svg">`;
 
-  // ── 背景渐变定义 ─────────────────────────────────────
+  // ── SVG 滤镜与渐变 ───────────────────────────────────
   svg += `<defs>
-    <linearGradient id="mazeBg1" x1="0%" y1="100%" x2="0%" y2="0%">
-      <stop offset="0%" stop-color="#C8E6C9"/>
-      <stop offset="100%" stop-color="#A5D6A7"/>
-    </linearGradient>
-    <linearGradient id="mazeBg2" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#BBDEFB"/>
-      <stop offset="100%" stop-color="#90CAF9"/>
-    </linearGradient>
-    <linearGradient id="mazeBg3" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFE082"/>
-      <stop offset="100%" stop-color="#FFD54F"/>
-    </linearGradient>
-    <filter id="fog">
-      <feGaussianBlur stdDeviation="6"/>
+    <filter id="cartoonShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.25)"/>
     </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="fog">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <!-- Phase1 草地渐变 -->
+    <linearGradient id="gGarden" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#81C784"/>
+      <stop offset="60%" stop-color="#66BB6A"/>
+      <stop offset="100%" stop-color="#43A047"/>
+    </linearGradient>
+    <!-- Phase2 城堡渐变 -->
+    <linearGradient id="gCastle" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1E88E5"/>
+      <stop offset="100%" stop-color="#1565C0"/>
+    </linearGradient>
+    <!-- Phase3 金殿渐变 -->
+    <linearGradient id="gTreasure" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="100%" stop-color="#FF8F00"/>
+    </linearGradient>
+    <!-- 草地纹理图案 -->
+    <pattern id="grassTex" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="40" height="40" fill="#4CAF50"/>
+      <ellipse cx="10" cy="30" rx="4" ry="6" fill="#388E3C" opacity="0.4"/>
+      <ellipse cx="30" cy="10" rx="3" ry="5" fill="#2E7D32" opacity="0.3"/>
+    </pattern>
+    <!-- 砖墙图案 -->
+    <pattern id="brickTex" x="0" y="0" width="32" height="18" patternUnits="userSpaceOnUse">
+      <rect width="32" height="18" fill="#C62828"/>
+      <rect x="1" y="1" width="30" height="7" fill="#B71C1C" rx="1"/>
+      <rect x="1" y="10" width="14" height="7" fill="#B71C1C" rx="1"/>
+      <rect x="17" y="10" width="14" height="7" fill="#B71C1C" rx="1"/>
+    </pattern>
   </defs>`;
 
-  // ── Phase 3 背景（金色殿堂区）─────────────────────────
-  svg += `<rect x="0" y="0" width="800" height="200" fill="url(#mazeBg3)" rx="0"/>`;
+  // ════════════════════════════════════════════════════════
+  // PHASE 3：宝藏殿堂（y: -450 ~ 0）
+  // ════════════════════════════════════════════════════════
+  const p3y0 = 0, p3y1 = 200;
+
+  // 天空背景
+  svg += `<rect x="0" y="${p3y0}" width="800" height="${p3y1}" fill="#5C6BC0"/>`;
+  // 金色渐变基底
+  svg += `<rect x="0" y="${p3y0 + 80}" width="800" height="${p3y1 - 80}" fill="url(#gTreasure)"/>`;
+  // 宫殿大理石地面
+  svg += `<rect x="0" y="${p3y1 - 30}" width="800" height="30" fill="#FFF9C4"/>`;
+  svg += `<rect x="0" y="${p3y1 - 30}" width="800" height="3" fill="#FFD700"/>`;
+
+  // 背景宫殿剪影（左右两侧）
+  svg += `<g opacity="0.15" fill="#FFD54F">`;
+  svg += `<polygon points="30,${p3y0 + 60} 60,${p3y0 + 20} 90,${p3y0 + 60}"/>`;
+  svg += `<rect x="30" y="${p3y0 + 60}" width="60" height="50"/>`;
+  svg += `<rect x="650" y="${p3y0 + 50}" width="70" height="60"/>`;
+  svg += `<polygon points="650,${p3y0 + 50} 685,${p3y0 + 10} 720,${p3y0 + 50}"/>`;
+  svg += `</g>`;
+
+  // 星星 sparkle
+  const stars3 = [[50,30],[150,60],[300,20],[450,50],[600,30],[720,70],[250,90],[550,80]];
+  stars3.forEach(([sx,sy]) => {
+    svg += `<g transform="translate(${sx},${sy})" filter="url(#glow)">`;
+    svg += `<polygon points="0,-6 1.5,-1.5 6,0 1.5,1.5 0,6 -1.5,1.5 -6,0 -1.5,-1.5" fill="#FFD700"/>`;
+    svg += `</g>`;
+  });
+
+  // 宝藏箱（装饰）
+  svg += `<g transform="translate(720, 165)">`;
+  svg += `<rect x="-15" y="-10" width="30" height="22" fill="#8D6E63" rx="3"/>`;
+  svg += `<rect x="-15" y="-10" width="30" height="8" fill="#A1887F" rx="3"/>`;
+  svg += `<rect x="-4" y="-6" width="8" height="6" fill="#FFD700" rx="1"/>`;
+  svg += `</g>`;
+
   // Phase 3 迷雾
-  svg += `<rect id="phaseFog3" class="phase-fog" x="0" y="0" width="800" height="200" fill="rgba(245,127,23,0.5)" filter="url(#fog)" style="${state.totalScore >= 90 ? 'opacity:0' : 'opacity:1'}"/>`;
+  svg += `<rect id="phaseFog3" class="phase-fog" x="0" y="${p3y0}" width="800" height="${p3y1}" fill="rgba(30,30,80,0.7)" filter="url(#fog)" style="${state.totalScore >= 90 ? 'opacity:0' : 'opacity:1'}"/>`;
 
-  // ── Phase 2 背景（蓝色城堡区）────────────────────────
-  svg += `<rect x="0" y="200" width="800" height="340" fill="url(#mazeBg2)" rx="0"/>`;
+  // ════════════════════════════════════════════════════════
+  // PHASE 2：神秘城堡（y: 200 ~ 540）
+  // ════════════════════════════════════════════════════════
+  const p2y0 = 200, p2y1 = 540;
+
+  // 天空
+  svg += `<rect x="0" y="${p2y0}" width="800" height="${p2y1 - 30}" fill="url(#gCastle)"/>`;
+  // 远山剪影
+  svg += `<g opacity="0.2" fill="#0D47A1">`;
+  svg += `<polygon points="0,${p2y0 + 60} 100,${p2y0 + 20} 200,${p2y0 + 60}"/>`;
+  svg += `<polygon points="150,${p2y0 + 50} 300,${p2y0} 450,${p2y0 + 50}"/>`;
+  svg += `<polygon points="400,${p2y0 + 40} 550,${p2y0 + 10} 700,${p2y0 + 40}"/>`;
+  svg += `<polygon points="600,${p2y0 + 50} 750,${p2y0 + 20} 800,${p2y0 + 30}"/>`;
+  svg += `</g>`;
+
+  // 城堡塔楼
+  svg += `<g transform="translate(680, 240)" filter="url(#cartoonShadow)">`;
+  svg += `<rect x="-20" y="0" width="40" height="80" fill="#5D4037" rx="2"/>`;
+  svg += `<rect x="-25" y="-20" width="50" height="25" fill="#6D4C41" rx="2"/>`;
+  // 窗户
+  svg += `<rect x="-8" y="20" width="16" height="20" fill="#FFEB3B" rx="8" ry="8"/>`;
+  svg += `<rect x="-8" y="50" width="16" height="20" fill="#FFEB3B" rx="8" ry="8"/>`;
+  // 旗帜
+  svg += `<line x1="0" y1="-20" x2="0" y2="-40" stroke="#5D4037" stroke-width="2"/>`;
+  svg += `<polygon points="0,-40 18,-33 0,-26" fill="#E53935"/>`;
+  svg += `</g>`;
+
+  // 石板地面
+  svg += `<rect x="0" y="${p2y1 - 40}" width="800" height="40" fill="#78909C"/>`;
+  // 石板缝隙
+  for (let i = 0; i < 800; i += 60) {
+    svg += `<line x1="${i}" y1="${p2y1 - 40}" x2="${i}" y2="${p2y1 - 10}" stroke="#546E7A" stroke-width="1" opacity="0.5"/>`;
+  }
+  svg += `<rect x="0" y="${p2y1 - 5}" width="800" height="5" fill="#455A64"/>`;
+
   // Phase 2 迷雾
-  svg += `<rect id="phaseFog2" class="phase-fog" x="0" y="200" width="800" height="340" fill="rgba(25,118,210,0.5)" filter="url(#fog)" style="${state.totalScore >= 30 ? 'opacity:0' : 'opacity:1'}"/>`;
+  svg += `<rect id="phaseFog2" class="phase-fog" x="0" y="${p2y0}" width="800" height="${p2y1 - p2y0}" fill="rgba(20,50,120,0.65)" filter="url(#fog)" style="${state.totalScore >= 30 ? 'opacity:0' : 'opacity:1'}"/>`;
 
-  // ── Phase 1 背景（绿色花园区）─────────────────────────
-  svg += `<rect x="0" y="540" width="800" height="360" fill="url(#mazeBg1)" rx="0"/>`;
+  // ════════════════════════════════════════════════════════
+  // PHASE 1：英雄花园（y: 540 ~ 900）
+  // ════════════════════════════════════════════════════════
+  const p1y0 = 540, p1y1 = 900;
 
-  // ── 阶段分隔线 ──────────────────────────────────────
-  svg += `<line x1="0" y1="540" x2="800" y2="540" stroke="#FFF" stroke-width="2" stroke-dasharray="8 6" opacity="0.6"/>`;
-  svg += `<line x1="0" y1="200" x2="800" y2="200" stroke="#FFF" stroke-width="2" stroke-dasharray="8 6" opacity="0.6"/>`;
+  // 草地基底
+  svg += `<rect x="0" y="${p1y0}" width="800" height="${p1y1 - p1y0}" fill="url(#grassTex)"/>`;
+  // 草地渐变叠加
+  svg += `<rect x="0" y="${p1y0}" width="800" height="${p1y1 - p1y0}" fill="url(#gGarden)"/>`;
 
-  // ── 阶段标签 ─────────────────────────────────────────
-  svg += `<text x="10" y="225" font-size="11" fill="#1565C0" font-weight="700" opacity="0.8">🏰 神秘城堡</text>`;
-  svg += `<text x="10" y="560" font-size="11" fill="#2E7D32" font-weight="700" opacity="0.8">🌿 英雄花园</text>`;
-  svg += `<text x="10" y="25" font-size="11" fill="#E65100" font-weight="700" opacity="0.8">👑 宝藏殿堂</text>`;
+  // 草地底部草叶纹理
+  for (let i = 0; i < 800; i += 30) {
+    svg += `<ellipse cx="${i + 10}" cy="${p1y1 - 5}" rx="8" ry="5" fill="#2E7D32" opacity="0.4"/>`;
+    svg += `<ellipse cx="${i + 20}" cy="${p1y1 - 8}" rx="6" ry="4" fill="#388E3C" opacity="0.3"/>`;
+  }
 
-  // ── 绘制所有路径 ─────────────────────────────────────
-  Object.entries(MAZE_MAP.phases).forEach(([phaseId, phase]) => {
-    phase.paths.forEach(path => {
-      svg += `<path class="maze-path" d="${path.d}" stroke="${phase.pathColor}" stroke-width="${phase.pathWidth}" opacity="0.8"/>`;
-      // 路径高亮边框
-      svg += `<path class="maze-path" d="${path.d}" stroke="${phase.nodeColor}" stroke-width="2" opacity="0.3"/>`;
-    });
+  // 太阳
+  svg += `<g transform="translate(730, 580)" filter="url(#glow)">`;
+  svg += `<circle cx="0" cy="0" r="28" fill="#FFEE58"/>`;
+  svg += `<circle cx="0" cy="0" r="22" fill="#FFEB3B"/>`;
+  for (let a = 0; a < 360; a += 45) {
+    const rad = a * Math.PI / 180;
+    svg += `<line x1="${Math.cos(rad)*28}" y1="${Math.sin(rad)*28}" x2="${Math.cos(rad)*36}" y2="${Math.sin(rad)*36}" stroke="#FFD54F" stroke-width="3" stroke-linecap="round"/>`;
+  }
+  svg += `</g>`;
+
+  // 树木（左右两侧装饰）
+  const drawTree = (tx, ty, sz) => {
+    svg += `<g transform="translate(${tx},${ty})">`;
+    svg += `<rect x="-5" y="0" width="10" height="${30*sz}" fill="#6D4C41" rx="3"/>`;
+    svg += `<ellipse cx="0" cy="-${10*sz}" rx="${25*sz}" ry="${20*sz}" fill="#388E3C"/>`;
+    svg += `<ellipse cx="-${10*sz}" cy="${5*sz}" rx="${18*sz}" ry="${15*sz}" fill="#43A047"/>`;
+    svg += `<ellipse cx="${12*sz}" cy="${-5*sz}" rx="${20*sz}" ry="${16*sz}" fill="#2E7D32"/>`;
+    svg += `</g>`;
+  };
+  drawTree(50, 700, 1.2); drawTree(750, 720, 1.0); drawTree(30, 850, 0.9); drawTree(770, 860, 1.1);
+
+  // 小花丛
+  const drawFlowers = (fx, fy, col) => {
+    svg += `<g transform="translate(${fx},${fy})">`;
+    svg += `<ellipse cx="0" cy="5" rx="6" ry="4" fill="#4CAF50"/>`;
+    svg += `<circle cx="0" cy="0" r="5" fill="${col}"/>`;
+    svg += `<circle cx="0" cy="0" r="2.5" fill="#FFEB3B"/>`;
+    svg += `</g>`;
+  };
+  [[100,780,'#E91E63'],[110,790,'#FF5722'],[700,760,'#9C27B0'],[710,775,'#E91E63'],
+   [60,880,'#FF9800'],[200,870,'#E91E63'],[650,880,'#9C27B0'],[740,870,'#FF5722']].forEach(([a,b,c])=>drawFlowers(a,b,c));
+
+  // 蘑菇
+  const drawMushroom = (mx, my, col) => {
+    svg += `<g transform="translate(${mx},${my})">`;
+    svg += `<rect x="-4" y="0" width="8" height="10" fill="#FFF9C4" rx="2"/>`;
+    svg += `<ellipse cx="0" cy="0" rx="10" ry="7" fill="${col}"/>`;
+    svg += `<circle cx="-4" cy="-2" r="2" fill="#FFF" opacity="0.7"/>`;
+    svg += `<circle cx="3" cy="-1" r="1.5" fill="#FFF" opacity="0.7"/>`;
+    svg += `</g>`;
+  };
+  [[150,830,'#F44336'],[680,820,'#FF9800'],[300,860,'#F44336']].forEach(([a,b,c])=>drawMushroom(a,b,c));
+
+  // 云朵
+  const drawCloud = (cx, cy, sz) => {
+    svg += `<g transform="translate(${cx},${cy})" opacity="0.85">`;
+    svg += `<ellipse cx="0" cy="0" rx="${20*sz}" ry="${12*sz}" fill="white"/>`;
+    svg += `<ellipse cx="${-15*sz}" cy="${3*sz}" rx="${14*sz}" ry="${9*sz}" fill="white"/>`;
+    svg += `<ellipse cx="${15*sz}" cy="${2*sz}" rx="${16*sz}" ry="${10*sz}" fill="white"/>`;
+    svg += `</g>`;
+  };
+  drawCloud(120, 570, 1.0); drawCloud(500, 580, 0.8); drawCloud(280, 560, 0.7);
+
+  // 蝴蝶
+  svg += `<g transform="translate(350, 600)">`;
+  svg += `<ellipse cx="-5" cy="-3" rx="5" ry="3" fill="#E91E63" transform="rotate(-20)"/>`;
+  svg += `<ellipse cx="5" cy="-3" rx="5" ry="3" fill="#E91E63" transform="rotate(20)"/>`;
+  svg += `<ellipse cx="-4" cy="3" rx="4" ry="2.5" fill="#F48FB1" transform="rotate(-10)"/>`;
+  svg += `<ellipse cx="4" cy="3" rx="4" ry="2.5" fill="#F48FB1" transform="rotate(10)"/>`;
+  svg += `<ellipse cx="0" cy="0" rx="2" ry="4" fill="#5D4037"/>`;
+  svg += `</g>`;
+
+  // 阶段分隔线（装饰性）
+  svg += `<rect x="0" y="${p2y0}" width="800" height="8" fill="#455A64"/>`;
+  svg += `<rect x="0" y="${p2y0 + 3}" width="800" height="2" fill="#607D8B" opacity="0.6"/>`;
+  svg += `<rect x="0" y="${p1y0}" width="800" height="6" fill="#2E7D32"/>`;
+  svg += `<rect x="0" y="${p1y0 + 2}" width="800" height="2" fill="#4CAF50" opacity="0.5"/>`;
+
+  // ── 绘制石头小路（Phase 1 花园）─────────────────────
+  MAZE_MAP.phases[1].paths.forEach(path => {
+    // 底层阴影
+    svg += `<path d="${path.d}" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>`;
+    // 主路面
+    svg += `<path d="${path.d}" fill="none" stroke="#8D6E63" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>`;
+    // 路面纹理（浅色石块）
+    svg += `<path d="${path.d}" fill="none" stroke="#A1887F" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 12" opacity="0.5"/>`;
+    // 高光边缘
+    svg += `<path d="${path.d}" fill="none" stroke="#BCAAA4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>`;
+  });
+
+  // ── 绘制石板路（Phase 2 城堡）────────────────────────
+  MAZE_MAP.phases[2].paths.forEach(path => {
+    svg += `<path d="${path.d}" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>`;
+    svg += `<path d="${path.d}" fill="none" stroke="#78909C" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>`;
+    svg += `<path d="${path.d}" fill="none" stroke="#90A4AE" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4 10" opacity="0.4"/>`;
+  });
+
+  // ── 绘制黄金路（Phase 3 宝藏殿堂）────────────────────
+  MAZE_MAP.phases[3].paths.forEach(path => {
+    svg += `<path d="${path.d}" fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>`;
+    svg += `<path d="${path.d}" fill="none" stroke="#FFD700" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>`;
+    svg += `<path d="${path.d}" fill="none" stroke="#FFF176" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>`;
   });
 
   // ── 绘制所有节点 ─────────────────────────────────────
@@ -2164,77 +2344,127 @@ function renderMaze() {
       const nodeState = getMazeNodeState(node);
       const revealed = phaseRevealed;
       const isClickable = node.cardId && revealed;
+      const card = node.cardId ? TASK_CARDS.find(c => c.id === node.cardId) : null;
 
-      // 节点颜色
-      let fillColor, strokeColor;
+      // 节点颜色配置
+      let platformFill, platformStroke, iconCol, labelBg;
       if (node.isGate) {
-        fillColor = '#8D6E63'; strokeColor = '#5D4037';
+        platformFill = '#6D4C41'; platformStroke = '#4E342E'; iconCol = '#FFF';
+        labelBg = 'rgba(109,76,65,0.85)';
       } else if (node.isTreasure) {
-        fillColor = '#FFD700'; strokeColor = '#E65100';
+        platformFill = '#FFD700'; platformStroke = '#FF8F00'; iconCol = '#E65100';
+        labelBg = 'rgba(255,179,0,0.85)';
       } else if (!revealed) {
-        fillColor = '#9E9E9E'; strokeColor = '#616161';
+        platformFill = '#9E9E9E'; platformStroke = '#616161'; iconCol = '#757575';
+        labelBg = 'rgba(158,158,158,0.8)';
       } else if (nodeState === 'done') {
-        fillColor = phase.nodeColor; strokeColor = '#fff';
+        platformFill = '#43A047'; platformStroke = '#2E7D32'; iconCol = '#FFF';
+        labelBg = 'rgba(67,160,71,0.85)';
       } else if (nodeState === 'available') {
-        fillColor = '#FFEB3B'; strokeColor = phase.nodeColor;
+        platformFill = '#FFCA28'; platformStroke = '#F9A825'; iconCol = '#5D4037';
+        labelBg = 'rgba(255,202,40,0.85)';
       } else {
-        fillColor = '#BDBDBD'; strokeColor = '#757575';
+        platformFill = '#BDBDBD'; platformStroke = '#757575'; iconCol = '#9E9E9E';
+        labelBg = 'rgba(189,189,189,0.8)';
       }
 
-      // 发光效果（已完成节点）
-      const glowClass = nodeState === 'done' && !node.isGate ? 'maze-node-glow' : '';
-
-      // 点击事件
       const onclick = isClickable ? `openMazeNode('${node.id}')` : '';
-
-      // 节点圆
       const r = node.isGate ? 22 : node.isTreasure ? 26 : 18;
-      svg += `<g class="maze-node ${glowClass}" ${onclick ? `style="cursor:pointer"` : ''} onclick="${onclick}">`;
-      svg += `<circle cx="${node.x}" cy="${node.y}" r="${r + 4}" fill="none" stroke="${strokeColor}" stroke-width="1" opacity="0.2"/>`;
-      svg += `<circle class="maze-node-circle" cx="${node.x}" cy="${node.y}" r="${r}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2.5"/>`;
+      const glowG = nodeState === 'done' && !node.isGate && !node.isTreasure;
 
-      // 节点图标/文字
+      svg += `<g class="maze-node ${glowG ? 'maze-node-glow' : ''}" ${onclick ? 'style="cursor:pointer"' : ''} onclick="${onclick}">`;
+
+      // 木质平台底座（所有节点都有）
+      if (!node.isGate) {
+        svg += `<rect x="${node.x - r - 8}" y="${node.y + r - 4}" width="${(r+8)*2}" height="16" fill="${platformStroke}" rx="6"/>`;
+        svg += `<rect x="${node.x - r - 8}" y="${node.y + r - 8}" width="${(r+8)*2}" height="12" fill="${platformFill}" rx="6"/>`;
+      }
+
+      // 发光圆（已完成节点有脉冲）
+      if (glowG) {
+        svg += `<circle cx="${node.x}" cy="${node.y}" r="${r + 8}" fill="${phase.nodeColor}" opacity="0.3">
+          <animate attributeName="r" values="${r+4};${r+12};${r+4}" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite"/>
+        </circle>`;
+      }
+
+      // 节点主体圆
+      svg += `<circle cx="${node.x}" cy="${node.y}" r="${r + 3}" fill="${platformStroke}" opacity="0.3"/>`;
+      svg += `<circle cx="${node.x}" cy="${node.y}" r="${r}" fill="${platformFill}" stroke="${platformStroke}" stroke-width="3"/>`;
+
+      // 节点图标
       if (node.isGate) {
         svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="16">🚪</text>`;
       } else if (node.isTreasure) {
         svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="18">👑</text>`;
       } else if (node.cardId) {
-        const card = TASK_CARDS.find(c => c.id === node.cardId);
-        if (card) {
-          // 已完成打勾
-          if (nodeState === 'done') {
-            svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">✅</text>`;
-          } else if (!revealed) {
-            svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">🔒</text>`;
-          } else {
-            svg += `<text x="${node.x}" y="${node.y + 4}" text-anchor="middle" font-size="10" fill="${strokeColor}" font-weight="700">${card.stars || '⭐'}</text>`;
-          }
+        if (nodeState === 'done') {
+          svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">✅</text>`;
+        } else if (!revealed) {
+          svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">🔒</text>`;
+        } else if (card) {
+          svg += `<text x="${node.x}" y="${node.y + 4}" text-anchor="middle" font-size="10" fill="${iconCol}" font-weight="700">${card.stars || '⭐'}</text>`;
         }
       }
 
-      // 节点名称（淡色底）
+      // 节点名称标签
       if (node.label && (revealed || node.isGate || node.isTreasure)) {
-        const labelY = node.y + r + 14;
-        svg += `<rect x="${node.x - 36}" y="${labelY - 8}" width="72" height="14" rx="6" fill="rgba(255,255,255,0.7)"/>`;
-        svg += `<text x="${node.x}" y="${labelY + 3}" text-anchor="middle" class="maze-node-label">${node.label}</text>`;
+        const lW = node.label.length * 11 + 16;
+        const lX = node.x - lW / 2;
+        const lY = node.y + r + 16;
+        svg += `<rect x="${lX}" y="${lY}" width="${lW}" height="16" fill="${labelBg}" rx="8"/>`;
+        svg += `<text x="${node.x}" y="${lY + 11.5}" text-anchor="middle" font-size="10" fill="white" font-weight="700">${node.label}</text>`;
       }
 
-      // 死路标记
+      // 死路藤蔓
       if (node.deadEnd && revealed) {
-        svg += `<text x="${node.x}" y="${node.y - r - 4}" text-anchor="middle" font-size="9" fill="#EF5350">死路</text>`;
+        svg += `<line x1="${node.x}" y1="${node.y - r}" x2="${node.x}" y2="${node.y - r - 14}" stroke="#4CAF50" stroke-width="2"/>`;
+        svg += `<text x="${node.x}" y="${node.y - r - 18}" text-anchor="middle" font-size="9" fill="#E91E63" font-weight="700">✗</text>`;
       }
 
       svg += `</g>`;
     });
   });
 
-  // ── 骑士角色 ─────────────────────────────────────────
-  // 骑士画在(0,0)，通过transform定位（与moveKnight/positionKnightImmediate配合）
+  // ── 骑士角色（卡通小骑士）────────────────────────────
   const knightNodeId = state.mazeKnightNode || 'n_start';
   const knightNode = findMazeNode(knightNodeId) || findMazeNode('n_start');
   svg += `<g id="mazeKnightGroup" class="maze-knight" transform="translate(${knightNode.x}, ${knightNode.y})">`;
-  svg += `<circle cx="0" cy="0" r="16" fill="#FF6F00" stroke="#E65100" stroke-width="2.5"/>`;
-  svg += `<text x="0" y="5" text-anchor="middle" font-size="16">🦸</text>`;
+
+  // 骑士阴影
+  svg += `<ellipse cx="0" cy="18" rx="10" ry="4" fill="rgba(0,0,0,0.2)"/>`;
+
+  // 盾牌（左）
+  svg += `<g transform="translate(-14, -2)">`;
+  svg += `<ellipse cx="0" cy="0" rx="9" ry="12" fill="#1565C0" stroke="#0D47A1" stroke-width="2"/>`;
+  svg += `<ellipse cx="0" cy="0" rx="5" ry="7" fill="#1E88E5"/>`;
+  svg += `<text x="0" y="4" text-anchor="middle" font-size="9" fill="white">★</text>`;
+  svg += `</g>`;
+
+  // 身体（盔甲）
+  svg += `<rect x="-8" y="-4" width="16" height="18" fill="#78909C" rx="4"/>`;
+  svg += `<rect x="-6" y="-2" width="12" height="14" fill="#90A4AE" rx="3"/>`;
+
+  // 头部（头盔）
+  svg += `<circle cx="0" cy="-10" r="10" fill="#78909C" stroke="#546E7A" stroke-width="2"/>`;
+  svg += `<rect x="-8" y="-16" width="16" height="6" fill="#78909C" rx="3"/>`;
+  // 头盔面罩缝
+  svg += `<line x1="0" y1="-15" x2="0" y2="-5" stroke="#546E7A" stroke-width="1.5"/>`;
+  svg += `<line x1="-7" y1="-10" x2="7" y2="-10" stroke="#546E7A" stroke-width="1.5"/>`;
+  // 头盔眼睛
+  svg += `<circle cx="-3" cy="-10" r="2" fill="#29B6F6"/>`;
+  svg += `<circle cx="3" cy="-10" r="2" fill="#29B6F6"/>`;
+
+  // 剑（右）
+  svg += `<g transform="translate(14, -2)">`;
+  svg += `<rect x="-2" y="-14" width="4" height="18" fill="#BDBDBD" rx="1"/>`;
+  svg += `<rect x="-5" y="2" width="10" height="5" fill="#8D6E63" rx="1"/>`;
+  svg += `<rect x="-1.5" y="-16" width="3" height="4" fill="#E0E0E0" rx="0.5"/>`;
+  svg += `</g>`;
+
+  // 小披风
+  svg += `<path d="M -6,-2 Q -10,8 -4,14 L 0,12 L 4,14 Q 10,8 6,-2 Z" fill="#E53935" opacity="0.9"/>`;
+
   svg += `</g>`;
 
   svg += `</svg>`;

@@ -342,23 +342,27 @@ body {
 /* 骑士角色 */
 .maze-knight {
   transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-origin: center;
+  filter: drop-shadow(2px 3px 3px rgba(0,0,0,0.25));
 }
 .maze-knight.moving {
-  animation: knightBounce 0.3s ease-in-out infinite;
+  animation: knightBounce 0.25s ease-in-out infinite;
 }
 @keyframes knightBounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%, 100% { transform: translateY(0px) rotate(-2deg); }
+  50% { transform: translateY(-6px) rotate(2deg); }
 }
 
-/* 迷雾层 */
+/* 迷雾层（卡通云雾效果） */
 .phase-fog {
   transition: opacity 2.5s ease-out;
   pointer-events: none;
 }
 .phase-fog.revealed {
   opacity: 0;
+}
+/* 节点发光（卡通脉冲） */
+.maze-node-glow {
+  filter: drop-shadow(0 0 6px #FFD700);
 }
 
 /* 节点名称标签 */
