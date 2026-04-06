@@ -560,34 +560,42 @@ function claimSelfPick() {
   const card = TASK_CARDS.find(c => c.id === state.selfPickCard);
   if (!card || state.selfPickClaimed) return;
   // 先弹出「是否自主完成」对话框，回调里再执行 claimCard
-  showSelfReportModalForCard(card, () => {
+  showSelfReportUnified(card.id, card.name, card.score, '🎯', (isSelf) => {
     claimCard(state.selfPickCard);
     state.selfPickClaimed = true;
     saveState();
     renderSelfPick();
+    const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
+    showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
+    setTimeout(() => tryShowShopBoost(card.score, false), 1600);
   });
 }
 
-// 专为挑战卡设计的自律自报弹窗（带回调，不影响原 showSelfReportModal 固定任务逻辑）
-function showSelfReportModalForCard(card, onConfirm) {
+// ── 通用自律自报弹窗（所有模块共用）─────────────────────────
+// taskId: 唯一key用于统计 | taskName: 显示名 | score: 分值 | icon: emoji | onConfirm: 完成后回调
+function showSelfReportUnified(taskId, taskName, score, icon, onConfirm) {
   const today = todayStr();
+  // 移除已有弹窗，避免叠加
+  const existing = document.getElementById('selfReportUnifiedModal');
+  if (existing) existing.remove();
+
   const modal = document.createElement('div');
-  modal.id = 'selfReportModalCard';
+  modal.id = 'selfReportUnifiedModal';
   modal.style.cssText = `
     position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
     display:flex;align-items:center;justify-content:center;padding:20px;
   `;
   modal.innerHTML = `
     <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
-      <div style="font-size:2rem;margin-bottom:8px;">🎯</div>
-      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">「${card.name}」完成啦！</div>
+      <div style="font-size:2rem;margin-bottom:8px;">${icon}</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">「${taskName}」完成啦！</div>
       <div style="font-size:0.95rem;color:#666;margin-bottom:20px;">今天是你自己想起来做的吗？</div>
       <div style="display:flex;gap:12px;justify-content:center;">
-        <button id="selfPickSelfBtn"
+        <button id="_srSelfBtn"
           style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:linear-gradient(135deg,#06D6A0,#00897B);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">
           💪 我自己<br>想起来的！
         </button>
-        <button id="selfPickRemindBtn"
+        <button id="_srRemindBtn"
           style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:#f0f0f0;color:#555;font-size:1rem;font-weight:700;cursor:pointer;">
           👋 爸爸/妈妈<br>提醒了我
         </button>
@@ -599,22 +607,21 @@ function showSelfReportModalForCard(card, onConfirm) {
 
   function close(isSelf) {
     modal.remove();
-    // 记录自律数据到 selfReport（与固定任务共用同一套统计）
     if (!state.selfReport) state.selfReport = {};
     if (!state.selfReport[today]) state.selfReport[today] = {};
-    state.selfReport[today][card.id] = isSelf ? 'self' : 'reminded';
+    state.selfReport[today][taskId] = isSelf ? 'self' : 'reminded';
     saveState();
     if (window._firebaseReady) {
       window._firebaseSet(
-        window._firebaseRef(window._firebaseDB, `selfReport/${today}/${card.id}`),
+        window._firebaseRef(window._firebaseDB, `selfReport/${today}/${taskId}`),
         isSelf ? 'self' : 'reminded'
       );
     }
-    onConfirm();
+    if (onConfirm) onConfirm(isSelf);
   }
 
-  document.getElementById('selfPickSelfBtn').onclick = () => close(true);
-  document.getElementById('selfPickRemindBtn').onclick = () => close(false);
+  document.getElementById('_srSelfBtn').onclick = () => close(true);
+  document.getElementById('_srRemindBtn').onclick = () => close(false);
 }
 
 function togglePackItem(packType, id, score) {
@@ -662,11 +669,20 @@ function togglePackItem(packType, id, score) {
   }
 
   renderAll();
+  const packIcon = packType === 'morning' ? '🌅' : '🌙';
+  const packLabel = packType === 'morning' ? '早晨英雄包' : '睡前英雄包';
+  const packItemName = pack.find(t => t.id === id)?.name || id;
   if (isFull && gain > 1) {
-    showCelebration('🎉', `${packType==='morning'?'早晨':'睡前'}英雄包全套！`, `太棒了！全套完成+${fullScore}分！`);
-    setTimeout(() => tryShowShopBoost(gain, false), 1600);
+    // 全套完成：弹自律弹窗，回调里弹庆祝
+    showSelfReportUnified(`${packType}_full_${todayStr()}`, `${packLabel}全套完成`, gain, packIcon, (isSelf) => {
+      showCelebration('🎉', `${packLabel}全套！`, `太棒了！全套完成+${fullScore}分！`);
+      setTimeout(() => tryShowShopBoost(gain, false), 1600);
+    });
   } else {
-    showCelebration('✅', '完成一件！', `已完成${doneCnt}/${pack.length}件，${isFull?'全套达成！':'再完成'+(pack.length-doneCnt)+'件有惊喜！'}`);
+    // 单件完成：弹自律弹窗，回调里弹小庆祝
+    showSelfReportUnified(`${packType}_${id}`, packItemName, 1, packIcon, (isSelf) => {
+      showCelebration('✅', '完成一件！', `已完成${doneCnt}/${pack.length}件，${isFull?'全套达成！':'再完成'+(pack.length-doneCnt)+'件有惊喜！'}`);
+    });
   }
 }
 
@@ -681,8 +697,10 @@ function completeHomework() {
     submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete);
   }
   renderAll();
-  showCelebration('📚', '作业完成！', `写完作业了！+${HOMEWORK_TASK.scoreComplete}分！太棒了！`);
-  setTimeout(() => tryShowShopBoost(HOMEWORK_TASK.scoreComplete, false), 1600);
+  showSelfReportUnified('hw_complete', '今日作业完成', HOMEWORK_TASK.scoreComplete, '📚', (isSelf) => {
+    showCelebration('📚', '作业完成！', `写完作业了！+${HOMEWORK_TASK.scoreComplete}分！太棒了！`);
+    setTimeout(() => tryShowShopBoost(HOMEWORK_TASK.scoreComplete, false), 1600);
+  });
 }
 
 function addFocusBlock() {
@@ -697,7 +715,9 @@ function addFocusBlock() {
     submitPending('homework', 'hw_block_'+state.hwBlocks, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock);
   }
   renderAll();
-  showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
+  showSelfReportUnified(`hw_block_${state.hwBlocks}`, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock, '🍅', (isSelf) => {
+    showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
+  });
 }
 
 // ── 专注力时光（独立模块）────────────────────────────────────
@@ -825,12 +845,14 @@ function completeFocusTime(isOvertime) {
     submitPending('focus', 'focus_time', '专注力时光', pts);
   }
   renderAll();
-  if (isOvertime) {
-    showCelebration('⚡', '超级专注徽章！', `停不下来是最棒的状态！+${pts}分！超级专注徽章已解锁！`);
-  } else {
-    showCelebration('🧠', '专注力时光完成！', `专注了${FOCUS_TIME.minutes}分钟！+${pts}分！你越来越厉害了！`);
-  }
-  setTimeout(() => tryShowShopBoost(pts, false), 1600);
+  showSelfReportUnified('focus_time', '专注力时光', pts, isOvertime ? '⚡' : '🧠', (isSelf) => {
+    if (isOvertime) {
+      showCelebration('⚡', '超级专注徽章！', `停不下来是最棒的状态！+${pts}分！超级专注徽章已解锁！`);
+    } else {
+      showCelebration('🧠', '专注力时光完成！', `专注了${FOCUS_TIME.minutes}分钟！+${pts}分！你越来越厉害了！`);
+    }
+    setTimeout(() => tryShowShopBoost(pts, false), 1600);
+  });
 }
 
 function toggleDaily(id, score) {
@@ -859,12 +881,16 @@ function toggleDaily(id, score) {
       submitPending('daily', id, task.name, score);
     }
     renderAll();
-    // 弹出自律自报弹窗
-    setTimeout(() => showSelfReportModal(id, task ? task.name : id, score), 400);
+    // 弹出自律自报弹窗（通用版）
+    setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🦸', (isSelf) => {
+      const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
+      showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
+      setTimeout(() => tryShowShopBoost(score, true), 1600);
+    }), 400);
     return;
   }
 
-  // 可选/作业任务：直接提交
+  // 可选/作业任务：先提交，再弹自律弹窗
   state.todayChecked[id] = 'pending';
   saveState();
   const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
@@ -873,62 +899,13 @@ function toggleDaily(id, score) {
     submitPending('daily', id, task.name, score);
   }
   renderAll();
-  showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
-  setTimeout(() => tryShowShopBoost(score, true), 1600);
+  setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🎮', (isSelf) => {
+    showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
+    setTimeout(() => tryShowShopBoost(score, true), 1600);
+  }), 400);
 }
 
-// ── 自律自报弹窗 ───────────────────────────────────────────────
-function showSelfReportModal(taskId, taskName, score) {
-  const today = todayStr();
-  // 如果该任务今天已自报过，跳过
-  if (!state.selfReport) state.selfReport = {};
-  if (!state.selfReport[today]) state.selfReport[today] = {};
-
-  const modal = document.createElement('div');
-  modal.id = 'selfReportModal';
-  modal.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
-    display:flex;align-items:center;justify-content:center;padding:20px;
-  `;
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
-      <div style="font-size:2rem;margin-bottom:8px;">🦸</div>
-      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">「${taskName}」完成啦！</div>
-      <div style="font-size:0.95rem;color:#666;margin-bottom:20px;">今天是你自己想起来的吗？</div>
-      <div style="display:flex;gap:12px;justify-content:center;">
-        <button onclick="submitSelfReport('${taskId}','${today}',true,${score})"
-          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:linear-gradient(135deg,#06D6A0,#00897B);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">
-          💪 我自己<br>想起来的！
-        </button>
-        <button onclick="submitSelfReport('${taskId}','${today}',false,${score})"
-          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:#f0f0f0;color:#555;font-size:1rem;font-weight:700;cursor:pointer;">
-          👋 爸爸/妈妈<br>提醒了我
-        </button>
-      </div>
-      <div style="font-size:0.8rem;color:#aaa;margin-top:14px;">诚实回答，不管哪个都不扣分 ✨</div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-}
-
-function submitSelfReport(taskId, date, isSelf, score) {
-  const modal = document.getElementById('selfReportModal');
-  if (modal) modal.remove();
-  if (!state.selfReport) state.selfReport = {};
-  if (!state.selfReport[date]) state.selfReport[date] = {};
-  state.selfReport[date][taskId] = isSelf ? 'self' : 'reminded';
-  saveState();
-  // 同步到 Firebase
-  if (window._firebaseReady) {
-    window._firebaseSet(
-      window._firebaseRef(window._firebaseDB, `selfReport/${date}/${taskId}`),
-      isSelf ? 'self' : 'reminded'
-    );
-  }
-  const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
-  showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
-  setTimeout(() => tryShowShopBoost(score, true), 1600);
-}
+// [showSelfReportModal/submitSelfReport 已合并入 showSelfReportUnified]
 
 // ── 月度自律率计算 ─────────────────────────────────────────────
 function calcMonthlyDisciplineRate(year, month) {
@@ -1111,13 +1088,22 @@ function openCardModal(id) {
   }
 
   const btn = document.getElementById('btnCardClaim');
-  btn.onclick = () => claimCard(id);
+  btn.onclick = () => claimCardWithReport(id);
   btn.disabled = !unlocked;
   btn.style.opacity = unlocked ? '1' : '0.4';
   btn.textContent = unlocked ? '✅ 我完成了！领取积分' : '🔒 还没解锁';
 
   document.getElementById('cardModal').style.display = 'flex';
   window._currentCardId = id;
+}
+
+// 挑战卡领取入口：先弹自律弹窗，再执行 claimCard
+function claimCardWithReport(id) {
+  const card = TASK_CARDS.find(c => c.id === id);
+  if (!card || !isCardUnlocked(card)) return;
+  showSelfReportUnified(card.id, card.name, card.score, '🃏', (isSelf) => {
+    claimCard(id);
+  });
 }
 
 function claimCard(id) {
@@ -2572,12 +2558,16 @@ function toggleDaily(id, score) {
       submitPending('daily', id, task.name, score);
     }
     renderAll();
-    // 弹出自律自报弹窗
-    setTimeout(() => showSelfReportModal(id, task ? task.name : id, score), 400);
+    // 弹出自律自报弹窗（通用版）
+    setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🦸', (isSelf) => {
+      const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
+      showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
+      setTimeout(() => tryShowShopBoost(score, true), 1600);
+    }), 400);
     return;
   }
 
-  // 可选/作业任务：直接提交
+  // 可选/作业任务：先提交，再弹自律弹窗
   state.todayChecked[id] = 'pending';
   saveState();
   const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
@@ -2586,62 +2576,13 @@ function toggleDaily(id, score) {
     submitPending('daily', id, task.name, score);
   }
   renderAll();
-  showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
-  setTimeout(() => tryShowShopBoost(score, true), 1600);
+  setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🎮', (isSelf) => {
+    showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
+    setTimeout(() => tryShowShopBoost(score, true), 1600);
+  }), 400);
 }
 
-// ── 自律自报弹窗 ───────────────────────────────────────────────
-function showSelfReportModal(taskId, taskName, score) {
-  const today = todayStr();
-  // 如果该任务今天已自报过，跳过
-  if (!state.selfReport) state.selfReport = {};
-  if (!state.selfReport[today]) state.selfReport[today] = {};
-
-  const modal = document.createElement('div');
-  modal.id = 'selfReportModal';
-  modal.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
-    display:flex;align-items:center;justify-content:center;padding:20px;
-  `;
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
-      <div style="font-size:2rem;margin-bottom:8px;">🦸</div>
-      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">「${taskName}」完成啦！</div>
-      <div style="font-size:0.95rem;color:#666;margin-bottom:20px;">今天是你自己想起来的吗？</div>
-      <div style="display:flex;gap:12px;justify-content:center;">
-        <button onclick="submitSelfReport('${taskId}','${today}',true,${score})"
-          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:linear-gradient(135deg,#06D6A0,#00897B);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">
-          💪 我自己<br>想起来的！
-        </button>
-        <button onclick="submitSelfReport('${taskId}','${today}',false,${score})"
-          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:#f0f0f0;color:#555;font-size:1rem;font-weight:700;cursor:pointer;">
-          👋 爸爸/妈妈<br>提醒了我
-        </button>
-      </div>
-      <div style="font-size:0.8rem;color:#aaa;margin-top:14px;">诚实回答，不管哪个都不扣分 ✨</div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-}
-
-function submitSelfReport(taskId, date, isSelf, score) {
-  const modal = document.getElementById('selfReportModal');
-  if (modal) modal.remove();
-  if (!state.selfReport) state.selfReport = {};
-  if (!state.selfReport[date]) state.selfReport[date] = {};
-  state.selfReport[date][taskId] = isSelf ? 'self' : 'reminded';
-  saveState();
-  // 同步到 Firebase
-  if (window._firebaseReady) {
-    window._firebaseSet(
-      window._firebaseRef(window._firebaseDB, `selfReport/${date}/${taskId}`),
-      isSelf ? 'self' : 'reminded'
-    );
-  }
-  const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
-  showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
-  setTimeout(() => tryShowShopBoost(score, true), 1600);
-}
+// [showSelfReportModal/submitSelfReport 已合并入 showSelfReportUnified]
 
 // ── 月度自律率计算 ─────────────────────────────────────────────
 function calcMonthlyDisciplineRate(year, month) {
