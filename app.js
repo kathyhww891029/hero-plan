@@ -144,6 +144,8 @@ function defaultState() {
     // 当前培养阶段（爸妈设置）
     currentPhase: 1,
     phaseStartDate: null,
+    // 阅读挑战联动
+    readCount: 0,             // 累计完成阅读卡总次数（每领取一张+1）
   };
 }
 function loadState() {
@@ -805,6 +807,7 @@ function renderCards() {
             c.unlockMathCount !== undefined ? '⚡ 口算练习'+c.unlockMathCount+'次解锁' :
             c.unlockMathBest !== undefined ? '⚡ 口算单次答对'+c.unlockMathBest+'题解锁' :
             c.unlockMathLevel !== undefined ? '⚡ 口算升到第'+(c.unlockMathLevel+1)+'关解锁' :
+            c.unlockReadCount !== undefined ? '📚 完成'+c.unlockReadCount+'次阅读挑战解锁' :
             '累计'+c.unlockAt+'分解锁'
           }</div>` : ''}
           ${weekBadge}
@@ -830,6 +833,8 @@ function isCardUnlocked(card) {
   if (card.unlockMathLevel !== undefined) {
     try { const d = loadMathData(); return (d.levelId||0) >= card.unlockMathLevel; } catch(e) { return false; }
   }
+  // 阅读次数联动解锁（readCount）
+  if (card.unlockReadCount !== undefined) return (state.readCount || 0) >= card.unlockReadCount;
   if (card.unlockAt === 0) return true;
   return state.totalScore >= card.unlockAt;
 }
@@ -879,6 +884,10 @@ function claimCard(id) {
   // 周度成就计数（每张只计一次）
   if (state.cardClaims[id] === 1) {
     state.weeklyCardCount = (state.weeklyCardCount || 0) + 1;
+  }
+  // 阅读卡联动：每次领取阅读系列卡累计readCount
+  if (card.series && card.series.includes('阅读')) {
+    state.readCount = (state.readCount || 0) + 1;
   }
   saveState();
   if (window._firebaseReady) {
@@ -1738,6 +1747,7 @@ function renderAchievements() {
               c.unlockMathCount !== undefined ? `🔒 口算练习${c.unlockMathCount}次解锁` :
               c.unlockMathBest !== undefined ? `🔒 口算单次答对${c.unlockMathBest}题解锁` :
               c.unlockMathLevel !== undefined ? `🔒 口算升到第${c.unlockMathLevel+1}关解锁` :
+              c.unlockReadCount !== undefined ? `🔒 完成${c.unlockReadCount}次阅读挑战解锁` :
               `🔒 累计${c.unlockAt}分解锁`
             ) : done ? '✅ 已完成' : `📌 ${c.desc}`}</div>
           </div>
@@ -1772,7 +1782,9 @@ function renderAchievements() {
           <div class="ach-show-desc">${c.desc}</div>
           <div class="ach-show-how">
             ${done ? '🎉 已完成！传奇时刻' : locked
-              ? (c.unlockRope !== undefined ? `🔒 跳绳达到${c.unlockRope}个解锁 · 当前${state.ropeMax||0}个 · 还差${c.unlockRope - (state.ropeMax||0)}个` : `🔒 需要累计 ${c.unlockAt} 分解锁 · 当前 ${score} 分 · 还差 ${c.unlockAt - score} 分`)
+              ? (c.unlockRope !== undefined ? `🔒 跳绳达到${c.unlockRope}个解锁 · 当前${state.ropeMax||0}个 · 还差${c.unlockRope - (state.ropeMax||0)}个` :
+                c.unlockReadCount !== undefined ? `🔒 完成${c.unlockReadCount}次阅读挑战解锁 · 当前${state.readCount||0}次 · 还差${c.unlockReadCount - (state.readCount||0)}次` :
+                `🔒 需要累计 ${c.unlockAt} 分解锁 · 当前 ${score} 分 · 还差 ${c.unlockAt - score} 分`)
               : `✨ 已解锁！+${c.score}分等你来拿`}
           </div>
         </div>
