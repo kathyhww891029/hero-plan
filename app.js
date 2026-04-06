@@ -559,11 +559,62 @@ function cancelSelfPick() {
 function claimSelfPick() {
   const card = TASK_CARDS.find(c => c.id === state.selfPickCard);
   if (!card || state.selfPickClaimed) return;
-  // 复用 claimCard 逻辑（计积分、Firebase、readCount等）
-  claimCard(state.selfPickCard);
-  state.selfPickClaimed = true;
-  saveState();
-  renderSelfPick();
+  // 先弹出「是否自主完成」对话框，回调里再执行 claimCard
+  showSelfReportModalForCard(card, () => {
+    claimCard(state.selfPickCard);
+    state.selfPickClaimed = true;
+    saveState();
+    renderSelfPick();
+  });
+}
+
+// 专为挑战卡设计的自律自报弹窗（带回调，不影响原 showSelfReportModal 固定任务逻辑）
+function showSelfReportModalForCard(card, onConfirm) {
+  const today = todayStr();
+  const modal = document.createElement('div');
+  modal.id = 'selfReportModalCard';
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+      <div style="font-size:2rem;margin-bottom:8px;">🎯</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:6px;">「${card.name}」完成啦！</div>
+      <div style="font-size:0.95rem;color:#666;margin-bottom:20px;">今天是你自己想起来做的吗？</div>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="selfPickSelfBtn"
+          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:linear-gradient(135deg,#06D6A0,#00897B);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">
+          💪 我自己<br>想起来的！
+        </button>
+        <button id="selfPickRemindBtn"
+          style="flex:1;padding:14px 8px;border-radius:14px;border:none;background:#f0f0f0;color:#555;font-size:1rem;font-weight:700;cursor:pointer;">
+          👋 爸爸/妈妈<br>提醒了我
+        </button>
+      </div>
+      <div style="font-size:0.8rem;color:#aaa;margin-top:14px;">诚实回答，不管哪个都不扣分 ✨</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  function close(isSelf) {
+    modal.remove();
+    // 记录自律数据到 selfReport（与固定任务共用同一套统计）
+    if (!state.selfReport) state.selfReport = {};
+    if (!state.selfReport[today]) state.selfReport[today] = {};
+    state.selfReport[today][card.id] = isSelf ? 'self' : 'reminded';
+    saveState();
+    if (window._firebaseReady) {
+      window._firebaseSet(
+        window._firebaseRef(window._firebaseDB, `selfReport/${today}/${card.id}`),
+        isSelf ? 'self' : 'reminded'
+      );
+    }
+    onConfirm();
+  }
+
+  document.getElementById('selfPickSelfBtn').onclick = () => close(true);
+  document.getElementById('selfPickRemindBtn').onclick = () => close(false);
 }
 
 function togglePackItem(packType, id, score) {
