@@ -127,7 +127,8 @@ let state = loadState();
 function defaultState() {
   return {
     totalScore: 0,
-    pendingAdditions: [],    // [{type, taskId, name, score, date}] 待审加分，审核通过后才正式入账
+    pendingAdditions: [],    // [{type, taskId, name, score, date, isSelf}] 待审加分，审核通过后才正式入账
+    reviewedSelfLog: {},    // { "2026-04": { "2026-04-05": true, ... } } 记录每月自律（自主完成且审核通过）的日期
     todayChecked: {},         // { taskId: true }
     cardClaims: {},           // { cardId: count }
     shopHistory: [],          // [{ id, name, cost, date }]
@@ -781,35 +782,39 @@ function togglePackItem(packType, id, score) {
     updateStreak(packType === 'morning' ? 'morning' : 'night');
   }
 
-  // 加入待审加分池，等父母审核通过后才正式入账
+  // 加入待审加分池（带 isSelf=null，等弹窗确定）
   const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
   state.pendingAdditions.push({
     type: 'pack',
     taskId: id,
     name: label,
     score: gain,
-    date: todayStr()
+    date: todayStr(),
+    isSelf: null
   });
   saveState();
-
-  // Firebase 同步
-  if (window._firebaseReady) {
-    submitPending('pack', id, label, gain);
-  }
 
   renderAll();
   const packIcon = packType === 'morning' ? '🌅' : '🌙';
   const packLabel = packType === 'morning' ? '早晨英雄包' : '睡前英雄包';
   const packItemName = pack.find(t => t.id === id)?.name || id;
   if (isFull && gain > 1) {
-    // 全套完成：弹自律弹窗，回调里弹庆祝
+    // 全套完成：弹自律弹窗，确定后再提交审核
     showSelfReportUnified(`${packType}_full_${todayStr()}`, `${packLabel}全套完成`, gain, packIcon, (isSelf) => {
+      if (window._firebaseReady) submitPending('pack', id, label, gain, '', isSelf);
+      const today = todayStr();
+      const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === id && p.date === today);
+      if (entry) { entry.isSelf = isSelf; saveState(); }
       showCelebration('🎉', `${packLabel}全套！`, `太棒了！全套完成+${fullScore}分！`);
       setTimeout(() => tryShowShopBoost(gain, false), 1600);
     });
   } else {
-    // 单件完成：弹自律弹窗，回调里弹小庆祝
+    // 单件完成：弹自律弹窗，确定后再提交审核
     showSelfReportUnified(`${packType}_${id}`, packItemName, 1, packIcon, (isSelf) => {
+      if (window._firebaseReady) submitPending('pack', id, label, 1, '', isSelf);
+      const today = todayStr();
+      const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === id && p.date === today);
+      if (entry) { entry.isSelf = isSelf; saveState(); }
       showCelebration('✅', '完成一件！', `已完成${doneCnt}/${pack.length}件，${isFull?'全套达成！':'再完成'+(pack.length-doneCnt)+'件有惊喜！'}`);
     });
   }
@@ -849,15 +854,23 @@ function completeHomework() {
     taskId: 'hw_complete',
     name: '作业完成',
     score: HOMEWORK_TASK.scoreComplete,
-    date: todayStr()
+    date: todayStr(),
+    isSelf: null  // 等自律弹窗确定
   });
   updateStreak('homework');
   saveState();
-  if (window._firebaseReady) {
-    submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete);
-  }
   renderAll();
+  // 先弹自律自报弹窗，等用户选择后再提交审核
   showSelfReportUnified('hw_complete', '今日作业完成', HOMEWORK_TASK.scoreComplete, '📚', (isSelf) => {
+    // 提交到待审（带 isSelf）
+    if (window._firebaseReady) {
+      submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete, '', isSelf);
+    }
+    // 更新 pendingAdditions 中的 isSelf
+    const today = todayStr();
+    const entry = state.pendingAdditions.find(p => p.type === 'homework' && p.taskId === 'hw_complete' && p.date === today);
+    if (entry) entry.isSelf = isSelf;
+    saveState();
     showCelebration('📚', '作业完成！', `写完作业了！+${HOMEWORK_TASK.scoreComplete}分！太棒了！`);
     setTimeout(() => tryShowShopBoost(HOMEWORK_TASK.scoreComplete, false), 1600);
   });
@@ -1055,15 +1068,23 @@ function completeFocusTime(isOvertime) {
     taskId: 'focus_time',
     name: '专注力时光',
     score: pts,
-    date: todayStr()
+    date: todayStr(),
+    isSelf: null  // 等自律弹窗确定
   });
   updateStreak('focus');
   saveState();
-  if (window._firebaseReady) {
-    submitPending('focus', 'focus_time', '专注力时光', pts);
-  }
   renderAll();
+  // 先弹自律自报弹窗，等用户选择后再提交审核
   showSelfReportUnified('focus_time', '专注力时光', pts, isOvertime ? '⚡' : '🧠', (isSelf) => {
+    // 提交到待审（带 isSelf）
+    if (window._firebaseReady) {
+      submitPending('focus', 'focus_time', '专注力时光', pts, '', isSelf);
+    }
+    // 更新 pendingAdditions 中的 isSelf
+    const today = todayStr();
+    const entry = state.pendingAdditions.find(p => p.type === 'focus' && p.taskId === 'focus_time' && p.date === today);
+    if (entry) entry.isSelf = isSelf;
+    saveState();
     if (isOvertime) {
       showCelebration('⚡', '超级专注徽章！', `停不下来是最棒的状态！+${pts}分！超级专注徽章已解锁！`);
     } else {
@@ -1090,17 +1111,32 @@ function toggleDaily(id, score) {
   // 固定任务：完成后弹出自律自报弹窗
   const fixedTask = DAILY_FIXED.find(t => t.id === id);
   if (fixedTask) {
-    // 先标记待审，再弹自报
-    state.todayChecked[id] = 'pending';
-    saveState();
     const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
     const task = allTasks.find(t => t.id === id);
-    if (task && window._firebaseReady) {
-      submitPending('daily', id, task.name, score);
-    }
+    // 先标记待审
+    state.todayChecked[id] = 'pending';
+    // 加入待审加分池（带 isSelf=null，等弹窗确定）
+    state.pendingAdditions.push({
+      type: 'daily',
+      taskId: id,
+      name: task ? task.name : id,
+      score: score,
+      date: todayStr(),
+      isSelf: null
+    });
+    saveState();
     renderAll();
-    // 弹出自律自报弹窗（通用版）
+    // 弹出自律自报弹窗，确定后再提交审核
     setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🦸', (isSelf) => {
+      // 提交到待审（带 isSelf）
+      if (task && window._firebaseReady) {
+        submitPending('daily', id, task.name, score, '', isSelf);
+      }
+      // 更新 pendingAdditions 中的 isSelf
+      const today = todayStr();
+      const entry = state.pendingAdditions.find(p => p.type === 'daily' && p.taskId === id && p.date === today);
+      if (entry) entry.isSelf = isSelf;
+      saveState();
       const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
       showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
       setTimeout(() => tryShowShopBoost(score, true), 1600);
@@ -1118,6 +1154,15 @@ function toggleDaily(id, score) {
   }
   renderAll();
   setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🎮', (isSelf) => {
+    // 可选/作业任务也要更新 pendingAdditions 中的 isSelf
+    if (task) {
+      const today = todayStr();
+      const entry = state.pendingAdditions.find(p => p.type === 'daily' && p.taskId === id && p.date === today);
+      if (entry) {
+        entry.isSelf = isSelf;
+        saveState();
+      }
+    }
     showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
     setTimeout(() => tryShowShopBoost(score, true), 1600);
   }), 400);
@@ -1126,27 +1171,33 @@ function toggleDaily(id, score) {
 // [showSelfReportModal/submitSelfReport 已合并入 showSelfReportUnified]
 
 // ── 月度自律率计算 ─────────────────────────────────────────────
+// 逻辑：一天中有任何待审或已审记录 → 计入 totalDays
+//       自主完成（isSelf=true）且审核通过 → 计入 selfDays
+//       父母提醒（isSelf=false）即使通过 → 不计入 selfDays
 function calcMonthlyDisciplineRate(year, month) {
-  if (!state.selfReport) return { rate: 0, selfDays: 0, totalDays: 0 };
   const prefix = `${year}-${String(month).padStart(2,'0')}`;
+  const ymKey = prefix; // e.g. "2026-04"
   let selfDays = 0, totalDays = 0;
 
-  Object.entries(state.selfReport).forEach(([date, tasks]) => {
-    if (!date.startsWith(prefix)) return;
-    // 判断当天固定任务完成率是否达到80%
-    const fixedIds = DAILY_FIXED.map(t => t.id);
-    const totalFixed = fixedIds.length;
-    // 当天有自报记录的固定任务数（说明完成了）
-    const reportedFixed = fixedIds.filter(id => tasks[id]).length;
-    if (totalFixed === 0 || reportedFixed / totalFixed < 0.8) return; // 固定任务不达标，不计入
+  // 1. 已审通过的自助完成记录（来自 reviewedSelfLog）
+  const approvedSelfDates = state.reviewedSelfLog[ymKey] || {};
+  const approvedSelfDateSet = new Set(Object.keys(approvedSelfDates));
 
-    // 自律判断：当天所有自报的固定任务都是'self'
-    const reportedEntries = Object.values(tasks).filter(v => v === 'self' || v === 'reminded');
-    if (reportedEntries.length === 0) return;
-    totalDays++;
-    const allSelf = reportedEntries.every(v => v === 'self');
-    if (allSelf) selfDays++;
+  // 2. 当月有活动的日期集合（pendingAdditions 待审记录）
+  //    只有当前月且已提交的才计入；历史未审的忽略
+  const activeDates = new Set();
+  state.pendingAdditions.forEach(p => {
+    if (p.date && p.date.startsWith(prefix)) {
+      activeDates.add(p.date);
+    }
   });
+
+  // 合并所有有活动的日期
+  const allActiveDates = new Set([...activeDates, ...approvedSelfDateSet]);
+  totalDays = allActiveDates.size;
+
+  // selfDays = 自主完成且审核通过的日期数
+  selfDays = approvedSelfDateSet.size;
 
   const rate = totalDays > 0 ? Math.round(selfDays / totalDays * 100) : 0;
   return { rate, selfDays, totalDays };
@@ -1209,19 +1260,27 @@ function updateTodayScore() {
 
 // ── 父母审核回调：本地积分处理 ──────────────────────────────────
 // 审核通过：将 effectiveScore 加入本地 totalScore，并从 pendingAdditions 移除
-function onParentApprove(taskType, taskId, effectiveScore) {
-  // 找到对应的待审加分记录并移除（按 type + taskId 匹配，同一天通常只有一条）
+// isSelf: 是否自主完成（影响自律统计）
+function onParentApprove(taskType, taskId, effectiveScore, isSelf) {
   const today = todayStr();
+  // 找到对应的待审加分记录并移除（按 type + taskId 匹配，同一天通常只有一条）
   const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
   // 正式加分入账
   state.totalScore += effectiveScore;
+  // 自律统计：自主完成且审核通过，记录到月度自律日志
+  if (isSelf === true) {
+    const ym = today.slice(0, 7);  // e.g. "2026-04"
+    if (!state.reviewedSelfLog[ym]) state.reviewedSelfLog[ym] = {};
+    state.reviewedSelfLog[ym][today] = true;
+  }
   saveState();
   renderAll();
 }
 
 // 审核驳回：从 pendingAdditions 移除（本地从未加分，无需扣减）
-function onParentReject(taskType, taskId) {
+// isSelf 参数保留（驳回不影响自律统计，因为本来就没计入）
+function onParentReject(taskType, taskId, isSelf) {
   const today = todayStr();
   const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);

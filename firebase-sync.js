@@ -112,14 +112,15 @@ function parentLogout() {
 }
 
 // ── 提交待审申请（孩子打卡时调用） ────────────────────────────
-function submitPending(type, id, name, score, extra) {
+function submitPending(type, id, name, score, extra, isSelf) {
   if (!window._firebaseReady) return;
   const record = {
-    type,       // 'daily' | 'card' | 'rope'
+    type,       // 'daily' | 'card' | 'rope' | 'homework' | 'focus' | 'pack'
     taskId: id,
     name,
     score,
     extra: extra || '',
+    isSelf: isSelf !== undefined ? isSelf : true,  // 默认为自己完成
     date: new Date().toISOString().slice(0, 10),
     time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'}),
     status: 'pending',
@@ -208,54 +209,65 @@ function calcOptionalEffectiveScore(item, score) {
 
 function approveOne(key, score, name, taskId, taskType) {
   if (!window._firebaseReady) return;
+  // 先读取 pending 记录，获取 isSelf
+  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
+    const val = snap.val() || {};
+    const isSelf = val.isSelf !== undefined ? val.isSelf : null;
 
-  // 固定任务地板机制：可选任务检查
-  const fakeItem = { type: taskType || 'daily', taskId: taskId || '' };
-  const effectiveScore = calcOptionalEffectiveScore(fakeItem, score);
-  const scoreNote = effectiveScore < score
-    ? `（固定任务未达标，实得${effectiveScore}分）`
-    : '';
+    // 固定任务地板机制：可选任务检查
+    const fakeItem = { type: taskType || 'daily', taskId: taskId || '' };
+    const effectiveScore = calcOptionalEffectiveScore(fakeItem, score);
+    const scoreNote = effectiveScore < score
+      ? `（固定任务未达标，实得${effectiveScore}分）`
+      : '';
 
-  // 加入已审记录
-  window._firebasePush(fbRef('reviewed'), {
-    name, score: effectiveScore, originalScore: score, result: 'approved',
-    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-    reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10),
-    scoreNote
+    // 加入已审记录（含 isSelf）
+    window._firebasePush(fbRef('reviewed'), {
+      name, score: effectiveScore, originalScore: score, result: 'approved',
+      isSelf: isSelf,  // 记录是否自主完成
+      reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
+      reviewedAt: Date.now(),
+      date: new Date().toISOString().slice(0, 10),
+      scoreNote
+    });
+    // 更新 Firebase 总分
+    window._firebaseGet(fbRef('syncScore')).then(snap2 => {
+      const cur = snap2.val() || 0;
+      window._firebaseSet(fbRef('syncScore'), cur + effectiveScore);
+    });
+    // 更新本地 totalScore（审核通过后才正式入账）+ 更新月度自律统计
+    if (typeof onParentApprove === 'function') {
+      onParentApprove(taskType || 'daily', taskId || '', effectiveScore, isSelf);
+    }
+    // 删除 pending
+    window._firebaseRemove(fbRef('pending/' + key));
+    const msg = effectiveScore < score
+      ? `✅ 已通过「${name}」，+${effectiveScore}分${scoreNote}`
+      : `✅ 已通过「${name}」，+${score}分！`;
+    showParentToast(msg);
   });
-  // 更新 Firebase 总分
-  window._firebaseGet(fbRef('syncScore')).then(snap => {
-    const cur = snap.val() || 0;
-    window._firebaseSet(fbRef('syncScore'), cur + effectiveScore);
-  });
-  // 更新本地 totalScore（审核通过后才正式入账）
-  if (typeof onParentApprove === 'function') {
-    onParentApprove(taskType || 'daily', taskId || '', effectiveScore);
-  }
-  // 删除 pending
-  window._firebaseRemove(fbRef('pending/' + key));
-  const msg = effectiveScore < score
-    ? `✅ 已通过「${name}」，+${effectiveScore}分${scoreNote}`
-    : `✅ 已通过「${name}」，+${score}分！`;
-  showParentToast(msg);
 }
 
 // ── 驳回单条 ──────────────────────────────────────────────────
 function rejectOne(key, name, taskId, taskType) {
   if (!window._firebaseReady) return;
-  window._firebasePush(fbRef('reviewed'), {
-    name, score: 0, result: 'rejected',
-    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-    reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10)
+  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
+    const val = snap.val() || {};
+    const isSelf = val.isSelf !== undefined ? val.isSelf : null;
+    window._firebasePush(fbRef('reviewed'), {
+      name, score: 0, result: 'rejected',
+      isSelf: isSelf,  // 记录是否自主完成
+      reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
+      reviewedAt: Date.now(),
+      date: new Date().toISOString().slice(0, 10)
+    });
+    // 更新本地：审核驳回
+    if (typeof onParentReject === 'function') {
+      onParentReject(taskType || 'daily', taskId || '', isSelf);
+    }
+    window._firebaseRemove(fbRef('pending/' + key));
+    showParentToast(`❌ 已驳回「${name}」`);
   });
-  // 更新本地：审核驳回，从 pendingAdditions 移除（本地从未加分，无需扣减）
-  if (typeof onParentReject === 'function') {
-    onParentReject(taskType || 'daily', taskId || '');
-  }
-  window._firebaseRemove(fbRef('pending/' + key));
-  showParentToast(`❌ 已驳回「${name}」`);
 }
 
 // ── 全部通过 ──────────────────────────────────────────────────
@@ -270,15 +282,17 @@ function approveAll() {
       const fakeItem = { type: val.type || 'daily', taskId: val.taskId || '' };
       const effectiveScore = calcOptionalEffectiveScore(fakeItem, val.score);
       totalAdd += effectiveScore;
+      const isSelf = val.isSelf !== undefined ? val.isSelf : null;
       window._firebasePush(fbRef('reviewed'), {
         name: val.name, score: effectiveScore, originalScore: val.score, result: 'approved',
+        isSelf: isSelf,  // 记录是否自主完成
         reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
-      // 更新本地 totalScore
+      // 更新本地 totalScore + 月度自律统计
       if (typeof onParentApprove === 'function') {
-        onParentApprove(val.type || 'daily', val.taskId || '', effectiveScore);
+        onParentApprove(val.type || 'daily', val.taskId || '', effectiveScore, isSelf);
       }
       window._firebaseRemove(fbRef('pending/' + key));
     });
@@ -296,15 +310,17 @@ function rejectAll() {
     const data = snap.val();
     if (!data) return;
     Object.entries(data).forEach(([key, val]) => {
+      const isSelf = val.isSelf !== undefined ? val.isSelf : null;
       window._firebasePush(fbRef('reviewed'), {
         name: val.name, score: 0, result: 'rejected',
+        isSelf: isSelf,  // 记录是否自主完成
         reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
-      // 更新本地：从 pendingAdditions 移除
+      // 更新本地：审核驳回
       if (typeof onParentReject === 'function') {
-        onParentReject(val.type || 'daily', val.taskId || '');
+        onParentReject(val.type || 'daily', val.taskId || '', isSelf);
       }
       window._firebaseRemove(fbRef('pending/' + key));
     });
