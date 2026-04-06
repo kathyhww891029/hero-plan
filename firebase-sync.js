@@ -156,7 +156,7 @@ function loadPendingList() {
         <div class="pending-score">+${item.score}分</div>
         <div class="pending-actions">
           <button class="btn-approve" onclick="approveOne('${item.key}',${item.score},'${item.name}','${item.taskId||''}','${item.type||'daily'}')">✅</button>
-          <button class="btn-reject" onclick="rejectOne('${item.key}','${item.name}')">❌</button>
+          <button class="btn-reject" onclick="rejectOne('${item.key}','${item.name}','${item.taskId||''}','${item.type||'daily'}')">❌</button>
         </div>
       </div>`).join('');
     batchBtns.style.display = 'flex';
@@ -224,11 +224,15 @@ function approveOne(key, score, name, taskId, taskType) {
     date: new Date().toISOString().slice(0, 10),
     scoreNote
   });
-  // 更新总分
+  // 更新 Firebase 总分
   window._firebaseGet(fbRef('syncScore')).then(snap => {
     const cur = snap.val() || 0;
     window._firebaseSet(fbRef('syncScore'), cur + effectiveScore);
   });
+  // 更新本地 totalScore（审核通过后才正式入账）
+  if (typeof onParentApprove === 'function') {
+    onParentApprove(taskType || 'daily', taskId || '', effectiveScore);
+  }
   // 删除 pending
   window._firebaseRemove(fbRef('pending/' + key));
   const msg = effectiveScore < score
@@ -238,7 +242,7 @@ function approveOne(key, score, name, taskId, taskType) {
 }
 
 // ── 驳回单条 ──────────────────────────────────────────────────
-function rejectOne(key, name) {
+function rejectOne(key, name, taskId, taskType) {
   if (!window._firebaseReady) return;
   window._firebasePush(fbRef('reviewed'), {
     name, score: 0, result: 'rejected',
@@ -246,6 +250,10 @@ function rejectOne(key, name) {
     reviewedAt: Date.now(),
     date: new Date().toISOString().slice(0, 10)
   });
+  // 更新本地：审核驳回，从 pendingAdditions 移除（本地从未加分，无需扣减）
+  if (typeof onParentReject === 'function') {
+    onParentReject(taskType || 'daily', taskId || '');
+  }
   window._firebaseRemove(fbRef('pending/' + key));
   showParentToast(`❌ 已驳回「${name}」`);
 }
@@ -258,13 +266,20 @@ function approveAll() {
     if (!data) return;
     let totalAdd = 0;
     Object.entries(data).forEach(([key, val]) => {
-      totalAdd += val.score;
+      // 应用固定任务地板机制
+      const fakeItem = { type: val.type || 'daily', taskId: val.taskId || '' };
+      const effectiveScore = calcOptionalEffectiveScore(fakeItem, val.score);
+      totalAdd += effectiveScore;
       window._firebasePush(fbRef('reviewed'), {
-        name: val.name, score: val.score, result: 'approved',
+        name: val.name, score: effectiveScore, originalScore: val.score, result: 'approved',
         reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
+      // 更新本地 totalScore
+      if (typeof onParentApprove === 'function') {
+        onParentApprove(val.type || 'daily', val.taskId || '', effectiveScore);
+      }
       window._firebaseRemove(fbRef('pending/' + key));
     });
     window._firebaseGet(fbRef('syncScore')).then(s2 => {
@@ -287,6 +302,10 @@ function rejectAll() {
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
+      // 更新本地：从 pendingAdditions 移除
+      if (typeof onParentReject === 'function') {
+        onParentReject(val.type || 'daily', val.taskId || '');
+      }
       window._firebaseRemove(fbRef('pending/' + key));
     });
     showParentToast('❌ 全部已驳回');

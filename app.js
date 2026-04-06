@@ -127,6 +127,7 @@ let state = loadState();
 function defaultState() {
   return {
     totalScore: 0,
+    pendingAdditions: [],    // [{type, taskId, name, score, date}] 待审加分，审核通过后才正式入账
     todayChecked: {},         // { taskId: true }
     cardClaims: {},           // { cardId: count }
     shopHistory: [],          // [{ id, name, cost, date }]
@@ -748,7 +749,10 @@ function togglePackItem(packType, id, score) {
   const bonusKey = packType === 'morning' ? 'morningPackBonus' : 'nightPackBonus';
 
   if (state[packKey][id]) {
-    // 取消
+    // 取消：从待审加分池移除（审核通过前撤销，不扣分因为根本没入账）
+    const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
+    const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.name === label);
+    if (idx !== -1) state.pendingAdditions.splice(idx, 1);
     delete state[packKey][id];
     // 如果之前已发全套奖励，扣回差额
     if (state[bonusKey]) {
@@ -777,12 +781,20 @@ function togglePackItem(packType, id, score) {
     updateStreak(packType === 'morning' ? 'morning' : 'night');
   }
 
-  state.totalScore += gain;
+  // 加入待审加分池，等父母审核通过后才正式入账
+  const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
+  state.pendingAdditions.push({
+    type: 'pack',
+    taskId: id,
+    name: label,
+    score: gain,
+    date: todayStr()
+  });
   saveState();
 
   // Firebase 同步
   if (window._firebaseReady) {
-    submitPending('pack', id, (packType==='morning'?'早晨':'睡前')+'英雄包·'+id, gain);
+    submitPending('pack', id, label, gain);
   }
 
   renderAll();
@@ -807,8 +819,9 @@ function togglePackItem(packType, id, score) {
 function undoHomework() {
   if (!state.hwCompleted) return;
   state.hwCompleted = false;
-  state.totalScore -= HOMEWORK_TASK.scoreComplete;
-  if (state.totalScore < 0) state.totalScore = 0;
+  // 从待审加分池移除（审核通过前撤销，不扣分因为根本没入账）
+  const idx = state.pendingAdditions.findIndex(p => p.type === 'homework' && p.taskId === 'hw_complete');
+  if (idx !== -1) state.pendingAdditions.splice(idx, 1);
   // 撤销streak：清空今天的记录
   if (state.streaks && state.streaks.homework && state.streaks.homework.lastDate === todayStr()) {
     state.streaks.homework.count = 0;
@@ -820,7 +833,7 @@ function undoHomework() {
     submitPending('homework', 'hw_complete', null, null);
   }
   renderAll();
-  showCelebration('↩️', '已撤销', '作业打卡已撤销，分数已扣回');
+  showCelebration('↩️', '已撤销', '作业打卡已撤销');
 }
 
 function completeHomework() {
@@ -830,7 +843,14 @@ function completeHomework() {
     return;
   }
   state.hwCompleted = true;
-  state.totalScore += HOMEWORK_TASK.scoreComplete;
+  // 加入待审加分池，等父母审核通过后才正式入账
+  state.pendingAdditions.push({
+    type: 'homework',
+    taskId: 'hw_complete',
+    name: '作业完成',
+    score: HOMEWORK_TASK.scoreComplete,
+    date: todayStr()
+  });
   updateStreak('homework');
   saveState();
   if (window._firebaseReady) {
@@ -995,8 +1015,6 @@ function formatFocusSecs(secs) {
 
 function undoFocusTime() {
   if (!state.focusCompleted) return;
-  const wasOvertime = !!state.focusOvertime;
-  const pts = FOCUS_TIME.score + (wasOvertime ? FOCUS_TIME.bonusScore : 0);
   state.focusCompleted = false;
   state.focusOvertime = false;
   state.focusSelected = null;
@@ -1004,8 +1022,9 @@ function undoFocusTime() {
   _focusSeconds = 0;
   if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
   _focusTimerRunning = false;
-  state.totalScore -= pts;
-  if (state.totalScore < 0) state.totalScore = 0;
+  // 从待审加分池移除（审核通过前撤销，不扣分因为根本没入账）
+  const idx = state.pendingAdditions.findIndex(p => p.type === 'focus' && p.taskId === 'focus_time');
+  if (idx !== -1) state.pendingAdditions.splice(idx, 1);
   // 撤销streak
   if (state.streaks && state.streaks.focus && state.streaks.focus.lastDate === todayStr()) {
     state.streaks.focus.count = 0;
@@ -1016,7 +1035,7 @@ function undoFocusTime() {
     submitPending('focus', 'focus_time', null, null);
   }
   renderAll();
-  showCelebration('↩️', '已撤销', '专注力时光打卡已撤销，分数已扣回');
+  showCelebration('↩️', '已撤销', '专注力时光打卡已撤销');
 }
 
 function completeFocusTime(isOvertime) {
@@ -1030,7 +1049,14 @@ function completeFocusTime(isOvertime) {
   state.focusCompleted = true;
   state.focusOvertime = isOvertime;
   const pts = FOCUS_TIME.score + (isOvertime ? FOCUS_TIME.bonusScore : 0);
-  state.totalScore += pts;
+  // 加入待审加分池，等父母审核通过后才正式入账
+  state.pendingAdditions.push({
+    type: 'focus',
+    taskId: 'focus_time',
+    name: '专注力时光',
+    score: pts,
+    date: todayStr()
+  });
   updateStreak('focus');
   saveState();
   if (window._firebaseReady) {
@@ -1179,6 +1205,28 @@ function updateTodayScore() {
   // 同步顶部今日得分
   const el = document.getElementById('headerTodayScore');
   if (el) el.textContent = today > 0 ? `+${today}` : '+0';
+}
+
+// ── 父母审核回调：本地积分处理 ──────────────────────────────────
+// 审核通过：将 effectiveScore 加入本地 totalScore，并从 pendingAdditions 移除
+function onParentApprove(taskType, taskId, effectiveScore) {
+  // 找到对应的待审加分记录并移除（按 type + taskId 匹配，同一天通常只有一条）
+  const today = todayStr();
+  const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
+  if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+  // 正式加分入账
+  state.totalScore += effectiveScore;
+  saveState();
+  renderAll();
+}
+
+// 审核驳回：从 pendingAdditions 移除（本地从未加分，无需扣减）
+function onParentReject(taskType, taskId) {
+  const today = todayStr();
+  const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
+  if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+  saveState();
+  renderAll();
 }
 
 // ── 渲染任务卡 ─────────────────────────────────────────────────
