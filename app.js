@@ -121,8 +121,15 @@ function defaultState() {
     ropeMilestonesAchieved: [],
     weekStart: getWeekStart(),
     weeklyScore: 0,
-    consecutiveDays: {},      // 连续打卡追踪
-    consecutive930: 0,        // 连续9点半上床天数
+    consecutiveDays: {},      // 连续打卡追踪（旧字段保留）
+    consecutive930: 0,        // 连续9点半上床天数（旧字段保留）
+    // 连续天数（新版，跨天累积不被重置）
+    streaks: {
+      morning:  { count: 0, lastDate: '' },
+      night:    { count: 0, lastDate: '' },
+      homework: { count: 0, lastDate: '' },
+      focus:    { count: 0, lastDate: '' },
+    },
     weekUnlocked: false,      // 第一周是否已解锁专项卡
     weekStartDate: todayStr(),
     // 英雄包状态
@@ -232,6 +239,42 @@ function renderHeader() {
 }
 
 // ── 渲染每日任务 ───────────────────────────────────────────────
+
+// 连续天数更新：key = 'morning' | 'night' | 'homework' | 'focus'
+function updateStreak(key) {
+  const today = todayStr();
+  if (!state.streaks) {
+    state.streaks = { morning:{count:0,lastDate:''}, night:{count:0,lastDate:''}, homework:{count:0,lastDate:''}, focus:{count:0,lastDate:''} };
+  }
+  const s = state.streaks[key] || { count: 0, lastDate: '' };
+  if (s.lastDate === today) return; // 今天已经算过，不重复
+
+  // 计算昨天的日期字符串
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yesterday = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  if (s.lastDate === yesterday) {
+    s.count += 1; // 昨天完成了，连续 +1
+  } else {
+    s.count = 1;  // 断开了，从1重新开始
+  }
+  s.lastDate = today;
+  state.streaks[key] = s;
+  saveState();
+}
+
+// 获取连续天数标签 HTML
+function streakBadge(key) {
+  if (!state.streaks || !state.streaks[key]) return '';
+  const count = state.streaks[key].count || 0;
+  if (count < 2) return ''; // 不足2天不显示
+  let color = '#FF6B35';
+  if (count >= 7)  color = '#EF476F';
+  if (count >= 14) color = '#7B2FBE';
+  return `<span style="display:inline-flex;align-items:center;gap:2px;background:${color};color:#fff;font-size:0.72rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px;vertical-align:middle">🔥 连续${count}天</span>`;
+}
+
 function renderDaily() {
   renderMorningPack();
   renderNightPack();
@@ -255,7 +298,7 @@ function renderMorningPack() {
       <div class="pack-header">
         <span class="pack-icon">🌅</span>
         <div class="pack-title-area">
-          <div class="pack-title">早晨英雄包</div>
+          <div class="pack-title">早晨英雄包${streakBadge('morning')}</div>
           <div class="pack-subtitle">${isFull?'✨ 全套完成！':'还差'+(MORNING_PACK.length-done)+'件全套奖励'}</div>
         </div>
         <div class="pack-score-badge ${isFull?'full':'partial'}">
@@ -289,7 +332,7 @@ function renderNightPack() {
       <div class="pack-header">
         <span class="pack-icon">🌙</span>
         <div class="pack-title-area">
-          <div class="pack-title">睡前英雄包</div>
+          <div class="pack-title">睡前英雄包${streakBadge('night')}</div>
           <div class="pack-subtitle">${isFull?'✨ 全套完成！':'还差'+(NIGHT_PACK.length-done)+'件全套奖励'}</div>
         </div>
         <div class="pack-score-badge ${isFull?'full':'partial'}">
@@ -325,7 +368,7 @@ function renderHomeworkTask() {
       <div class="hw-header">
         <span class="hw-icon">${hw.icon}</span>
         <div class="hw-title-area">
-          <div class="hw-title">${hw.name}${speakBtn(hw.speech)}</div>
+          <div class="hw-title">${hw.name}${speakBtn(hw.speech)}${streakBadge('homework')}</div>
           <div class="hw-subtitle">
             ${completed ? '✅ 作业写完啦！太棒了！' : '⬜ 写完作业打卡，获得+2分！'}
           </div>
@@ -542,6 +585,7 @@ function togglePackItem(packType, id, score) {
     const prevPts = doneCnt - 1; // 之前已得分
     gain = fullScore - prevPts;
     state[bonusKey] = true;
+    updateStreak(packType === 'morning' ? 'morning' : 'night');
   }
 
   state.totalScore += gain;
@@ -566,6 +610,7 @@ function completeHomework() {
   if (state.hwCompleted) return;
   state.hwCompleted = true;
   state.totalScore += HOMEWORK_TASK.scoreComplete;
+  updateStreak('homework');
   saveState();
   if (window._firebaseReady) {
     submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete);
@@ -610,7 +655,7 @@ function renderFocusTime() {
       <div class="ft-header">
         <span class="ft-icon">${ft.icon}</span>
         <div class="ft-title-area">
-          <div class="ft-title">${ft.name} ${speakBtn(ft.speech)}</div>
+          <div class="ft-title">${ft.name} ${speakBtn(ft.speech)}${streakBadge('focus')}</div>
           <div class="ft-sub">${
             overtime ? '⚡ 超级专注模式！停不下来最棒了！' :
             completed ? '✅ 今日专注力时光完成！' :
@@ -709,6 +754,7 @@ function completeFocusTime(isOvertime) {
   state.focusOvertime = isOvertime;
   const pts = FOCUS_TIME.score + (isOvertime ? FOCUS_TIME.bonusScore : 0);
   state.totalScore += pts;
+  updateStreak('focus');
   saveState();
   if (window._firebaseReady) {
     submitPending('focus', 'focus_time', '专注力时光', pts);
