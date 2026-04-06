@@ -156,19 +156,22 @@ function loadPendingList() {
         </div>
         <div class="pending-score">+${item.score}分</div>
         <div class="pending-actions">
-          <!-- Step 1: 选择通过 or 驳回 -->
-          <div class="step1-actions">
-            <button class="btn-approve" onclick="step1Approve('${item.key}')">✅</button>
-            <button class="btn-reject" onclick="step1Reject('${item.key}')">❌</button>
+          <!-- Step 1: 确认孩子是否完成 -->
+          <div class="step1-done">
+            <button class="btn-done" onclick="step1Done('${item.key}')">✅ 完成了</button>
+            <button class="btn-not-done" onclick="step1NotDone('${item.key}')">❌ 没完成</button>
           </div>
-          <!-- Step 2: 通过后选择是否自主完成 -->
-          <div class="step2-approve" style="display:none">
-            <button class="btn-self" onclick="approveOneStep2('${item.key}', true)">💪</button>
-            <button class="btn-reminded" onclick="approveOneStep2('${item.key}', false)">👋</button>
+          <!-- Step 2: 确认是否自主完成（仅在点了"完成了"之后出现）-->
+          <div class="step2-self" style="display:none">
+            <div class="step2-label">自己完成的？</div>
+            <button class="btn-self" onclick="confirmDone('${item.key}', true)">💪 是</button>
+            <button class="btn-reminded" onclick="confirmDone('${item.key}', false)">👋 爸妈提醒</button>
+            <button class="btn-cancel" onclick="cancelStep2('${item.key}')">取消</button>
           </div>
-          <!-- Step 2: 驳回确认 -->
+          <!-- Step 2: 驳回确认（仅在点了"没完成"之后出现）-->
           <div class="step2-reject" style="display:none">
-            <button class="btn-confirm-reject" onclick="rejectOneConfirm('${item.key}')">⚠️</button>
+            <div class="step2-label">确定驳回？</div>
+            <button class="btn-confirm-reject" onclick="rejectOneConfirm('${item.key}')">⚠️ 确认驳回</button>
             <button class="btn-cancel" onclick="cancelStep2('${item.key}')">取消</button>
           </div>
         </div>
@@ -183,22 +186,22 @@ function typeLabel(type) {
 }
 
 // ── 父母审核两步操作辅助函数 ───────────────────────────────────
-// Step1: 点通过 → 显示第二步选择是否自主完成
-function step1Approve(key) {
+// Step1: 点"完成了" → 显示第二步选择是否自主完成
+function step1Done(key) {
   const pi = document.getElementById('pi-' + key);
   if (!pi) return;
-  pi.dataset.step = '2approve';
-  pi.querySelector('.step1-actions').style.display = 'none';
-  pi.querySelector('.step2-approve').style.display = 'flex';
+  pi.dataset.step = '2self';
+  pi.querySelector('.step1-done').style.display = 'none';
+  pi.querySelector('.step2-self').style.display = 'flex';
   pi.querySelector('.step2-reject').style.display = 'none';
 }
-// Step1: 点驳回 → 显示确认
-function step1Reject(key) {
+// Step1: 点"没完成" → 显示驳回确认
+function step1NotDone(key) {
   const pi = document.getElementById('pi-' + key);
   if (!pi) return;
   pi.dataset.step = '2reject';
-  pi.querySelector('.step1-actions').style.display = 'none';
-  pi.querySelector('.step2-approve').style.display = 'none';
+  pi.querySelector('.step1-done').style.display = 'none';
+  pi.querySelector('.step2-self').style.display = 'none';
   pi.querySelector('.step2-reject').style.display = 'flex';
 }
 // 取消第二步 → 回到第一步
@@ -206,21 +209,19 @@ function cancelStep2(key) {
   const pi = document.getElementById('pi-' + key);
   if (!pi) return;
   pi.dataset.step = '1';
-  pi.querySelector('.step1-actions').style.display = 'flex';
-  pi.querySelector('.step2-approve').style.display = 'none';
+  pi.querySelector('.step1-done').style.display = 'flex';
+  pi.querySelector('.step2-self').style.display = 'none';
   pi.querySelector('.step2-reject').style.display = 'none';
 }
-// 通过时：带上 isSelf 调用实际的 approveOne 逻辑
-function approveOneStep2(key, isSelf) {
-  // 先读取 pending 记录获取完整数据，再调用内部逻辑
+// Step2: 确认"完成了"且选择了是否自主完成 → 执行通过
+function confirmDone(key, isSelf) {
   window._firebaseGet(fbRef('pending/' + key)).then(snap => {
     const val = snap.val();
     if (!val) { showParentToast('记录不存在'); return; }
-    // 调用带 isSelf 的实际审核逻辑
     doApproveOne(key, val.score, val.name, val.taskId || '', val.type || 'daily', isSelf);
   });
 }
-// 驳回确认：调用实际的 rejectOne 逻辑
+// Step2: 确认驳回
 function rejectOneConfirm(key) {
   window._firebaseGet(fbRef('pending/' + key)).then(snap => {
     const val = snap.val();
@@ -335,10 +336,10 @@ function showBatchApproveModal() {
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.12);">
-      <div style="font-size:22px;margin-bottom:8px;">✅ 全部通过</div>
-      <div style="color:#666;font-size:15px;margin-bottom:22px;">这些任务，孩子都是自己完成的吗？</div>
-      <button onclick="doApproveAllWithSelf(true)" style="width:100%;padding:13px;border:none;border-radius:12px;background:#e8f5e9;color:#2e7d32;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">💪 全是自己完成</button>
-      <button onclick="doApproveAllWithSelf(false)" style="width:100%;padding:13px;border:none;border-radius:12px;background:#fff8e1;color:#f57f17;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">👋 有爸妈提醒</button>
+      <div style="font-size:22px;margin-bottom:8px;">✅ 全部完成确认</div>
+      <div style="color:#666;font-size:15px;margin-bottom:22px;">这些任务，孩子都自己完成的吗？</div>
+      <button onclick="doApproveAllWithSelf(true)" style="width:100%;padding:13px;border:none;border-radius:12px;background:#e8f5e9;color:#2e7d32;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">💪 是，都自己完成</button>
+      <button onclick="doApproveAllWithSelf(false)" style="width:100%;padding:13px;border:none;border-radius:12px;background:#fff8e1;color:#f57f17;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">👋 不是，有爸妈提醒</button>
       <button onclick="closeBatchModal()" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:12px;background:#fff;color:#757575;font-size:14px;cursor:pointer;">取消</button>
     </div>`;
   document.body.appendChild(overlay);

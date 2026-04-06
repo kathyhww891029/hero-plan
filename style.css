@@ -717,15 +717,19 @@ body {
 .pending-meta { font-size: 12px; color: #95a5a6; margin-top: 2px; }
 .pending-extra { font-size: 12px; color: #7f8c8d; }
 .pending-score { font-size: 16px; font-weight: 800; color: #27ae60; min-width: 50px; text-align: right; }
-.pending-actions { display: flex; gap: 6px; }
-.btn-approve, .btn-reject {
-  width: 36px; height: 36px; border: none; border-radius: 50%; font-size: 16px; cursor: pointer;
+.pending-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.step1-done { display: flex; gap: 6px; }
+.step2-self, .step2-reject { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.step2-label { font-size: 12px; color: #7f8c8d; width: 100%; margin-bottom: 2px; }
+.btn-done, .btn-not-done {
+  height: 34px; border: none; border-radius: 17px; font-size: 13px; font-weight: 700;
+  padding: 0 12px; cursor: pointer;
 }
-.btn-approve { background: #eafaf1; }
-.btn-reject { background: #fdf2f2; }
+.btn-done { background: #eafaf1; color: #27ae60; }
+.btn-not-done { background: #fdf2f2; color: #e74c3c; }
 .btn-self, .btn-reminded, .btn-confirm-reject, .btn-cancel {
   height: 32px; border: none; border-radius: 16px; font-size: 13px; font-weight: 700;
-  padding: 0 12px; cursor: pointer;
+  padding: 0 10px; cursor: pointer;
 }
 .btn-self { background: #e8f5e9; color: #2e7d32; }
 .btn-reminded { background: #fff8e1; color: #f57f17; }
