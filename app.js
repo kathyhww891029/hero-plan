@@ -800,7 +800,13 @@ function renderCards() {
           <div class="card-name">${c.name}</div>
           <div class="card-sub">${c.sub}</div>
           <div class="card-score">+${c.score}分</div>
-          ${!isUnlocked && !c.weekUnlock ? `<div class="card-unlock">${c.unlockRope !== undefined ? '🪢 跳绳达到'+c.unlockRope+'个解锁' : '累计'+c.unlockAt+'分解锁'}</div>` : ''}
+          ${!isUnlocked && !c.weekUnlock ? `<div class="card-unlock">${
+            c.unlockRope !== undefined ? '🪢 跳绳达到'+c.unlockRope+'个解锁' :
+            c.unlockMathCount !== undefined ? '⚡ 口算练习'+c.unlockMathCount+'次解锁' :
+            c.unlockMathBest !== undefined ? '⚡ 口算单次答对'+c.unlockMathBest+'题解锁' :
+            c.unlockMathLevel !== undefined ? '⚡ 口算升到第'+(c.unlockMathLevel+1)+'关解锁' :
+            '累计'+c.unlockAt+'分解锁'
+          }</div>` : ''}
           ${weekBadge}
           ${isUnlocked ? speakBtn(c.speech) : ''}
         </div>`;
@@ -812,8 +818,18 @@ function renderCards() {
 
 function isCardUnlocked(card) {
   if (card.weekUnlock) return state.weekUnlocked;
-  // 方案A：跳绳成绩联动解锁（ropeMax）
+  // 跳绳成绩联动解锁（ropeMax）
   if (card.unlockRope !== undefined) return (state.ropeMax || 0) >= card.unlockRope;
+  // 口算数据联动解锁（三种维度）
+  if (card.unlockMathCount !== undefined) {
+    try { const d = loadMathData(); return (d.history||[]).length >= card.unlockMathCount; } catch(e) { return false; }
+  }
+  if (card.unlockMathBest !== undefined) {
+    try { const d = loadMathData(); const best = (d.history||[]).reduce((m,h) => Math.max(m, h.correct||0), 0); return best >= card.unlockMathBest; } catch(e) { return false; }
+  }
+  if (card.unlockMathLevel !== undefined) {
+    try { const d = loadMathData(); return (d.levelId||0) >= card.unlockMathLevel; } catch(e) { return false; }
+  }
   if (card.unlockAt === 0) return true;
   return state.totalScore >= card.unlockAt;
 }
@@ -1717,7 +1733,13 @@ function renderAchievements() {
           <span class="ach-card-stars">${c.stars}</span>
           <div class="ach-card-detail">
             <div class="ach-card-name">${c.name}</div>
-            <div class="ach-card-how">${locked ? (c.unlockRope !== undefined ? `🔒 跳绳达到${c.unlockRope}个解锁` : `🔒 累计${c.unlockAt}分解锁`) : done ? '✅ 已完成' : `📌 ${c.desc}`}</div>
+            <div class="ach-card-how">${locked ? (
+              c.unlockRope !== undefined ? `🔒 跳绳达到${c.unlockRope}个解锁` :
+              c.unlockMathCount !== undefined ? `🔒 口算练习${c.unlockMathCount}次解锁` :
+              c.unlockMathBest !== undefined ? `🔒 口算单次答对${c.unlockMathBest}题解锁` :
+              c.unlockMathLevel !== undefined ? `🔒 口算升到第${c.unlockMathLevel+1}关解锁` :
+              `🔒 累计${c.unlockAt}分解锁`
+            ) : done ? '✅ 已完成' : `📌 ${c.desc}`}</div>
           </div>
           <span class="ach-card-pts">+${c.score}</span>
         </div>`;

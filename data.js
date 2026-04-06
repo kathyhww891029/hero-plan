@@ -636,19 +636,21 @@ const TASK_CARDS = [
     id:'m1', series:'⚡ 数学专项', theme:'闪电侠', color:'#118AB2', lightColor:'#E8F4FD',
     level:1, stars:'⚡',
     name:'闪电侠·热身赛',
-    sub:'完成口算，记录时间 ⏱️',
-    desc:'完成口算，记录完成时间',
-    score:4, unlockAt:0, unlocked:false, weekUnlock:true,
-    speech:'闪电侠热身赛！完成口算练习，记录下你用了多少时间，开始计时！完成得4分！第一周结束后解锁！'
+    sub:'完成第一次口算，英雄正式出道！⚡',
+    desc:'在口算页面完成一次练习，看看自己答了几题',
+    score:4, unlockMathCount:0, unlocked:false,
+    tip:'⚡ 怎么做：\n① 切换到口算页面\n② 选一个关卡，开始练习\n③ 60秒倒计时结束\n④ 回来这里领4分！\n只要做过一次口算就能领——快去试试！',
+    speech:'闪电侠热身赛！去口算页面完成一次练习，看看自己能答几题，回来领4分！做过口算就能解锁！'
   },
   {
     id:'m2', series:'⚡ 数学专项', theme:'闪电侠', color:'#118AB2', lightColor:'#E8F4FD',
     level:2, stars:'⚡⚡',
     name:'闪电侠·速度挑战',
-    sub:'今天比昨天快，哪怕(pà)快1秒！⚡',
-    desc:'今天比昨天完成口算更快',
-    score:6, unlockAt:0, unlocked:false, weekUnlock:true,
-    speech:'闪电侠速度挑战！今天做口算要比昨天快，哪怕只快了1秒也算赢，进步就是胜利，得6分！'
+    sub:'比上次多答对1题，就是进步！⚡',
+    desc:'在口算页面比上一次多答对至少1题',
+    score:6, unlockMathCount:2, unlocked:false,
+    tip:'⚡ 进步挑战：\n① 先看看上次答对了几题\n② 去口算页面再练一次\n③ 比上次多1题就算赢！\n🔓 完成过2次口算后解锁\n每次进步都可以来领——可以多次挑战！',
+    speech:'闪电侠速度挑战！去口算页面，比上一次多答对至少1题就算赢，得6分！完成过2次口算后自动解锁，可以多次挑战！'
   },
   {
     id:'m3', series:'⚡ 数学专项', theme:'恐龙', color:'#118AB2', lightColor:'#E8F4FD',
@@ -676,6 +678,38 @@ const TASK_CARDS = [
     desc:'买东西算钱/量身高/数台阶',
     score:5, unlockAt:0, unlocked:false, weekUnlock:true,
     speech:'生活里的数字！买东西的时候帮忙算钱，或者量一量自己的身高，或者数数台阶有多少级，数学就在生活里，得5分！'
+  },
+
+  // ── 数学专项·成就联动卡（口算数据自动解锁）────────────────
+  {
+    id:'m6', series:'⚡ 数学专项', theme:'闪电侠', color:'#118AB2', lightColor:'#E8F4FD',
+    level:2, stars:'⚡⚡',
+    name:'口算初级闯关者',
+    sub:'练了5次，你已经是真英雄！🏅',
+    desc:'累计完成5次口算练习',
+    score:5, unlockMathCount:5, unlocked:false,
+    tip:'🏅 自动认定：\n只要在口算页面完成了5次练习\n这张卡就自动解锁，来领5分！\n不需要做任何额外的事\n坚持练习就是最大的胜利 💪\n🔓 口算练习累计达到5次解锁',
+    speech:'口算初级闯关者！你已经完成了5次口算练习，坚持就是英雄，来领5分！口算累计5次自动解锁！'
+  },
+  {
+    id:'m7', series:'⚡ 数学专项', theme:'闪电侠', color:'#118AB2', lightColor:'#E8F4FD',
+    level:3, stars:'⚡⚡⚡',
+    name:'闪电速算达人',
+    sub:'一次答对15题，闪电侠认可你了！⚡',
+    desc:'口算单次答对15题或以上',
+    score:8, unlockMathBest:15, unlocked:false,
+    tip:'⚡ 达人认证：\n在口算页面，一次练习答对15题或更多\n达到这个成绩，来领8分！\n🔓 口算单次答对15题自动解锁\n拿到之后继续冲更高！',
+    speech:'闪电速算达人！口算单次答对15题或以上，闪电侠正式认可你，来领8分！单次答对15题自动解锁！'
+  },
+  {
+    id:'m8', series:'⚡ 数学专项', theme:'闪电侠', color:'#118AB2', lightColor:'#E8F4FD',
+    level:4, stars:'⚡⚡⚡⚡',
+    name:'晋级中级烈焰',
+    sub:'口算关卡升到🔥中级，你太厉害了！',
+    desc:'口算自适应关卡达到🔥中级烈焰（第2关）',
+    score:10, unlockMathLevel:2, unlocked:false,
+    tip:'🔥 晋级认证：\n口算系统会自动帮你升级\n当你连续2次达标，就会进入下一关\n升到🔥中级烈焰（第2关）后\n来这里领10分！\n🔓 口算关卡升到中级烈焰自动解锁',
+    speech:'晋级中级烈焰！口算自适应关卡升到中级烈焰，你已经超越大部分同龄人，来领10分！升到中级后自动解锁！'
   },
   // 英语专项卡·蜘蛛侠（第一周后解锁）
   {
