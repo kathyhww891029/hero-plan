@@ -940,22 +940,37 @@ function renderShop() {
   `;
 
   el.innerHTML = barHtml + SHOP.map(section => {
-    // 过滤：B类奖励在未达标时隐藏（但显示解锁提示占位）
-    const visibleItems = section.items.filter(item => {
-      if (!item.selfDisciplineRequired) return true;
-      return bUnlocked; // B类奖励只在自律达标时显示
-    });
-    const hiddenBCount = section.items.filter(i => i.selfDisciplineRequired && !bUnlocked).length;
-
+    // v22：所有奖励全部可见，B类未达标时显示锁定态（而非隐藏）
     return `
     <div class="shop-section">
       <div class="shop-section-header" style="background:${section.color}">${section.type}</div>
-      ${visibleItems.map(item => {
-        const canBuy = state.totalScore >= item.cost;
+      ${section.items.map(item => {
+        const isLocked = item.selfDisciplineRequired && !bUnlocked;
+        const canBuy = !isLocked && state.totalScore >= item.cost;
         const btnClass = item.isEgg ? 'egg' : (canBuy ? 'available' : 'unavailable');
         const tierBadge = item.tier === 'B'
-          ? '<span style="font-size:0.7rem;background:#06D6A0;color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px;">✨自律奖励</span>'
+          ? `<span style="font-size:0.7rem;background:${bUnlocked?'#06D6A0':'#aaa'};color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px;">${bUnlocked?'✨自律奖励':'🔒自律解锁'}</span>`
           : '';
+        // 锁定态：卡片灰显 + 显示解锁条件 + 仍有语音按钮
+        if (isLocked) {
+          const needRate = 85;
+          const now = new Date();
+          const { rate } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth()+1);
+          const gap = needRate - rate;
+          return `
+          <div class="shop-item" style="background:#f5f5f5;border:1.5px dashed #ccc;opacity:0.82;">
+            <div class="shop-icon" style="filter:grayscale(0.5)">${item.icon}</div>
+            <div class="shop-info">
+              <div class="shop-name" style="color:#888">${item.name}${tierBadge}${speakBtn(item.speech)}</div>
+              <div class="shop-note" style="color:#aaa">${item.note}</div>
+              <div style="margin-top:6px;font-size:0.8rem;color:#F9A825;font-weight:600;">
+                🔒 本月自律率达85%解锁 · 当前${rate}% · 还差${gap}%
+              </div>
+            </div>
+            <div class="shop-cost" style="color:#bbb">${item.cost}分</div>
+          </div>`;
+        }
+        // 正常态（A类或B类已解锁）
         return `
           <div class="shop-item" style="background:${section.lightColor}${item.tier==='B'?';border:1.5px solid #06D6A0':''}">
             <div class="shop-icon">${item.icon}</div>
@@ -971,11 +986,6 @@ function renderShop() {
             <div class="shop-cost">${item.cost}分</div>
           </div>`;
       }).join('')}
-      ${hiddenBCount > 0 ? `
-        <div style="text-align:center;padding:14px;color:#aaa;font-size:0.88rem;border-top:1px dashed #eee;margin-top:8px;">
-          🔒 还有 ${hiddenBCount} 个自律解锁奖励隐藏中<br>
-          <span style="color:#F9A825;font-weight:600;">本月自律率达到85%即可解锁 💪</span>
-        </div>` : ''}
     </div>`;
   }).join('');
 }
