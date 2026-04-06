@@ -161,12 +161,6 @@ const DAILY_FIXED = [
 
 // ── 可选任务（均直接可见，无锁定）────────────────────────────
 const DAILY_OPTIONAL_INTEREST = [
-  { id:'oi1', icon:'🎨', name:'英雄画册打卡', sub:'今天画了一幅画，来领分！🖌️', score:2, type:'optional', category:'interest',
-    tip:'今天画了任何一幅画（不限内容，不评判好坏），打卡就得分',
-    speech:'英雄画册打卡！今天画了画吗？不管画什么，画了就是小画家，来打卡得2分！你的每幅画都是世界上独一无二的！' },
-  { id:'oi2', icon:'💃', name:'跳舞打卡', sub:'跟着音乐跳起来 🎵', score:2, type:'optional', category:'interest',
-    tip:'跟着音乐跳一段舞，哪怕5分钟！爸爸一起跳额外+1分！',
-    speech:'跳舞打卡！跟着音乐跳起来，身体是最强的武器！爸爸一起跳的话还能多1分，得2分！' },
   { id:'oi3', icon:'🎵', name:'音乐欣赏时光', sub:'认真听一首曲子，说说感受！🎧', score:2, type:'optional', category:'interest',
     tip:'闭上眼睛听一首曲子，听完说出你的感受，说了就得分',
     speech:'音乐欣赏时光！闭上眼睛认真听一首曲子，听完说说你的感受，开心还是难过？说出来就得2分！' },
