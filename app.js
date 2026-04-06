@@ -146,6 +146,9 @@ function defaultState() {
     phaseStartDate: null,
     // 阅读挑战联动
     readCount: 0,             // 累计完成阅读卡总次数（每领取一张+1）
+    // 今日自选挑战卡
+    selfPickCard: null,       // 今日选择的挑战卡 id（每天可换）
+    selfPickClaimed: false,   // 今日自选卡是否已领分
   };
 }
 function loadState() {
@@ -234,6 +237,7 @@ function renderDaily() {
   renderNightPack();
   renderHomeworkTask();
   renderFocusTime();
+  renderSelfPick();
   renderOptionalTasks();
   updateTodayScore();
 }
@@ -377,6 +381,134 @@ function renderOptionalTasks() {
   if (!el) return;
   el.innerHTML = renderOptionalList();
 }
+
+// ── 今日自选挑战卡 ─────────────────────────────────────────────
+function renderSelfPick() {
+  const el = document.getElementById('dailySelfPick');
+  if (!el) return;
+
+  const pickedId = state.selfPickCard;
+  const claimed  = !!state.selfPickClaimed;
+  const card     = pickedId ? TASK_CARDS.find(c => c.id === pickedId) : null;
+
+  // 获取今日可选卡列表：已解锁 + 未在本周完成过（或可重复）
+  const claimedIds = Object.keys(state.cardClaims || {});
+  const available = TASK_CARDS.filter(c => {
+    if (!isCardUnlocked(c)) return false;
+    // 可重复挑战的卡（如 m2 速度挑战）不过滤，其余过滤已完成
+    if (c.repeatable) return true;
+    return !claimedIds.includes(c.id);
+  });
+
+  if (claimed && card) {
+    // 已领分态
+    el.innerHTML = `
+      <div class="focus-time-card ft-complete">
+        <div class="ft-header">
+          <span class="ft-icon">${card.icon || card.stars}</span>
+          <div class="ft-title-area">
+            <div class="ft-title">🎯 今日我的挑战 ${speakBtn(card.speech||'')}</div>
+            <div class="ft-sub">✅ 「${card.name}」已完成！</div>
+          </div>
+          <div class="ft-score">+${card.score}分</div>
+        </div>
+        <div class="ft-done-summary">
+          <div class="ft-done-activity">${card.series} · ${card.name} 挑战完成 🎉</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (card) {
+    // 已选、未领分态
+    const tipHtml = card.tip
+      ? `<div style="margin:8px 0 4px;background:#fffbe6;border-radius:8px;padding:8px 12px;font-size:0.83rem;color:#7a5c00;white-space:pre-line">${card.tip}</div>`
+      : '';
+    el.innerHTML = `
+      <div class="focus-time-card ft-active">
+        <div class="ft-header">
+          <span class="ft-icon">${card.stars}</span>
+          <div class="ft-title-area">
+            <div class="ft-title">🎯 今日我的挑战 ${speakBtn(card.speech||'')}</div>
+            <div class="ft-sub">已选：「${card.name}」</div>
+          </div>
+          <div class="ft-score">+${card.score}分</div>
+        </div>
+        <div style="padding:0 4px">
+          <div style="font-size:0.9rem;color:#333;margin-bottom:4px;">✅ ${card.desc}</div>
+          ${tipHtml}
+        </div>
+        <div class="ft-actions">
+          <button class="btn-ft-done" onclick="claimSelfPick()" style="margin-top:6px">
+            ✅ 我完成了！领取 +${card.score}分
+          </button>
+          <button onclick="cancelSelfPick()" style="margin-top:6px;background:none;border:none;color:#aaa;font-size:0.82rem;cursor:pointer">
+            ↩ 重新选一张
+          </button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // 未选态：展示可选卡片菜单（按系列分组，每组最多显示3张）
+  const groups = {};
+  available.forEach(c => {
+    const s = c.series || '其他';
+    if (!groups[s]) groups[s] = [];
+    if (groups[s].length < 3) groups[s].push(c);
+  });
+  const seriesList = Object.keys(groups).slice(0, 8); // 最多显示8个系列
+
+  el.innerHTML = `
+    <div class="focus-time-card">
+      <div class="ft-header">
+        <span class="ft-icon">🎯</span>
+        <div class="ft-title-area">
+          <div class="ft-title">今日我的挑战</div>
+          <div class="ft-sub">选一张你今天想挑战的任务卡，完成了来领分！</div>
+        </div>
+      </div>
+      <div class="ft-menu-label">👇 选一张今天想做的：</div>
+      <div style="max-height:260px;overflow-y:auto;padding:0 2px">
+        ${seriesList.map(s => `
+          <div style="margin-bottom:8px">
+            <div style="font-size:0.78rem;color:#888;font-weight:600;margin-bottom:4px;padding-left:2px">${s}</div>
+            ${groups[s].map(c => `
+              <div class="ft-menu-item" style="justify-content:space-between;padding:7px 10px;margin-bottom:4px"
+                   onclick="selectSelfPick('${c.id}')">
+                <span style="font-size:0.9rem">${c.stars} ${c.name}</span>
+                <span style="color:#F9A825;font-weight:700;font-size:0.9rem">+${c.score}分</span>
+              </div>`).join('')}
+          </div>`).join('')}
+        ${available.length === 0 ? '<div style="text-align:center;color:#aaa;padding:16px">🎉 所有挑战卡都完成啦！太厉害了！</div>' : ''}
+      </div>
+    </div>`;
+}
+
+function selectSelfPick(id) {
+  state.selfPickCard = id;
+  state.selfPickClaimed = false;
+  saveState();
+  renderSelfPick();
+}
+
+function cancelSelfPick() {
+  state.selfPickCard = null;
+  state.selfPickClaimed = false;
+  saveState();
+  renderSelfPick();
+}
+
+function claimSelfPick() {
+  const card = TASK_CARDS.find(c => c.id === state.selfPickCard);
+  if (!card || state.selfPickClaimed) return;
+  // 复用 claimCard 逻辑（计积分、Firebase、readCount等）
+  claimCard(state.selfPickCard);
+  state.selfPickClaimed = true;
+  saveState();
+  renderSelfPick();
+}
+
 function togglePackItem(packType, id, score) {
   const packKey = packType === 'morning' ? 'morningPack' : 'nightPack';
   const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
