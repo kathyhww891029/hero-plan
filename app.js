@@ -800,7 +800,7 @@ function renderCards() {
           <div class="card-name">${c.name}</div>
           <div class="card-sub">${c.sub}</div>
           <div class="card-score">+${c.score}分</div>
-          ${!isUnlocked && !c.weekUnlock ? `<div class="card-unlock">累计${c.unlockAt}分解锁</div>` : ''}
+          ${!isUnlocked && !c.weekUnlock ? `<div class="card-unlock">${c.unlockRope !== undefined ? '🪢 跳绳达到'+c.unlockRope+'个解锁' : '累计'+c.unlockAt+'分解锁'}</div>` : ''}
           ${weekBadge}
           ${isUnlocked ? speakBtn(c.speech) : ''}
         </div>`;
@@ -812,6 +812,8 @@ function renderCards() {
 
 function isCardUnlocked(card) {
   if (card.weekUnlock) return state.weekUnlocked;
+  // 方案A：跳绳成绩联动解锁（ropeMax）
+  if (card.unlockRope !== undefined) return (state.ropeMax || 0) >= card.unlockRope;
   if (card.unlockAt === 0) return true;
   return state.totalScore >= card.unlockAt;
 }
@@ -1715,7 +1717,7 @@ function renderAchievements() {
           <span class="ach-card-stars">${c.stars}</span>
           <div class="ach-card-detail">
             <div class="ach-card-name">${c.name}</div>
-            <div class="ach-card-how">${locked ? `🔒 累计${c.unlockAt}分解锁` : done ? '✅ 已完成' : `📌 ${c.desc}`}</div>
+            <div class="ach-card-how">${locked ? (c.unlockRope !== undefined ? `🔒 跳绳达到${c.unlockRope}个解锁` : `🔒 累计${c.unlockAt}分解锁`) : done ? '✅ 已完成' : `📌 ${c.desc}`}</div>
           </div>
           <span class="ach-card-pts">+${c.score}</span>
         </div>`;
@@ -1748,7 +1750,7 @@ function renderAchievements() {
           <div class="ach-show-desc">${c.desc}</div>
           <div class="ach-show-how">
             ${done ? '🎉 已完成！传奇时刻' : locked
-              ? `🔒 需要累计 ${c.unlockAt} 分解锁 · 当前 ${score} 分 · 还差 ${c.unlockAt - score} 分`
+              ? (c.unlockRope !== undefined ? `🔒 跳绳达到${c.unlockRope}个解锁 · 当前${state.ropeMax||0}个 · 还差${c.unlockRope - (state.ropeMax||0)}个` : `🔒 需要累计 ${c.unlockAt} 分解锁 · 当前 ${score} 分 · 还差 ${c.unlockAt - score} 分`)
               : `✨ 已解锁！+${c.score}分等你来拿`}
           </div>
         </div>
