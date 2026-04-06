@@ -79,6 +79,7 @@
 
 <!-- 标签页 -->
 <nav class="tab-nav">
+  <button class="tab-btn" data-tab="kid">🦸 写给子渊的信</button>
   <button class="tab-btn active" data-tab="daily">⚡ 今日出击</button>
   <button class="tab-btn" data-tab="weekly">📅 本周战报</button>
   <button class="tab-btn" data-tab="cards">⚔️ 英雄挑战</button>
@@ -86,8 +87,8 @@
   <button class="tab-btn" data-tab="shop">🎁 宝藏屋</button>
   <button class="tab-btn" data-tab="rope">💨 极速训练</button>
   <button class="tab-btn" data-tab="math">🔢 口算</button>
-  <button class="tab-btn" data-tab="dad">💌 爸爸妈妈要牢记</button>
   <button class="tab-btn parent-tab-btn" data-tab="parent">🔐 审核</button>
+  <button class="tab-btn" data-tab="dad">💌 爸爸妈妈要牢记</button>
 </nav>
 
 <!-- ═══ TAB: 今日任务 ═══ -->
@@ -100,11 +101,6 @@
       <div class="welcome-date" id="todayDate"></div>
     </div>
     <button class="welcome-speak-btn" onclick="speakWelcome()" title="听欢迎语">🔈</button>
-  </div>
-
-  <!-- 今日推荐任务卡 -->
-  <div class="card-section recommend-section">
-    <div id="todayRecommended"></div>
   </div>
 
   <!-- 早晨英雄包 -->
@@ -284,9 +280,14 @@
   </div>
 </div>
 
-<!-- ═══ TAB: 爸爸 ═══ -->
+<!-- ═══ TAB: 写给子渊的信 ═══ -->
+<div class="tab-content" id="tab-kid">
+  <div id="kidPage"></div>
+</div>
+
+<!-- ═══ TAB: 爸爸妈妈要牢记 ═══ -->
 <div class="tab-content" id="tab-dad">
-  <div id="dadGuide"></div>
+  <div id="dadPage"></div>
 </div>
 
 <!-- ═══ TAB: 口算练习 ═══ -->

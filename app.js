@@ -200,12 +200,12 @@ function checkDayReset() {
 function renderAll() {
   renderHeader();
   renderDaily();
-  renderTodayRecommended();
   renderWeeklyAchievement();
   renderCards();
   renderShop();
   renderRope();
-  renderDadGuide();
+  renderKidPage();
+  renderDadPage();
   renderWeekly();
   renderAchievements();
 }
@@ -1028,95 +1028,86 @@ document.getElementById('btnRopeSubmit').addEventListener('click', () => {
 });
 
 // ── 渲染爸爸说明 ───────────────────────────────────────────────
-function renderDadGuide() {
-  const el = document.getElementById('dadGuide');
+// ── 渲染「写给子渊的信」独立Tab ─────────────────────────────
+function renderKidPage() {
+  const el = document.getElementById('kidPage');
+  if (!el) return;
   const g = DAD_GUIDE;
   const nl2br = s => s.replace(/\n/g, '<br>');
-
   el.innerHTML = `
     <div class="dad-guide">
-
-      <!-- 切换Tab -->
-      <div class="dad-tab-switch">
-        <button class="dad-switch-btn active" id="btnDadKid" onclick="dadSwitchTab('kid')">🦸 写给子渊的信</button>
-        <button class="dad-switch-btn" id="btnDadParent" onclick="dadSwitchTab('parent')">💌 爸爸妈妈要牢记</button>
-      </div>
-
-      <!-- 爸爸妈妈页 -->
-      <div id="dadPageParent" class="dad-page" style="display:none">
-        <div class="dad-guide-header">${g.parentTitle}</div>
-        <div class="dad-guide-body">
-          <div class="dad-tip-box" style="background:#FFF0E6;border-left:4px solid #FF6B35">
-            <div class="dad-tip-title" style="color:#FF6B35">🎯 这套系统的灵魂</div>
-            <div class="dad-tip-text" style="line-height:1.8">${nl2br(g.parentSoul)}</div>
-          </div>
-          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">你们的角色</div>
-          ${g.parentRoles.map(r => `
-            <div class="dad-principle" style="align-items:center">
-              <div class="principle-icon">${r.icon}</div>
-              <div>
-                <span style="color:#aaa;text-decoration:line-through;font-size:13px">${r.role}</span>
-                <span style="color:#06D6A0;font-weight:700;font-size:13px;margin-left:6px">${r.become}</span>
-              </div>
-            </div>`).join('')}
-          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">四个使用原则</div>
-          ${g.parentPrinciples.map(p => `
-            <div class="dad-principle" style="align-items:flex-start">
-              <div class="principle-icon" style="background:#118AB2;color:#fff;min-width:28px;height:28px;font-size:13px">${p.icon}</div>
-              <div>
-                <div class="principle-title">${p.title}</div>
-                <div class="principle-desc">${p.desc}</div>
-              </div>
-            </div>`).join('')}
-          <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
-            <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.parentClosing)}</div>
-          </div>
-
-          <!-- 清空测试数据 -->
-          <div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center">
-            <div style="font-size:12px;color:#aaa;margin-bottom:8px">⚠️ 测试阶段专用，正式使用前请清空数据</div>
-            <button onclick="clearAllData()" style="background:#fff;border:2px solid #FF6B35;color:#FF6B35;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">
-              🗑️ 清空所有测试数据
-            </button>
-          </div>
+      <div class="dad-guide-header">${g.kidTitle}</div>
+      <div class="dad-guide-body">
+        <div class="dad-tip-box" style="background:#FFF8E7;border-left:4px solid #F9A825">
+          <div class="dad-tip-text" style="line-height:2;font-size:14px">${nl2br(g.kidOpening)}</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">⚔️ 怎么玩？</div>
+        <div style="font-size:13px;color:#666;margin-bottom:10px">每天，你有三种任务：</div>
+        ${g.kidRules.map(r => `
+          <div class="dad-principle" style="align-items:flex-start;background:#F8F9FF;border-radius:12px;padding:12px;margin-bottom:8px">
+            <div class="principle-icon" style="font-size:1.4rem;background:none;padding:0;margin-right:12px">${r.icon}</div>
+            <div>
+              <div class="principle-title">${r.title}</div>
+              <div class="principle-desc" style="line-height:1.8">${nl2br(r.desc)}</div>
+            </div>
+          </div>`).join('')}
+        <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">🎁 积分能换什么？</div>
+        ${g.kidShop.map(s => `
+          <div class="dad-example">${s.icon} ${s.name}：${s.cost}分</div>`).join('')}
+        <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
+          <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.kidClosing)}</div>
         </div>
       </div>
-
-      <!-- 孩子页 -->
-      <div id="dadPageKid" class="dad-page">
-        <div class="dad-guide-header">${g.kidTitle}</div>
-        <div class="dad-guide-body">
-          <div class="dad-tip-box" style="background:#FFF8E7;border-left:4px solid #F9A825">
-            <div class="dad-tip-text" style="line-height:2;font-size:14px">${nl2br(g.kidOpening)}</div>
-          </div>
-          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">⚔️ 怎么玩？</div>
-          <div style="font-size:13px;color:#666;margin-bottom:10px">每天，你有三种任务：</div>
-          ${g.kidRules.map(r => `
-            <div class="dad-principle" style="align-items:flex-start;background:#F8F9FF;border-radius:12px;padding:12px;margin-bottom:8px">
-              <div class="principle-icon" style="font-size:1.4rem;background:none;padding:0;margin-right:12px">${r.icon}</div>
-              <div>
-                <div class="principle-title">${r.title}</div>
-                <div class="principle-desc" style="line-height:1.8">${nl2br(r.desc)}</div>
-              </div>
-            </div>`).join('')}
-          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">🎁 积分能换什么？</div>
-          ${g.kidShop.map(s => `
-            <div class="dad-example">${s.icon} ${s.name}：${s.cost}分</div>`).join('')}
-          <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
-            <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.kidClosing)}</div>
-          </div>
-        </div>
-      </div>
-
     </div>`;
 }
 
-function dadSwitchTab(tab) {
-  document.getElementById('dadPageParent').style.display = tab === 'parent' ? '' : 'none';
-  document.getElementById('dadPageKid').style.display = tab === 'kid' ? '' : 'none';
-  document.getElementById('btnDadParent').classList.toggle('active', tab === 'parent');
-  document.getElementById('btnDadKid').classList.toggle('active', tab === 'kid');
+// ── 渲染「爸爸妈妈要牢记」独立Tab ──────────────────────────
+function renderDadPage() {
+  const el = document.getElementById('dadPage');
+  if (!el) return;
+  const g = DAD_GUIDE;
+  const nl2br = s => s.replace(/\n/g, '<br>');
+  el.innerHTML = `
+    <div class="dad-guide">
+      <div class="dad-guide-header">${g.parentTitle}</div>
+      <div class="dad-guide-body">
+        <div class="dad-tip-box" style="background:#FFF0E6;border-left:4px solid #FF6B35">
+          <div class="dad-tip-title" style="color:#FF6B35">🎯 这套系统的灵魂</div>
+          <div class="dad-tip-text" style="line-height:1.8">${nl2br(g.parentSoul)}</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">你们的角色</div>
+        ${g.parentRoles.map(r => `
+          <div class="dad-principle" style="align-items:center">
+            <div class="principle-icon">${r.icon}</div>
+            <div>
+              <span style="color:#aaa;text-decoration:line-through;font-size:13px">${r.role}</span>
+              <span style="color:#06D6A0;font-weight:700;font-size:13px;margin-left:6px">${r.become}</span>
+            </div>
+          </div>`).join('')}
+        <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">四个使用原则</div>
+        ${g.parentPrinciples.map(p => `
+          <div class="dad-principle" style="align-items:flex-start">
+            <div class="principle-icon" style="background:#118AB2;color:#fff;min-width:28px;height:28px;font-size:13px">${p.icon}</div>
+            <div>
+              <div class="principle-title">${p.title}</div>
+              <div class="principle-desc">${p.desc}</div>
+            </div>
+          </div>`).join('')}
+        <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
+          <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.parentClosing)}</div>
+        </div>
+        <!-- 清空测试数据 -->
+        <div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center">
+          <div style="font-size:12px;color:#aaa;margin-bottom:8px">⚠️ 测试阶段专用，正式使用前请清空数据</div>
+          <button onclick="clearAllData()" style="background:#fff;border:2px solid #FF6B35;color:#FF6B35;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">
+            🗑️ 清空所有测试数据
+          </button>
+        </div>
+      </div>
+    </div>`;
 }
+
+// dadSwitchTab 已移除（子渊页和爸妈页现为独立Tab）
 
 function clearAllData() {
   if (!confirm('确定要清空所有数据吗？\n\n这会删除：\n• 所有积分记录\n• 所有打卡历史\n• 所有兑换记录\n\n清空后无法恢复！')) return;
@@ -1349,38 +1340,6 @@ function countSeriesDone(s, seriesName) {
 }
 
 // ── 今日推荐任务卡渲染 ────────────────────────────────────────
-function renderTodayRecommended() {
-  const el = document.getElementById('todayRecommended');
-  if (!el) return;
-  const phase = state.currentPhase || 1;
-  const claimed = Object.keys(state.cardClaims || {}).filter(id => state.cardClaims[id] > 0);
-  const recommended = getTodayRecommended(phase, claimed, state.totalScore);
-  if (recommended.length === 0) {
-    el.innerHTML = '<div class="recommend-empty">🎉 今日推荐已全部完成！明天再来看看！</div>';
-    return;
-  }
-  const phaseConfig = PHASE_CONFIG[phase] || PHASE_CONFIG[1];
-  el.innerHTML = `
-    <div class="recommend-header">
-      <span class="recommend-title">🎴 今日推荐任务卡</span>
-      <span class="recommend-phase">${phaseConfig.name.split('·')[0]}</span>
-    </div>
-    <div class="recommend-desc">📌 ${phaseConfig.focusDesc}</div>
-    <div class="recommend-cards">
-      ${recommended.map(c => `
-        <div class="recommend-card" style="background:${c.lightColor};border-left:4px solid ${c.color}"
-             onclick="openCardModal('${c.id}')">
-          <div class="rec-card-stars">${c.stars}</div>
-          <div class="rec-card-info">
-            <div class="rec-card-name">${c.name}</div>
-            <div class="rec-card-desc">${c.desc}</div>
-          </div>
-          <div class="rec-card-score">+${c.score}分</div>
-          ${speakBtn(c.speech)}
-        </div>`).join('')}
-    </div>`;
-}
-
 // ── 周度成就系统 ──────────────────────────────────────────────
 function renderWeeklyAchievement() {
   const el = document.getElementById('weeklyAchievementBanner');
