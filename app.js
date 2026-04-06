@@ -1116,14 +1116,33 @@ function renderDadPage() {
 // dadSwitchTab 已移除（子渊页和爸妈页现为独立Tab）
 
 function clearAllData() {
-  if (!confirm('确定要清空所有数据吗？\n\n这会删除：\n• 所有积分记录\n• 所有打卡历史\n• 所有兑换记录\n\n清空后无法恢复！')) return;
+  if (!confirm('确定要清空所有测试数据吗？\n\n这会删除：\n• 所有积分（总积分 + 本周积分）\n• 所有打卡历史\n• 所有英雄包 / 今日作业记录\n• 英雄挑战 / 勋章进度\n• 口算历史 / 最高分\n• 极速训练（跳绳）记录\n• 兑换记录\n• 品格英雄行为记录\n• Firebase 云端数据\n\n⚠️ PIN 码将保留，清空后无法恢复！')) return;
+
+  // ── 1. 清空 localStorage（保留 PIN 码）────────────────────
+  localStorage.removeItem('heroplan_v4');      // 主状态
+  localStorage.removeItem('heroplan_math_v1'); // 口算数据
+  // 兼容旧 key（如有残留）
   localStorage.removeItem('heroplan_state');
-  // 重置 Firebase（可选）
+
+  // ── 2. 清空 Firebase 所有数据路径 ────────────────────────
   if (window._firebaseReady) {
     try {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, '/'), null);
-    } catch(e) {}
+      const db = window._firebaseDB;
+      const ref = window._firebaseRef;
+      const set = window._firebaseSet;
+      // 逐路径清除，避免误删根节点结构
+      set(ref(db, 'pending'),      null);
+      set(ref(db, 'reviewed'),     null);
+      set(ref(db, 'syncScore'),    null);
+      set(ref(db, 'heroActions'),  null);
+      set(ref(db, 'weeklyPraise'), null);
+      set(ref(db, 'selfReport'),   null);
+    } catch(e) {
+      console.warn('Firebase 清空异常:', e);
+    }
   }
+
+  // ── 3. 重载页面 ───────────────────────────────────────────
   location.reload();
 }
 
