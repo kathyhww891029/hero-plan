@@ -516,6 +516,8 @@ body {
 }
 .btn-ft-done { background: #06D6A0; color: #fff; }
 .btn-ft-overtime { background: linear-gradient(135deg, #F9A825, #FF6B35); color: #fff; }
+.btn-ft-done.disabled { background: #e0e0e0; color: #aaa; cursor: not-allowed; }
+.btn-ft-overtime.disabled { background: #e0e0e0; color: #aaa; cursor: not-allowed; }
 .ft-done-summary { text-align: center; padding: 8px 0; }
 .ft-done-activity { font-size: 14px; color: #444; margin-bottom: 6px; }
 .ft-overtime-badge {

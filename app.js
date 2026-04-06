@@ -907,8 +907,9 @@ function renderFocusTime() {
         `<div class="ft-timer-row">
           <div class="ft-timer-big" id="focusTimerBig">${formatFocusSecs(_focusSeconds)}</div>
           <div class="ft-timer-hint">${ft.minutes}分钟 = 完成！停不下来就继续 🔥</div>
-          <button class="btn-ft-done" onclick="completeFocusTime(false)">✅ 完成了！（${ft.minutes}分钟到了）</button>
-          <button class="btn-ft-overtime" onclick="completeFocusTime(true)">⚡ 停不下来！继续超时（+${ft.bonusScore}分）</button>
+          <button class="btn-ft-done ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}" onclick="${_focusSeconds >= ft.minutes * 60 ? 'completeFocusTime(false)' : ''}" ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}>✅ 完成了！（${ft.minutes}分钟到了）</button>
+          <button class="btn-ft-overtime ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}" onclick="${_focusSeconds >= ft.minutes * 60 ? 'completeFocusTime(true)' : ''}" ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}>⚡ 停不下来！继续超时（+${ft.bonusScore}分）</button>
+          ${_focusSeconds < ft.minutes * 60 ? '<div style="margin-top:8px;font-size:0.8rem;color:#f44336">⏱️ 专注满' + ft.minutes + '分钟才能打卡哦，再坚持一下！</div>' : ''}
         </div>`}
       </div>` :
       `<div class="ft-done-summary">
