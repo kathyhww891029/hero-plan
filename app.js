@@ -255,6 +255,95 @@ function renderHeader() {
     dateEl.textContent = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${days[d.getDay()]}  ${h}:${m}:${s}`;
   }
   updateWelcomeArea();
+  renderMonthlyCalendar();
+}
+
+// ── 月历打卡记录 ───────────────────────────────────────────────
+var _calendarYear = new Date().getFullYear();
+var _calendarMonth = new Date().getMonth();
+
+function renderMonthlyCalendar() {
+  const container = document.getElementById('monthlyCalendar');
+  if (!container) return;
+  
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  const year = _calendarYear;
+  const month = _calendarMonth;
+  
+  // 获取当月第一天和最后一天
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startWeekday = firstDay.getDay();
+  const totalDays = lastDay.getDate();
+  
+  // 获取今天的日期字符串
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  
+  // 获取所有有打卡记录的日期（从streaks数据中提取）
+  var recordDates = new Set();
+  if (state.streaks) {
+    var keys = ['morning', 'night', 'homework', 'focus'];
+    for (var k = 0; k < keys.length; k++) {
+      var s = state.streaks[keys[k]];
+      if (s && s.lastDate) {
+        recordDates.add(s.lastDate);
+      }
+    }
+  }
+  
+  // 构建HTML
+  var html = '<div class="calendar-header">';
+  html += `<span class="calendar-title">📅 ${year}年${month+1}月</span>`;
+  html += '<div class="calendar-nav">';
+  html += `<button onclick="changeCalendarMonth(-1)">◀</button>`;
+  html += `<button onclick="changeCalendarMonth(1)">▶</button>`;
+  html += '</div></div>';
+  
+  // 星期标题
+  html += '<div class="calendar-weekdays">';
+  for (var i = 0; i < 7; i++) {
+    html += `<div class="calendar-weekday">${weekdays[i]}</div>`;
+  }
+  html += '</div>';
+  
+  // 日期
+  html += '<div class="calendar-days">';
+  
+  // 空格子
+  for (var j = 0; j < startWeekday; j++) {
+    html += '<div class="calendar-day empty"></div>';
+  }
+  
+  // 日期格子
+  for (var d = 1; d <= totalDays; d++) {
+    var dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    var isToday = (dateStr === todayStr);
+    var hasRecord = recordDates.has(dateStr);
+    var isFuture = dateStr > todayStr;
+    
+    var className = 'calendar-day';
+    if (isToday) className += ' today';
+    if (hasRecord) className += ' has-record';
+    if (isFuture) className += ' future';
+    
+    html += `<div class="${className}">${d}</div>`;
+  }
+  
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function changeCalendarMonth(delta) {
+  _calendarMonth += delta;
+  if (_calendarMonth > 11) {
+    _calendarMonth = 0;
+    _calendarYear++;
+  } else if (_calendarMonth < 0) {
+    _calendarMonth = 11;
+    _calendarYear--;
+  }
+  renderMonthlyCalendar();
 }
 
 // ── 渲染每日任务 ───────────────────────────────────────────────
