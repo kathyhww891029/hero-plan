@@ -130,10 +130,14 @@ function defaultState() {
     nightPack: {},            // { np1:true, np2:true, np3:true }
     morningPackBonus: false,  // 今日早晨英雄包全套奖励已发
     nightPackBonus: false,    // 今日睡前英雄包全套奖励已发
-    // 写作业双钥匙
-    hwStarted: false,         // 已开始写作业（小钥匙）
-    hwCompleted: false,       // 已写完作业（大钥匙）
+    // 写作业（简化单步）
+    hwCompleted: false,       // 已写完作业
     hwBlocks: 0,              // 今日已完成专注块数
+    // 专注力时光
+    focusSelected: null,      // 今日选择的活动 id
+    focusStarted: false,      // 已开始计时
+    focusCompleted: false,    // 已完成15分钟
+    focusOvertime: false,     // 超时继续（超级专注徽章）
     // 周度成就
     weeklyCardCount: 0,       // 本周已完成任务卡数
     weeklyAchievement: null,  // 本周成就等级
@@ -225,6 +229,7 @@ function renderDaily() {
   renderMorningPack();
   renderNightPack();
   renderHomeworkTask();
+  renderFocusTime();
   renderOptionalTasks();
   updateTodayScore();
 }
@@ -297,95 +302,77 @@ function renderNightPack() {
     </div>`;
 }
 
-// 渲染写作业（双钥匙+专注块）
+// 渲染写作业（简化：完成打卡 + 专注块）
 function renderHomeworkTask() {
   const el = document.getElementById('dailyOptional');
   if (!el) return;
   const hw = HOMEWORK_TASK;
   const blocks = state.hwBlocks || 0;
-  const started = !!state.hwStarted;
   const completed = !!state.hwCompleted;
   const blockScore = Math.min(blocks, hw.maxBlocks) * hw.scorePerBlock;
   const totalScore = blockScore + (completed ? hw.scoreComplete : 0);
 
   el.innerHTML = `
-    <div class="homework-card ${completed?'hw-complete':started?'hw-started':''}">
+    <div class="homework-card ${completed ? 'hw-complete' : ''}">
       <div class="hw-header">
         <span class="hw-icon">${hw.icon}</span>
         <div class="hw-title-area">
           <div class="hw-title">${hw.name}${speakBtn(hw.speech)}</div>
           <div class="hw-subtitle">
-            ${completed?'✅ 作业写完啦！所有可选任务已解锁！':
-              started?'🔑 已开始写作业，兴趣任务已解锁！':
-              '⬜ 开始写作业，解锁今天的兴趣任务'}
+            ${completed ? '✅ 作业写完啦！太棒了！' : '⬜ 写完作业打卡，获得+2分！'}
           </div>
         </div>
         <div class="hw-score">+${totalScore}分</div>
       </div>
 
       <div class="hw-blocks">
-        <div class="blocks-label">🍅 专注块（每10分钟不分心=+1分）</div>
+        <div class="blocks-label">🍅 专注块（每10分钟不分心 = +1分）</div>
         <div class="blocks-row">
           ${[1,2,3].map(i => `
             <div class="block-btn ${blocks>=i?'done':''}" onclick="addFocusBlock()">
               ${blocks>=i?'✅':'⬜'} 第${i}块
             </div>`).join('')}
         </div>
-        <div class="blocks-hint">最多3块，当前+${blockScore}分</div>
+        <div class="blocks-hint">最多3块，当前 +${blockScore}分</div>
       </div>
 
       <div class="hw-keys">
-        <div class="key-item ${started?'unlocked':''}" onclick="startHomework()">
-          🔑 开始写作业 → ${started?'<span style="color:#06D6A0">✅ 兴趣任务已解锁</span>':'点击打卡'}
-        </div>
-        <div class="key-item ${completed?'unlocked':started?'':'locked'}" onclick="${started?'completeHomework()':''}">
-          🔑🔑 写完作业（+2分）→ ${completed?'<span style="color:#06D6A0">✅ 全部任务已解锁</span>':started?'点击打卡':'先开始写'}
+        <div class="key-item ${completed?'unlocked':''}" onclick="completeHomework()" style="cursor:pointer">
+          📚 写完作业 (+2分) → ${completed ? '<span style="color:#06D6A0">✅ 已完成！</span>' : '点击打卡'}
         </div>
       </div>
-    </div>
-
-    <div class="optional-section">
-      <div class="optional-title">
-        🎮 今日可选任务
-        ${!started?'<span class="lock-hint">（开始写作业后解锁兴趣类）</span>':''}
-      </div>
-      ${renderOptionalList()}
     </div>`;
 }
 
-// 渲染可选任务列表（按钥匙状态显示锁定/解锁）
+// 渲染可选任务列表（无锁定，全部直接可用）
 function renderOptionalList() {
-  const started = !!state.hwStarted;
-  const completed = !!state.hwCompleted;
-
   return [...DAILY_OPTIONAL_INTEREST, ...DAILY_OPTIONAL_FUN].map(t => {
-    const isInterest = t.category === 'interest';
-    const isFun = t.category === 'fun';
-    const isLocked = isInterest ? !started : (isFun ? !completed : false);
     const status = state.todayChecked[t.id];
     const isPending = status === 'pending';
     const isApproved = status === 'approved';
-    const clickHandler = isLocked ? 'showLockHint()' : "toggleDaily('" + t.id + "'," + t.score + ")";
-    const subText = isLocked ? (isInterest ? '先开始写作业来解锁' : '先写完作业来解锁') : t.sub;
-    const tipHtml = (t.tip && !isLocked) ? '<div class="task-tip">💡 ' + t.tip + '</div>' : '';
+    const tipHtml = t.tip ? '<div class="task-tip">💡 ' + t.tip + '</div>' : '';
     const pendingHtml = isPending ? '<div class="task-pending-label">⏳ 等待爸妈审核</div>' : '';
 
-    return '<div class="daily-item ' + (isLocked?'locked-task':'') + ' ' + (isPending?'pending':'') + ' ' + (isApproved?'done':'') + '"' +
+    return '<div class="daily-item ' + (isPending?'pending':'') + ' ' + (isApproved?'done':'') + '"' +
       ' data-id="' + t.id + '"' +
-      ' onclick="' + clickHandler + '">' +
-      '<div class="task-icon">' + (isLocked ? '🔒' : t.icon) + '</div>' +
+      ' onclick="toggleDaily(\'' + t.id + '\',' + t.score + ')">' +
+      '<div class="task-icon">' + t.icon + '</div>' +
       '<div class="task-info">' +
-        '<div class="task-name">' + t.name + (isLocked ? '' : speakBtn(t.speech)) + '</div>' +
-        '<div class="task-sub">' + subText + '</div>' +
+        '<div class="task-name">' + t.name + speakBtn(t.speech) + '</div>' +
+        '<div class="task-sub">' + t.sub + '</div>' +
         tipHtml + pendingHtml +
       '</div>' +
-      '<div class="task-score ' + (isLocked?'locked-score':'') + '">+' + t.score + '</div>' +
+      '<div class="task-score">+' + t.score + '</div>' +
       '<div class="task-check">' + (isApproved?'✓':isPending?'⏳':'') + '</div>' +
     '</div>';
   }).join('');
 }
 
-function renderOptionalTasks() {} // 已整合进 renderHomeworkTask
+function renderOptionalTasks() {
+  const el = document.getElementById('dailyOptionalList');
+  if (!el) return;
+  el.innerHTML = renderOptionalList();
+}
 function togglePackItem(packType, id, score) {
   const packKey = packType === 'morning' ? 'morningPack' : 'nightPack';
   const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
@@ -438,17 +425,9 @@ function togglePackItem(packType, id, score) {
   }
 }
 
-// ── 写作业双钥匙 ──────────────────────────────────────────────
-function startHomework() {
-  if (state.hwStarted) return;
-  state.hwStarted = true;
-  saveState();
-  renderAll();
-  showCelebration('🔑', '小钥匙获得！', '开始写作业！兴趣任务已解锁——画画、跳舞、音乐可以做了！');
-}
-
+// ── 写作业（简化版）──────────────────────────────────────────
 function completeHomework() {
-  if (!state.hwStarted || state.hwCompleted) return;
+  if (state.hwCompleted) return;
   state.hwCompleted = true;
   state.totalScore += HOMEWORK_TASK.scoreComplete;
   saveState();
@@ -456,15 +435,11 @@ function completeHomework() {
     submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete);
   }
   renderAll();
-  showCelebration('🔑🔑', '大钥匙获得！', `作业写完了！+${HOMEWORK_TASK.scoreComplete}分！游戏、零食、电影全部解锁！`);
+  showCelebration('📚', '作业完成！', `写完作业了！+${HOMEWORK_TASK.scoreComplete}分！太棒了！`);
   setTimeout(() => tryShowShopBoost(HOMEWORK_TASK.scoreComplete, false), 1600);
 }
 
 function addFocusBlock() {
-  if (!state.hwStarted) {
-    showCelebration('⚠️', '先开始写作业', '点「开始写作业」来记录专注块！');
-    return;
-  }
   if (state.hwBlocks >= HOMEWORK_TASK.maxBlocks) {
     showCelebration('🏆', '专注块已满！', `已完成${HOMEWORK_TASK.maxBlocks}个专注块，太棒了！`);
     return;
@@ -479,8 +454,136 @@ function addFocusBlock() {
   showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
 }
 
-function showLockHint() {
-  showCelebration('🔒', '还没解锁', '先完成写作业的打卡，就能解锁这个任务！');
+// ── 专注力时光（独立模块）────────────────────────────────────
+let _focusTimer = null;
+let _focusSeconds = 0;
+let _focusTimerRunning = false;
+
+function renderFocusTime() {
+  const el = document.getElementById('dailyFocusTime');
+  if (!el) return;
+  const ft = FOCUS_TIME;
+  const selected = state.focusSelected;
+  const started = !!state.focusStarted;
+  const completed = !!state.focusCompleted;
+  const overtime = !!state.focusOvertime;
+  const menuItem = selected ? ft.menuItems.find(m => m.id === selected) : null;
+
+  el.innerHTML = `
+    <div class="focus-time-card ${completed ? 'ft-complete' : started ? 'ft-active' : ''}">
+      <div class="ft-header">
+        <span class="ft-icon">${ft.icon}</span>
+        <div class="ft-title-area">
+          <div class="ft-title">${ft.name} ${speakBtn(ft.speech)}</div>
+          <div class="ft-sub">${
+            overtime ? '⚡ 超级专注模式！停不下来最棒了！' :
+            completed ? '✅ 今日专注力时光完成！' :
+            started ? `⏱️ 专注中：<span id="focusTimerDisplay">${formatFocusSecs(_focusSeconds)}</span>` :
+            ft.sub
+          }</div>
+        </div>
+        <div class="ft-score">+${completed ? (overtime ? ft.score + ft.bonusScore : ft.score) : ft.score}分</div>
+      </div>
+
+      ${!completed ? `
+      <div class="ft-menu-label">🎯 今天想专注做什么？</div>
+      <div class="ft-menu">
+        ${ft.menuItems.map(m => `
+          <div class="ft-menu-item ${selected===m.id?'selected':''}" onclick="selectFocusActivity('${m.id}')">
+            <span>${m.icon}</span><span>${m.name}</span>
+          </div>`).join('')}
+      </div>
+      <div class="ft-actions">
+        ${!started ? `
+          <button class="btn-ft-start ${!selected?'disabled':''}" onclick="startFocusTime()" ${!selected?'disabled':''}>
+            ${selected ? `▶ 开始专注（${ft.minutes}分钟）` : '👆 先选一件事'}
+          </button>` :
+        `<div class="ft-timer-row">
+          <div class="ft-timer-big" id="focusTimerBig">${formatFocusSecs(_focusSeconds)}</div>
+          <div class="ft-timer-hint">${ft.minutes}分钟 = 完成！停不下来就继续 🔥</div>
+          <button class="btn-ft-done" onclick="completeFocusTime(false)">✅ 完成了！（${ft.minutes}分钟到了）</button>
+          <button class="btn-ft-overtime" onclick="completeFocusTime(true)">⚡ 停不下来！继续超时（+${ft.bonusScore}分）</button>
+        </div>`}
+      </div>` :
+      `<div class="ft-done-summary">
+        <div class="ft-done-activity">${menuItem ? menuItem.icon + ' ' + menuItem.name : ''}专注完成 🎉</div>
+        ${overtime ? '<div class="ft-overtime-badge">⚡ 超级专注徽章已解锁！</div>' : ''}
+      </div>`}
+    </div>`;
+
+  if (started && !completed && _focusTimerRunning) {
+    _startFocusDisplayUpdate();
+  }
+}
+
+function selectFocusActivity(id) {
+  if (state.focusStarted) return;
+  state.focusSelected = id;
+  saveState();
+  renderFocusTime();
+}
+
+function startFocusTime() {
+  if (!state.focusSelected || state.focusStarted) return;
+  state.focusStarted = true;
+  _focusSeconds = 0;
+  _focusTimerRunning = true;
+  saveState();
+  renderFocusTime();
+  _startFocusTimer();
+  showCelebration('🧠', '专注开始！', '找一个安静的地方，关掉干扰，专心做你选的事！');
+}
+
+function _startFocusTimer() {
+  if (_focusTimer) clearInterval(_focusTimer);
+  _focusTimer = setInterval(() => {
+    _focusSeconds++;
+    const d1 = document.getElementById('focusTimerDisplay');
+    const d2 = document.getElementById('focusTimerBig');
+    const t = formatFocusSecs(_focusSeconds);
+    if (d1) d1.textContent = t;
+    if (d2) d2.textContent = t;
+  }, 1000);
+}
+
+function _startFocusDisplayUpdate() {
+  const d1 = document.getElementById('focusTimerDisplay');
+  const d2 = document.getElementById('focusTimerBig');
+  if ((d1 || d2) && _focusTimerRunning) {
+    if (_focusTimer) clearInterval(_focusTimer);
+    _focusTimer = setInterval(() => {
+      _focusSeconds++;
+      const t = formatFocusSecs(_focusSeconds);
+      if (d1) d1.textContent = t;
+      if (d2) d2.textContent = t;
+    }, 1000);
+  }
+}
+
+function formatFocusSecs(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+function completeFocusTime(isOvertime) {
+  if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
+  _focusTimerRunning = false;
+  state.focusCompleted = true;
+  state.focusOvertime = isOvertime;
+  const pts = FOCUS_TIME.score + (isOvertime ? FOCUS_TIME.bonusScore : 0);
+  state.totalScore += pts;
+  saveState();
+  if (window._firebaseReady) {
+    submitPending('focus', 'focus_time', '专注力时光', pts);
+  }
+  renderAll();
+  if (isOvertime) {
+    showCelebration('⚡', '超级专注徽章！', `停不下来是最棒的状态！+${pts}分！超级专注徽章已解锁！`);
+  } else {
+    showCelebration('🧠', '专注力时光完成！', `专注了${FOCUS_TIME.minutes}分钟！+${pts}分！你越来越厉害了！`);
+  }
+  setTimeout(() => tryShowShopBoost(pts, false), 1600);
 }
 
 function toggleDaily(id, score) {
@@ -529,7 +632,7 @@ function toggleDaily(id, score) {
 
 // ── 自律自报弹窗 ───────────────────────────────────────────────
 function showSelfReportModal(taskId, taskName, score) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   // 如果该任务今天已自报过，跳过
   if (!state.selfReport) state.selfReport = {};
   if (!state.selfReport[today]) state.selfReport[today] = {};
@@ -928,38 +1031,103 @@ document.getElementById('btnRopeSubmit').addEventListener('click', () => {
 function renderDadGuide() {
   const el = document.getElementById('dadGuide');
   const g = DAD_GUIDE;
+  const nl2br = s => s.replace(/\n/g, '<br>');
+
   el.innerHTML = `
     <div class="dad-guide">
-      <div class="dad-guide-header">${g.title}</div>
-      <div class="dad-guide-body">
-        <div class="dad-tip-box" style="background:#FFF0E6">
-          <div class="dad-tip-title" style="color:#FF6B35">🎯 这套系统的核心理念</div>
-          <div class="dad-tip-text">我们希望培养的不是「听话的孩子」，而是「有自驱力的孩子」。核心不是奖惩，而是让孩子体验「我能做到」的成就感。</div>
-        </div>
-        <div style="font-size:14px;font-weight:700;padding:12px 0 8px">✅ 三个重要原则</div>
-        ${g.principles.map(p => `
-          <div class="dad-principle">
-            <div class="principle-icon">${p.icon}</div>
-            <div>
-              <div class="principle-title">${p.title}</div>
-              <div class="principle-desc">${p.desc}</div>
-            </div>
-          </div>`).join('')}
-        <div class="dad-tip-box">
-          <div class="dad-tip-title">💪 爸爸专区说明</div>
-          <div class="dad-tip-text">${g.dadZone}</div>
-        </div>
-        <div class="dad-tip-box" style="background:#EDFFF9">
-          <div class="dad-tip-title" style="color:#00897B">📅 每周结算你要做的事</div>
-          <div class="dad-tip-text">${g.weeklyTask}</div>
-        </div>
-        <div style="font-size:13px;font-weight:700;padding:8px 0 6px;color:#118AB2">💬 参考示例：</div>
-        ${g.examples.map(e => `<div class="dad-example">${e}</div>`).join('')}
-        <div style="text-align:center;padding:16px 0;font-size:13px;color:#666">
-          谢谢你的参与，孩子需要你 💪
+
+      <!-- 切换Tab -->
+      <div class="dad-tab-switch">
+        <button class="dad-switch-btn active" id="btnDadParent" onclick="dadSwitchTab('parent')">💌 写给爸爸妈妈</button>
+        <button class="dad-switch-btn" id="btnDadKid" onclick="dadSwitchTab('kid')">🦸 写给孩子的信</button>
+      </div>
+
+      <!-- 爸爸妈妈页 -->
+      <div id="dadPageParent" class="dad-page">
+        <div class="dad-guide-header">${g.parentTitle}</div>
+        <div class="dad-guide-body">
+          <div class="dad-tip-box" style="background:#FFF0E6;border-left:4px solid #FF6B35">
+            <div class="dad-tip-title" style="color:#FF6B35">🎯 这套系统的灵魂</div>
+            <div class="dad-tip-text" style="line-height:1.8">${nl2br(g.parentSoul)}</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">你们的角色</div>
+          ${g.parentRoles.map(r => `
+            <div class="dad-principle" style="align-items:center">
+              <div class="principle-icon">${r.icon}</div>
+              <div>
+                <span style="color:#aaa;text-decoration:line-through;font-size:13px">${r.role}</span>
+                <span style="color:#06D6A0;font-weight:700;font-size:13px;margin-left:6px">${r.become}</span>
+              </div>
+            </div>`).join('')}
+          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">四个使用原则</div>
+          ${g.parentPrinciples.map(p => `
+            <div class="dad-principle" style="align-items:flex-start">
+              <div class="principle-icon" style="background:#118AB2;color:#fff;min-width:28px;height:28px;font-size:13px">${p.icon}</div>
+              <div>
+                <div class="principle-title">${p.title}</div>
+                <div class="principle-desc">${p.desc}</div>
+              </div>
+            </div>`).join('')}
+          <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
+            <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.parentClosing)}</div>
+          </div>
+
+          <!-- 清空测试数据 -->
+          <div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center">
+            <div style="font-size:12px;color:#aaa;margin-bottom:8px">⚠️ 测试阶段专用，正式使用前请清空数据</div>
+            <button onclick="clearAllData()" style="background:#fff;border:2px solid #FF6B35;color:#FF6B35;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">
+              🗑️ 清空所有测试数据
+            </button>
+          </div>
         </div>
       </div>
+
+      <!-- 孩子页 -->
+      <div id="dadPageKid" class="dad-page" style="display:none">
+        <div class="dad-guide-header">${g.kidTitle}</div>
+        <div class="dad-guide-body">
+          <div class="dad-tip-box" style="background:#FFF8E7;border-left:4px solid #F9A825">
+            <div class="dad-tip-text" style="line-height:2;font-size:14px">${nl2br(g.kidOpening)}</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">⚔️ 怎么玩？</div>
+          <div style="font-size:13px;color:#666;margin-bottom:10px">每天，你有三种任务：</div>
+          ${g.kidRules.map(r => `
+            <div class="dad-principle" style="align-items:flex-start;background:#F8F9FF;border-radius:12px;padding:12px;margin-bottom:8px">
+              <div class="principle-icon" style="font-size:1.4rem;background:none;padding:0;margin-right:12px">${r.icon}</div>
+              <div>
+                <div class="principle-title">${r.title}</div>
+                <div class="principle-desc" style="line-height:1.8">${nl2br(r.desc)}</div>
+              </div>
+            </div>`).join('')}
+          <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">🎁 积分能换什么？</div>
+          ${g.kidShop.map(s => `
+            <div class="dad-example">${s.icon} ${s.name}：${s.cost}分</div>`).join('')}
+          <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
+            <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.kidClosing)}</div>
+          </div>
+        </div>
+      </div>
+
     </div>`;
+}
+
+function dadSwitchTab(tab) {
+  document.getElementById('dadPageParent').style.display = tab === 'parent' ? '' : 'none';
+  document.getElementById('dadPageKid').style.display = tab === 'kid' ? '' : 'none';
+  document.getElementById('btnDadParent').classList.toggle('active', tab === 'parent');
+  document.getElementById('btnDadKid').classList.toggle('active', tab === 'kid');
+}
+
+function clearAllData() {
+  if (!confirm('确定要清空所有数据吗？\n\n这会删除：\n• 所有积分记录\n• 所有打卡历史\n• 所有兑换记录\n\n清空后无法恢复！')) return;
+  localStorage.removeItem('heroplan_state');
+  // 重置 Firebase（可选）
+  if (window._firebaseReady) {
+    try {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, '/'), null);
+    } catch(e) {}
+  }
+  location.reload();
 }
 
 // ── 彩蛋弹窗 ───────────────────────────────────────────────────
@@ -1247,7 +1415,7 @@ function renderWeekly() {
   // ── 阶段横幅 ─────────────────────────────────────────────────
   const phaseEl = document.getElementById('phaseBanner');
   if (phaseEl) {
-    const startDate = state.phaseStartDate || new Date().toISOString().slice(0, 10);
+    const startDate = state.phaseStartDate || todayStr();
     const start = new Date(startDate);
     const now2 = new Date();
     const elapsed = Math.floor((now2 - start) / (1000 * 60 * 60 * 24));
@@ -1272,7 +1440,7 @@ function renderWeekly() {
     `;
     // 保存开始日期
     if (!state.phaseStartDate) {
-      state.phaseStartDate = new Date().toISOString().slice(0, 10);
+      state.phaseStartDate = todayStr();
       saveState();
     }
   }
@@ -2106,7 +2274,7 @@ function toggleDaily(id, score) {
 
 // ── 自律自报弹窗 ───────────────────────────────────────────────
 function showSelfReportModal(taskId, taskName, score) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   // 如果该任务今天已自报过，跳过
   if (!state.selfReport) state.selfReport = {};
   if (!state.selfReport[today]) state.selfReport[today] = {};

@@ -79,13 +79,13 @@
 
 <!-- 标签页 -->
 <nav class="tab-nav">
-  <button class="tab-btn active" data-tab="daily">⚡ 今日</button>
-  <button class="tab-btn" data-tab="weekly">📅 本周</button>
-  <button class="tab-btn" data-tab="cards">🎴 任务卡</button>
-  <button class="tab-btn" data-tab="achievements">🏆 成就</button>
-  <button class="tab-btn" data-tab="shop">🏪 补给站</button>
-  <button class="tab-btn" data-tab="rope">🪢 跳绳</button>
-  <button class="tab-btn" data-tab="dad">💌 爸爸</button>
+  <button class="tab-btn active" data-tab="daily">⚡ 今日出击</button>
+  <button class="tab-btn" data-tab="weekly">📅 本周战报</button>
+  <button class="tab-btn" data-tab="cards">⚔️ 英雄挑战</button>
+  <button class="tab-btn" data-tab="achievements">👑 英雄勋章</button>
+  <button class="tab-btn" data-tab="shop">🎁 宝藏屋</button>
+  <button class="tab-btn" data-tab="rope">💨 极速训练</button>
+  <button class="tab-btn" data-tab="dad">💌 爸爸妈妈</button>
   <button class="tab-btn" data-tab="math">🔢 口算</button>
   <button class="tab-btn parent-tab-btn" data-tab="parent">🔐 审核</button>
 </nav>
@@ -113,10 +113,22 @@
     <div id="dailyFixed"></div>
   </div>
 
-  <!-- 写作业 + 可选任务 -->
+  <!-- 写作业 -->
   <div class="card-section">
-    <div class="section-header purple">📚 今日任务 · 双钥匙解锁</div>
+    <div class="section-header purple">📚 今日作业</div>
     <div id="dailyOptional"></div>
+  </div>
+
+  <!-- 专注力时光 -->
+  <div class="card-section">
+    <div class="section-header" style="background:linear-gradient(135deg,#7B2FF7,#F107A3);color:#fff">🧠 专注力时光</div>
+    <div id="dailyFocusTime"></div>
+  </div>
+
+  <!-- 可选任务 -->
+  <div class="card-section">
+    <div class="section-header green">🎮 今日可选任务（自愿挑战）</div>
+    <div id="dailyOptionalList"></div>
   </div>
 
   <!-- 睡前英雄包 -->
@@ -132,7 +144,7 @@
       <span class="summary-score" id="todayScore">0</span>
       <span>分</span>
     </div>
-    <div class="summary-tip">全做到可得17分+ | 英雄包+作业+任务卡一起冲！⚡</div>
+    <div class="summary-tip">全做到可得17分+ | 英雄包+作业+英雄挑战一起冲！⚡</div>
     <button class="btn-reset" id="btnResetDay">🔄 新的一天（重置今日打卡）</button>
   </div>
 </div>
@@ -160,7 +172,7 @@
       </div>
       <div class="weekly-score-box">
         <div class="weekly-score-num" id="weeklyCardDone">0</div>
-        <div class="weekly-score-label">任务卡</div>
+        <div class="weekly-score-label">英雄挑战</div>
       </div>
     </div>
   </div>
@@ -183,20 +195,20 @@
     <div id="weeklyOptional"></div>
   </div>
 
-  <!-- 本周任务卡汇总 -->
+  <!-- 本周英雄挑战汇总 -->
   <div class="weekly-section">
-    <div class="weekly-section-title">🎴 本周可做任务卡 <span class="weekly-section-sub">点卡片去完成</span></div>
+    <div class="weekly-section-title">⚔️ 本周英雄挑战 <span class="weekly-section-sub">点卡片去完成</span></div>
     <div id="weeklyCards"></div>
   </div>
 
-  <!-- 本周兑换目标 -->
+  <!-- 本周宝藏屋目标 -->
   <div class="weekly-section">
-    <div class="weekly-section-title">🏪 本周兑换目标 <span class="weekly-section-sub">攒够分就能换</span></div>
+    <div class="weekly-section-title">🎁 本周宝藏屋目标 <span class="weekly-section-sub">攒够分就能换</span></div>
     <div id="weeklyShopGoal"></div>
   </div>
 </div>
 
-<!-- ═══ TAB: 成就中心 ═══ -->
+<!-- ═══ TAB: 英雄勋章 ═══ -->
 <div class="tab-content" id="tab-achievements">
   <!-- 英雄档案 -->
   <div class="ach-hero-card" id="achHeroCard">
@@ -217,7 +229,7 @@
 
   <!-- 任务卡系列进度 -->
   <div class="ach-section">
-    <div class="ach-section-title">🎯 任务卡系列进度</div>
+    <div class="ach-section-title">⚔️ 英雄挑战系列进度</div>
     <div class="ach-series-list" id="achSeriesList"></div>
   </div>
 
@@ -234,7 +246,7 @@
   </div>
 </div>
 
-<!-- ═══ TAB: 任务卡 ═══ -->
+<!-- ═══ TAB: 英雄挑战 ═══ -->
 <div class="tab-content" id="tab-cards">
   <div class="cards-filter">
     <button class="filter-btn active" data-filter="all">全部</button>
@@ -249,7 +261,7 @@
   <div id="cardsGrid"></div>
 </div>
 
-<!-- ═══ TAB: 补给站 ═══ -->
+<!-- ═══ TAB: 宝藏屋 ═══ -->
 <div class="tab-content" id="tab-shop">
   <div class="shop-balance">
     <div class="balance-label">当前积分</div>
