@@ -208,6 +208,8 @@ function renderAll() {
   renderDadPage();
   renderWeekly();
   renderAchievements();
+  // 英雄行为历史（子渊Tab）
+  if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
 }
 
 // ── 渲染头部 ──────────────────────────────────────────────────
@@ -1052,8 +1054,12 @@ function renderKidPage() {
             </div>
           </div>`).join('')}
         <div style="font-size:14px;font-weight:700;padding:14px 0 8px;color:#1a1a2e">🎁 积分能换什么？</div>
+        ${g.kidShopIntro ? `<div class="dad-tip-box" style="background:#F3EFFF;border-left:4px solid #7C3AED;margin-bottom:12px"><div class="dad-tip-text" style="line-height:1.9;font-size:13px">${nl2br(g.kidShopIntro)}</div></div>` : ''}
         ${g.kidShop.map(s => `
-          <div class="dad-example">${s.icon} ${s.name}：${s.cost}分</div>`).join('')}
+          <div class="dad-example" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#F8F9FF;border-radius:8px;margin-bottom:6px">
+            <span>${s.icon} <strong>${s.name}</strong></span>
+            <span style="color:#7C3AED;font-weight:700">${s.cost}分${s.desc ? ` · <span style="color:#aaa;font-weight:400;font-size:0.85em">${s.desc}</span>` : ''}</span>
+          </div>`).join('')}
         <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
           <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.kidClosing)}</div>
         </div>

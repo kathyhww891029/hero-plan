@@ -101,6 +101,8 @@ function parentLogin() {
   hint.textContent = '';
   loadPendingList();
   loadReviewedList();
+  // 渲染品格考核选项
+  if (typeof renderCharacterChecklist === 'function') renderCharacterChecklist();
 }
 
 function parentLogout() {
@@ -380,6 +382,218 @@ function showSyncBadge() {
     tryShowShopBoost(1); // score变化了就检查
   }
 }
+
+
+// ══════════════════════════════════════════════════════════════
+//  🏅 英雄品格记录
+// ══════════════════════════════════════════════════════════════
+
+// 渲染品格考核选项列表（父母端）
+function renderCharacterChecklist() {
+  const el = document.getElementById('characterChecklist');
+  if (!el) return;
+  if (typeof CHARACTER_CHECKS === 'undefined') return;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  el.innerHTML = CHARACTER_CHECKS.map(c => `
+    <div style="background:#FFFBF5;border:1.5px solid #FFE0B2;border-radius:12px;padding:12px 14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div style="font-size:0.92rem;font-weight:700;color:#1a1a2e;margin-bottom:3px">
+            ${c.icon} ${c.name}
+            <span style="font-size:0.78rem;color:#FF6B35;font-weight:600;margin-left:6px">+${c.score}分</span>
+          </div>
+          <div style="font-size:0.82rem;color:#888;line-height:1.5">${c.desc}</div>
+          <div style="font-size:0.78rem;color:#aaa;margin-top:3px">${c.categoryName}</div>
+        </div>
+        <button
+          style="flex-shrink:0;background:#FF6B35;color:#fff;border:none;border-radius:20px;padding:6px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap"
+          onclick="recordHeroAction('${c.id}', '${c.name}', ${c.score}, \`${c.praise.replace(/`/g, "'")}\`)">
+          记录 ✓
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+// 父母点击「记录」某条品格行为
+function recordHeroAction(checkId, name, score, praise) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const reviewer = currentParent === 'mom' ? '妈妈' : '爸爸';
+
+  // 1. 存入 Firebase reviewed（走积分审核通道，直接 approved）
+  window._firebasePush(fbRef('reviewed'), {
+    name: `🏅 品格记录·${name}`,
+    score,
+    result: 'approved',
+    reviewer,
+    reviewedAt: Date.now(),
+    date: todayStr,
+    type: 'character',
+    checkId,
+    praise
+  });
+
+  // 2. 同步积分
+  window._firebaseGet(fbRef('syncScore')).then(s => {
+    window._firebaseSet(fbRef('syncScore'), (s.val() || 0) + score);
+  });
+
+  // 3. 存入英雄行为历史（供子渊Tab查看）
+  window._firebasePush(fbRef('heroActions'), {
+    checkId, name, score, praise, reviewer,
+    date: todayStr,
+    ts: Date.now()
+  });
+
+  showParentToast(`🏅 已记录「${name}」+${score}分！子渊可以看到这条记录 💛`);
+
+  // 4. 刷新子渊端历史
+  if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
+}
+
+// 提交每周综合评价
+function submitWeeklyPraise() {
+  const textarea = document.getElementById('weeklyPraiseInput');
+  const text = textarea ? textarea.value.trim() : '';
+  if (!text) { showParentToast('❌ 请写一句这周子渊最让你骄傲的事'); return; }
+
+  const score = typeof WEEKLY_PRAISE_SCORE !== 'undefined' ? WEEKLY_PRAISE_SCORE : 5;
+  const reviewer = currentParent === 'mom' ? '妈妈' : '爸爸';
+  const weekStr = getWeekStartStr();
+
+  // 存入 Firebase reviewed（积分通道）
+  window._firebasePush(fbRef('reviewed'), {
+    name: `📝 每周评价`,
+    score,
+    result: 'approved',
+    reviewer,
+    reviewedAt: Date.now(),
+    date: new Date().toISOString().slice(0, 10),
+    type: 'weeklyPraise',
+    praiseText: text
+  });
+
+  // 同步积分
+  window._firebaseGet(fbRef('syncScore')).then(s => {
+    window._firebaseSet(fbRef('syncScore'), (s.val() || 0) + score);
+  });
+
+  // 存入每周评价历史（供子渊Tab查看）
+  window._firebaseSet(fbRef(`weeklyPraise/${weekStr}`), {
+    text, reviewer,
+    score,
+    ts: Date.now(),
+    week: weekStr
+  });
+
+  if (textarea) textarea.value = '';
+  showParentToast(`📝 本周评价已记录 +${score}分！子渊可以在自己的页面看到 💛`);
+
+  if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
+}
+
+// 获取本周开始日期字符串
+function getWeekStartStr() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(now.setDate(diff));
+  return monday.toISOString().slice(0, 10);
+}
+
+// ── 子渊端：渲染英雄行为历史（每日记录 + 每周评价）──────────────
+function renderKidHeroHistory() {
+  const el = document.getElementById('kidHeroHistory');
+  if (!el || !window._firebaseReady) return;
+
+  el.innerHTML = '<div style="text-align:center;color:#ccc;font-size:13px;padding:12px">加载中…</div>';
+
+  // 同时读取 heroActions 和 weeklyPraise
+  Promise.all([
+    window._firebaseGet(fbRef('heroActions')),
+    window._firebaseGet(fbRef('weeklyPraise'))
+  ]).then(([actSnap, praiseSnap]) => {
+    const actions = actSnap.val() || {};
+    const praises = praiseSnap.val() || {};
+
+    const actionList = Object.values(actions)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 30); // 最多显示30条
+
+    const praiseList = Object.values(praises)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 10); // 最多显示10周
+
+    if (actionList.length === 0 && praiseList.length === 0) {
+      el.innerHTML = `
+        <div style="background:#FFF8E7;border-radius:14px;padding:16px;text-align:center;margin:0 4px">
+          <div style="font-size:2rem;margin-bottom:8px">🌱</div>
+          <div style="font-size:13px;color:#888">爸爸妈妈还没有记录英雄行为哦<br>继续加油，他们一直在观察你！</div>
+        </div>`;
+      return;
+    }
+
+    let html = `<div style="padding:4px 0 8px">
+      <div style="font-size:15px;font-weight:700;color:#1a1a2e;padding:8px 4px 12px">🏅 爸妈眼中的你</div>`;
+
+    // 每周评价板块
+    if (praiseList.length > 0) {
+      html += `<div style="background:linear-gradient(135deg,#E8F5E9,#F1F8E9);border-radius:14px;padding:14px;margin-bottom:14px;border:1.5px solid #A5D6A7">
+        <div style="font-size:13px;font-weight:700;color:#2E7D32;margin-bottom:10px">📝 爸妈的每周评价</div>`;
+      praiseList.forEach(p => {
+        const d = new Date(p.ts);
+        const dateStr = d.getMonth()+1 + '月' + d.getDate() + '日这一周';
+        html += `<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;border-left:3px solid #4CAF50">
+          <div style="font-size:12px;color:#4CAF50;font-weight:700;margin-bottom:4px">${dateStr} · ${p.reviewer}写的 · +${p.score}分</div>
+          <div style="font-size:13px;color:#333;line-height:1.6">"${p.text}"</div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // 每日英雄行为记录
+    if (actionList.length > 0) {
+      // 按日期分组
+      const byDate = {};
+      actionList.forEach(a => {
+        if (!byDate[a.date]) byDate[a.date] = [];
+        byDate[a.date].push(a);
+      });
+
+      html += `<div style="background:#FFF9F0;border-radius:14px;padding:14px;border:1.5px solid #FFCC80">
+        <div style="font-size:13px;font-weight:700;color:#E65100;margin-bottom:10px">✨ 英雄行为记录</div>`;
+
+      Object.keys(byDate).sort((a,b) => b.localeCompare(a)).forEach(date => {
+        const items = byDate[date];
+        const d = new Date(date + 'T00:00:00');
+        const dateLabel = (d.getMonth()+1) + '月' + d.getDate() + '日';
+        const dayTotal = items.reduce((s, i) => s + i.score, 0);
+        html += `<div style="margin-bottom:10px">
+          <div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:6px;letter-spacing:0.5px">${dateLabel} · 共+${dayTotal}分</div>`;
+        items.forEach(a => {
+          html += `<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:6px;border-left:3px solid #FF6B35">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:700;color:#1a1a2e">${a.name}</span>
+              <span style="font-size:12px;color:#FF6B35;font-weight:700">+${a.score}分</span>
+            </div>
+            <div style="font-size:12px;color:#888;line-height:1.5">${a.praise}</div>
+            <div style="font-size:11px;color:#ccc;margin-top:4px">${a.reviewer}记录</div>
+          </div>`;
+        });
+        html += `</div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+    el.innerHTML = html;
+  }).catch(err => {
+    console.error('加载英雄行为历史失败', err);
+    el.innerHTML = '<div style="text-align:center;color:#ccc;font-size:12px;padding:12px">加载失败，请刷新重试</div>';
+  });
+}
+
 
 // ── Firebase 就绪后启动监听 ───────────────────────────────────
 window.addEventListener('firebaseReady', () => {

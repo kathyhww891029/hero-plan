@@ -283,6 +283,9 @@
 <!-- ═══ TAB: 写给子渊的信 ═══ -->
 <div class="tab-content" id="tab-kid">
   <div id="kidPage"></div>
+
+  <!-- 🏅 爸妈记录的英雄行为 -->
+  <div id="kidHeroHistory" style="margin-top:8px;padding:0 4px 20px"></div>
 </div>
 
 <!-- ═══ TAB: 爸爸妈妈要牢记 ═══ -->
@@ -467,6 +470,33 @@
         <input type="number" id="bonusInput" placeholder="输入奖励分数" min="1" max="50" class="bonus-input">
         <input type="text" id="bonusReason" placeholder="原因（可选）" class="bonus-reason-input">
         <button class="btn-primary" onclick="addManualBonus()">发放奖励</button>
+      </div>
+    </div>
+
+    <!-- ✨ 英雄品格记录 -->
+    <div class="parent-section">
+      <div class="section-header" style="background:linear-gradient(135deg,#FFF0E6,#FFE4CC);color:#E65100;border-left:4px solid #FF6B35">
+        🏅 今日英雄行为记录
+      </div>
+      <div style="font-size:12px;color:#888;padding:6px 0 10px;line-height:1.6">
+        发现子渊有以下行为，点击记录并加分 ✨<br>不是每天必须，看到了就记录！
+      </div>
+      <!-- 品格考核卡片由JS渲染 -->
+      <div id="characterChecklist"></div>
+    </div>
+
+    <!-- 📅 每周综合评价 -->
+    <div class="parent-section">
+      <div class="section-header" style="background:linear-gradient(135deg,#E8F5E9,#C8E6C9);color:#2E7D32;border-left:4px solid #4CAF50">
+        📝 本周综合评价
+      </div>
+      <div style="font-size:12px;color:#888;padding:6px 0 10px;line-height:1.6">
+        每周写一句话，记录这周子渊最让你骄傲的事，自动加5分 🌟
+      </div>
+      <div style="display:flex;gap:8px;flex-direction:column">
+        <textarea id="weeklyPraiseInput" placeholder="比如：这周子渊主动帮妈妈端菜，还安慰了哭泣的同学……"
+          style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1.5px solid #e0e0e0;font-size:13px;line-height:1.7;resize:none;height:80px;font-family:inherit"></textarea>
+        <button class="btn-primary" style="background:#4CAF50" onclick="submitWeeklyPraise()">记录本周评价 +5分</button>
       </div>
     </div>
   </div>
