@@ -148,7 +148,7 @@ function loadPendingList() {
     items.sort((a, b) => a.submittedAt - b.submittedAt);
 
     el.innerHTML = items.map(item => `
-      <div class="pending-item" id="pi-${item.key}">
+      <div class="pending-item" id="pi-${item.key}" data-step="1">
         <div class="pending-info">
           <div class="pending-name">${item.name}</div>
           <div class="pending-meta">${item.date} ${item.time} · ${typeLabel(item.type)}</div>
@@ -156,8 +156,21 @@ function loadPendingList() {
         </div>
         <div class="pending-score">+${item.score}分</div>
         <div class="pending-actions">
-          <button class="btn-approve" onclick="approveOne('${item.key}',${item.score},'${item.name}','${item.taskId||''}','${item.type||'daily'}')">✅</button>
-          <button class="btn-reject" onclick="rejectOne('${item.key}','${item.name}','${item.taskId||''}','${item.type||'daily'}')">❌</button>
+          <!-- Step 1: 选择通过 or 驳回 -->
+          <div class="step1-actions">
+            <button class="btn-approve" onclick="step1Approve('${item.key}')">✅</button>
+            <button class="btn-reject" onclick="step1Reject('${item.key}')">❌</button>
+          </div>
+          <!-- Step 2: 通过后选择是否自主完成 -->
+          <div class="step2-approve" style="display:none">
+            <button class="btn-self" onclick="approveOneStep2('${item.key}', true)">💪</button>
+            <button class="btn-reminded" onclick="approveOneStep2('${item.key}', false)">👋</button>
+          </div>
+          <!-- Step 2: 驳回确认 -->
+          <div class="step2-reject" style="display:none">
+            <button class="btn-confirm-reject" onclick="rejectOneConfirm('${item.key}')">⚠️</button>
+            <button class="btn-cancel" onclick="cancelStep2('${item.key}')">取消</button>
+          </div>
         </div>
       </div>`).join('');
     batchBtns.style.display = 'flex';
@@ -167,6 +180,53 @@ function loadPendingList() {
 function typeLabel(type) {
   const map = { daily:'每日任务', card:'任务卡', rope:'跳绳', manual:'手动奖励' };
   return map[type] || type;
+}
+
+// ── 父母审核两步操作辅助函数 ───────────────────────────────────
+// Step1: 点通过 → 显示第二步选择是否自主完成
+function step1Approve(key) {
+  const pi = document.getElementById('pi-' + key);
+  if (!pi) return;
+  pi.dataset.step = '2approve';
+  pi.querySelector('.step1-actions').style.display = 'none';
+  pi.querySelector('.step2-approve').style.display = 'flex';
+  pi.querySelector('.step2-reject').style.display = 'none';
+}
+// Step1: 点驳回 → 显示确认
+function step1Reject(key) {
+  const pi = document.getElementById('pi-' + key);
+  if (!pi) return;
+  pi.dataset.step = '2reject';
+  pi.querySelector('.step1-actions').style.display = 'none';
+  pi.querySelector('.step2-approve').style.display = 'none';
+  pi.querySelector('.step2-reject').style.display = 'flex';
+}
+// 取消第二步 → 回到第一步
+function cancelStep2(key) {
+  const pi = document.getElementById('pi-' + key);
+  if (!pi) return;
+  pi.dataset.step = '1';
+  pi.querySelector('.step1-actions').style.display = 'flex';
+  pi.querySelector('.step2-approve').style.display = 'none';
+  pi.querySelector('.step2-reject').style.display = 'none';
+}
+// 通过时：带上 isSelf 调用实际的 approveOne 逻辑
+function approveOneStep2(key, isSelf) {
+  // 先读取 pending 记录获取完整数据，再调用内部逻辑
+  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
+    const val = snap.val();
+    if (!val) { showParentToast('记录不存在'); return; }
+    // 调用带 isSelf 的实际审核逻辑
+    doApproveOne(key, val.score, val.name, val.taskId || '', val.type || 'daily', isSelf);
+  });
+}
+// 驳回确认：调用实际的 rejectOne 逻辑
+function rejectOneConfirm(key) {
+  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
+    const val = snap.val();
+    if (!val) { showParentToast('记录不存在'); return; }
+    doRejectOne(key, val.name, val.taskId || '', val.type || 'daily');
+  });
 }
 
 // ── 审核通过单条 ──────────────────────────────────────────────
@@ -207,90 +267,105 @@ function calcOptionalEffectiveScore(item, score) {
   }
 }
 
-function approveOne(key, score, name, taskId, taskType) {
+// 内部实现：审核通过（isSelf 由父母在第二步明确选择）
+function doApproveOne(key, score, name, taskId, taskType, isSelf) {
   if (!window._firebaseReady) return;
-  // 先读取 pending 记录，获取 isSelf
-  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
-    const val = snap.val() || {};
-    const isSelf = val.isSelf !== undefined ? val.isSelf : null;
+  // 固定任务地板机制：可选任务检查
+  const fakeItem = { type: taskType || 'daily', taskId: taskId || '' };
+  const effectiveScore = calcOptionalEffectiveScore(fakeItem, score);
+  const scoreNote = effectiveScore < score
+    ? `（固定任务未达标，实得${effectiveScore}分）`
+    : '';
 
-    // 固定任务地板机制：可选任务检查
-    const fakeItem = { type: taskType || 'daily', taskId: taskId || '' };
-    const effectiveScore = calcOptionalEffectiveScore(fakeItem, score);
-    const scoreNote = effectiveScore < score
-      ? `（固定任务未达标，实得${effectiveScore}分）`
-      : '';
-
-    // 加入已审记录（含 isSelf）
-    window._firebasePush(fbRef('reviewed'), {
-      name, score: effectiveScore, originalScore: score, result: 'approved',
-      isSelf: isSelf,  // 记录是否自主完成
-      reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-      reviewedAt: Date.now(),
-      date: new Date().toISOString().slice(0, 10),
-      scoreNote
-    });
-    // 更新 Firebase 总分
-    window._firebaseGet(fbRef('syncScore')).then(snap2 => {
-      const cur = snap2.val() || 0;
-      window._firebaseSet(fbRef('syncScore'), cur + effectiveScore);
-    });
-    // 更新本地 totalScore（审核通过后才正式入账）+ 更新月度自律统计
-    if (typeof onParentApprove === 'function') {
-      onParentApprove(taskType || 'daily', taskId || '', effectiveScore, isSelf);
-    }
-    // 删除 pending
-    window._firebaseRemove(fbRef('pending/' + key));
-    const msg = effectiveScore < score
-      ? `✅ 已通过「${name}」，+${effectiveScore}分${scoreNote}`
-      : `✅ 已通过「${name}」，+${score}分！`;
-    showParentToast(msg);
+  // 加入已审记录（含 isSelf）
+  window._firebasePush(fbRef('reviewed'), {
+    name, score: effectiveScore, originalScore: score, result: 'approved',
+    isSelf: isSelf,  // 父母明确选择的自律结果
+    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
+    reviewedAt: Date.now(),
+    date: new Date().toISOString().slice(0, 10),
+    scoreNote
   });
+  // 更新 Firebase 总分
+  window._firebaseGet(fbRef('syncScore')).then(snap2 => {
+    const cur = snap2.val() || 0;
+    window._firebaseSet(fbRef('syncScore'), cur + effectiveScore);
+  });
+  // 更新本地 totalScore（审核通过后才正式入账）+ 更新月度自律统计
+  if (typeof onParentApprove === 'function') {
+    onParentApprove(taskType || 'daily', taskId || '', effectiveScore, isSelf);
+  }
+  // 删除 pending
+  window._firebaseRemove(fbRef('pending/' + key));
+  const msg = effectiveScore < score
+    ? `✅ 已通过「${name}」，+${effectiveScore}分${scoreNote}`
+    : `✅ 已通过「${name}」，+${score}分！`;
+  showParentToast(msg);
 }
 
-// ── 驳回单条 ──────────────────────────────────────────────────
-function rejectOne(key, name, taskId, taskType) {
+// 内部实现：驳回单条
+function doRejectOne(key, name, taskId, taskType) {
   if (!window._firebaseReady) return;
-  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
-    const val = snap.val() || {};
-    const isSelf = val.isSelf !== undefined ? val.isSelf : null;
-    window._firebasePush(fbRef('reviewed'), {
-      name, score: 0, result: 'rejected',
-      isSelf: isSelf,  // 记录是否自主完成
-      reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-      reviewedAt: Date.now(),
-      date: new Date().toISOString().slice(0, 10)
-    });
-    // 更新本地：审核驳回
-    if (typeof onParentReject === 'function') {
-      onParentReject(taskType || 'daily', taskId || '', isSelf);
-    }
-    window._firebaseRemove(fbRef('pending/' + key));
-    showParentToast(`❌ 已驳回「${name}」`);
+  window._firebasePush(fbRef('reviewed'), {
+    name, score: 0, result: 'rejected',
+    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
+    reviewedAt: Date.now(),
+    date: new Date().toISOString().slice(0, 10)
   });
+  // 更新本地：审核驳回
+  if (typeof onParentReject === 'function') {
+    onParentReject(taskType || 'daily', taskId || '', null);
+  }
+  window._firebaseRemove(fbRef('pending/' + key));
+  showParentToast(`❌ 已驳回「${name}」`);
 }
 
 // ── 全部通过 ──────────────────────────────────────────────────
+// 第一步：弹出自律选择 modal
 function approveAll() {
   if (!window._firebaseReady) return;
+  showBatchApproveModal();
+}
+
+// 批量通过自律选择 modal
+function showBatchApproveModal() {
+  closeBatchModal();
+  const overlay = document.createElement('div');
+  overlay.id = 'batchModal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.12);">
+      <div style="font-size:22px;margin-bottom:8px;">✅ 全部通过</div>
+      <div style="color:#666;font-size:15px;margin-bottom:22px;">这些任务，孩子都是自己完成的吗？</div>
+      <button onclick="doApproveAllWithSelf(true)" style="width:100%;padding:13px;border:none;border-radius:12px;background:#e8f5e9;color:#2e7d32;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">💪 全是自己完成</button>
+      <button onclick="doApproveAllWithSelf(false)" style="width:100%;padding:13px;border:none;border-radius:12px;background:#fff8e1;color:#f57f17;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">👋 有爸妈提醒</button>
+      <button onclick="closeBatchModal()" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:12px;background:#fff;color:#757575;font-size:14px;cursor:pointer;">取消</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeBatchModal(); });
+}
+function closeBatchModal() {
+  const m = document.getElementById('batchModal');
+  if (m) m.remove();
+}
+// 实际执行批量通过，isSelf 由父母在 modal 中选择
+function doApproveAllWithSelf(isSelf) {
+  closeBatchModal();
   window._firebaseGet(fbRef('pending')).then(snap => {
     const data = snap.val();
     if (!data) return;
     let totalAdd = 0;
     Object.entries(data).forEach(([key, val]) => {
-      // 应用固定任务地板机制
       const fakeItem = { type: val.type || 'daily', taskId: val.taskId || '' };
       const effectiveScore = calcOptionalEffectiveScore(fakeItem, val.score);
       totalAdd += effectiveScore;
-      const isSelf = val.isSelf !== undefined ? val.isSelf : null;
       window._firebasePush(fbRef('reviewed'), {
         name: val.name, score: effectiveScore, originalScore: val.score, result: 'approved',
-        isSelf: isSelf,  // 记录是否自主完成
+        isSelf: isSelf,  // 父母明确选择的自律结果
         reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
-      // 更新本地 totalScore + 月度自律统计
       if (typeof onParentApprove === 'function') {
         onParentApprove(val.type || 'daily', val.taskId || '', effectiveScore, isSelf);
       }
@@ -306,21 +381,20 @@ function approveAll() {
 // ── 全部驳回 ──────────────────────────────────────────────────
 function rejectAll() {
   if (!window._firebaseReady) return;
+  if (!confirm('确定要驳回所有待审记录吗？')) return;
   window._firebaseGet(fbRef('pending')).then(snap => {
     const data = snap.val();
     if (!data) return;
     Object.entries(data).forEach(([key, val]) => {
-      const isSelf = val.isSelf !== undefined ? val.isSelf : null;
       window._firebasePush(fbRef('reviewed'), {
         name: val.name, score: 0, result: 'rejected',
-        isSelf: isSelf,  // 记录是否自主完成
         reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
       // 更新本地：审核驳回
       if (typeof onParentReject === 'function') {
-        onParentReject(val.type || 'daily', val.taskId || '', isSelf);
+        onParentReject(val.type || 'daily', val.taskId || '', null);
       }
       window._firebaseRemove(fbRef('pending/' + key));
     });
@@ -343,6 +417,8 @@ function loadReviewedList() {
       <div class="reviewed-item ${item.result}">
         <span class="reviewed-icon">${item.result === 'approved' ? '✅' : '❌'}</span>
         <span class="reviewed-name">${item.name}</span>
+        ${item.result === 'approved' && item.isSelf === true ? '<span class="reviewed-self-badge" title="自己完成">💪</span>' : ''}
+        ${item.result === 'approved' && item.isSelf === false ? '<span class="reviewed-self-badge" title="爸妈提醒">👋</span>' : ''}
         <span class="reviewed-score">${item.result === 'approved' ? '+'+item.score+'分' : '驳回'}</span>
         <span class="reviewed-by">${item.reviewer}</span>
         <span class="reviewed-date">${item.date}</span>
