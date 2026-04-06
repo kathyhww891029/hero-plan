@@ -497,7 +497,7 @@ function renderHomeworkTask() {
 
       <div class="hw-keys">
         <div class="key-item ${completed?'unlocked':''}" onclick="completeHomework()" style="cursor:pointer">
-          📚 写完作业 (+2分) → ${completed ? '<span style="color:#06D6A0">✅ 已完成！</span>' : '点击打卡'}
+          📚 写完作业 (+2分) → ${completed ? '<span style="color:#FF6B35">↩️ 点击撤销</span>' : '点击打卡'}
         </div>
       </div>
     </div>`;
@@ -566,6 +566,9 @@ function renderSelfPick() {
         <div class="ft-done-summary">
           <div class="ft-done-activity">${card.series} · ${card.name} 挑战完成 🎉</div>
         </div>
+        <button onclick="cancelSelfPick()" style="margin:10px 4px 0;padding:10px 16px;border-radius:10px;border:none;background:#f0f0f5;color:#666;font-size:0.9rem;font-weight:600;cursor:pointer;">
+          ↩️ 点此撤销
+        </button>
       </div>`;
     return;
   }
@@ -644,6 +647,26 @@ function selectSelfPick(id) {
 }
 
 function cancelSelfPick() {
+  // 如果已经claim过，需要撤销积分
+  if (state.selfPickClaimed && state.selfPickCard) {
+    const card = TASK_CARDS.find(c => c.id === state.selfPickCard);
+    if (card) {
+      // 撤销cardClaims
+      if (state.cardClaims && state.cardClaims[card.id]) {
+        state.cardClaims[card.id]--;
+        if (state.cardClaims[card.id] <= 0) {
+          delete state.cardClaims[card.id];
+          // 如果是该卡片第一次被claim，撤销周度计数
+          state.weeklyCardCount = Math.max(0, (state.weeklyCardCount || 0) - 1);
+        }
+      }
+      // 撤销阅读计数
+      if (card.series && card.series.includes('阅读')) {
+        state.readCount = Math.max(0, (state.readCount || 0) - 1);
+      }
+      showCelebration('↩️', '已撤销', `「${card.name}」挑战打卡已撤销`);
+    }
+  }
   state.selfPickCard = null;
   state.selfPickClaimed = false;
   saveState();
@@ -781,8 +804,31 @@ function togglePackItem(packType, id, score) {
 }
 
 // ── 写作业（简化版）──────────────────────────────────────────
+function undoHomework() {
+  if (!state.hwCompleted) return;
+  state.hwCompleted = false;
+  state.totalScore -= HOMEWORK_TASK.scoreComplete;
+  if (state.totalScore < 0) state.totalScore = 0;
+  // 撤销streak：清空今天的记录
+  if (state.streaks && state.streaks.homework && state.streaks.homework.lastDate === todayStr()) {
+    state.streaks.homework.count = 0;
+    state.streaks.homework.lastDate = '';
+  }
+  saveState();
+  if (window._firebaseReady) {
+    // 删除pending记录（设为null）
+    submitPending('homework', 'hw_complete', null, null);
+  }
+  renderAll();
+  showCelebration('↩️', '已撤销', '作业打卡已撤销，分数已扣回');
+}
+
 function completeHomework() {
-  if (state.hwCompleted) return;
+  if (state.hwCompleted) {
+    // 已完成，切换为撤销模式
+    undoHomework();
+    return;
+  }
   state.hwCompleted = true;
   state.totalScore += HOMEWORK_TASK.scoreComplete;
   updateStreak('homework');
@@ -868,6 +914,9 @@ function renderFocusTime() {
       `<div class="ft-done-summary">
         <div class="ft-done-activity">${menuItem ? menuItem.icon + ' ' + menuItem.name : ''}专注完成 🎉</div>
         ${overtime ? '<div class="ft-overtime-badge">⚡ 超级专注徽章已解锁！</div>' : ''}
+        <button class="btn-ft-undo" onclick="undoFocusTime()" style="margin-top:10px;padding:10px 16px;border-radius:10px;border:none;background:#f0f0f5;color:#666;font-size:0.9rem;font-weight:600;cursor:pointer;">
+          ↩️ 点此撤销
+        </button>
       </div>`}
     </div>`;
 
@@ -926,7 +975,38 @@ function formatFocusSecs(secs) {
   return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
 }
 
+function undoFocusTime() {
+  if (!state.focusCompleted) return;
+  const wasOvertime = !!state.focusOvertime;
+  const pts = FOCUS_TIME.score + (wasOvertime ? FOCUS_TIME.bonusScore : 0);
+  state.focusCompleted = false;
+  state.focusOvertime = false;
+  state.focusSelected = null;
+  state.focusStarted = null;
+  _focusSeconds = 0;
+  if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
+  _focusTimerRunning = false;
+  state.totalScore -= pts;
+  if (state.totalScore < 0) state.totalScore = 0;
+  // 撤销streak
+  if (state.streaks && state.streaks.focus && state.streaks.focus.lastDate === todayStr()) {
+    state.streaks.focus.count = 0;
+    state.streaks.focus.lastDate = '';
+  }
+  saveState();
+  if (window._firebaseReady) {
+    submitPending('focus', 'focus_time', null, null);
+  }
+  renderAll();
+  showCelebration('↩️', '已撤销', '专注力时光打卡已撤销，分数已扣回');
+}
+
 function completeFocusTime(isOvertime) {
+  if (state.focusCompleted) {
+    // 已完成，切换为撤销模式
+    undoFocusTime();
+    return;
+  }
   if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
   _focusTimerRunning = false;
   state.focusCompleted = true;
