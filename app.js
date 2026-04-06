@@ -485,10 +485,10 @@ function renderHomeworkTask() {
       </div>
 
       <div class="hw-blocks">
-        <div class="blocks-label">🍅 专注块（每10分钟不分心 = +1分）</div>
+        <div class="blocks-label">🍅 专注块（每10分钟不分心 = +1分，点击可撤销）</div>
         <div class="blocks-row">
           ${[1,2,3].map(i => `
-            <div class="block-btn ${blocks>=i?'done':''}" onclick="addFocusBlock()">
+            <div class="block-btn ${blocks>=i?'done':''}" onclick="toggleFocusBlock(${i})">
               ${blocks>=i?'✅':'⬜'} 第${i}块
             </div>`).join('')}
         </div>
@@ -843,21 +843,38 @@ function completeHomework() {
   });
 }
 
-function addFocusBlock() {
-  if (state.hwBlocks >= HOMEWORK_TASK.maxBlocks) {
-    showCelebration('🏆', '专注块已满！', `已完成${HOMEWORK_TASK.maxBlocks}个专注块，太棒了！`);
-    return;
+function toggleFocusBlock(idx) {
+  const currentBlocks = state.hwBlocks || 0;
+  
+  if (currentBlocks >= idx) {
+    // 撤销：从 idx 块开始全部撤销
+    const blocksToRemove = currentBlocks - idx + 1;
+    state.totalScore -= blocksToRemove * HOMEWORK_TASK.scorePerBlock;
+    if (state.totalScore < 0) state.totalScore = 0;
+    state.hwBlocks = idx - 1;
+    saveState();
+    if (window._firebaseReady) {
+      submitPending('homework', 'hw_block_' + idx, null, null);
+    }
+    renderAll();
+    showCelebration('↩️', '已撤销', `第${idx}块及之后的专注块已撤销`);
+  } else {
+    // 新增专注块
+    if (currentBlocks >= HOMEWORK_TASK.maxBlocks) {
+      showCelebration('🏆', '专注块已满！', `已完成${HOMEWORK_TASK.maxBlocks}个专注块，太棒了！`);
+      return;
+    }
+    state.hwBlocks = currentBlocks + 1;
+    state.totalScore += HOMEWORK_TASK.scorePerBlock;
+    saveState();
+    if (window._firebaseReady) {
+      submitPending('homework', 'hw_block_'+state.hwBlocks, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock);
+    }
+    renderAll();
+    showSelfReportUnified(`hw_block_${state.hwBlocks}`, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock, '🍅', (isSelf) => {
+      showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
+    });
   }
-  state.hwBlocks = (state.hwBlocks || 0) + 1;
-  state.totalScore += HOMEWORK_TASK.scorePerBlock;
-  saveState();
-  if (window._firebaseReady) {
-    submitPending('homework', 'hw_block_'+state.hwBlocks, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock);
-  }
-  renderAll();
-  showSelfReportUnified(`hw_block_${state.hwBlocks}`, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock, '🍅', (isSelf) => {
-    showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
-  });
 }
 
 // ── 专注力时光（独立模块）────────────────────────────────────
