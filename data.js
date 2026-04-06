@@ -201,6 +201,7 @@ const TASK_CARDS = [
     desc:'选一件事（画画/积木/看书），定时10分钟，中途不分心做完',
     tip:'📌 规则：\n①自己选一件喜欢的事\n②让爸妈帮你定时10分钟\n③铃声响之前不能停下来\n④做到了来领分！',
     score:4, unlockAt:0, unlocked:true,
+    recommendWeight:30,   // Phase1主推，已解锁，高权重
     speech:'专注小勇士！选一件事，定时10分钟，中途不分心，铃响前不停下来，做到得4分！'
   },
   {
@@ -210,6 +211,7 @@ const TASK_CARDS = [
     desc:'连续完成两个10分钟专注块（中间可以休息5分钟）',
     tip:'📌 规则：\n①第一个10分钟专注完成\n②休息5分钟（喝水、伸展）\n③第二个10分钟再来一次\n④两轮都完成才得分！',
     score:6, unlockAt:20, unlocked:false,
+    recommendWeight:15,   // 锁定卡，低权重
     speech:'专注升级版！连续两个10分钟，中间可以休息5分钟，两轮都完成得6分！需要20分解锁！'
   },
   {
@@ -219,6 +221,7 @@ const TASK_CARDS = [
     desc:'写作业期间完成3个专注块，中间没有被别的事打断',
     tip:'📌 标准：\n①专注块=10分钟不分心\n②完成3个专注块\n③中间只能喝水/上厕所\n④作业全部写完额外加分！',
     score:8, unlockAt:50, unlocked:false,
+    recommendWeight:8,    // 高级锁定卡，很低权重
     speech:'专注大师！写作业完成三个专注块，中间不被打断，得8分！需要50分解锁！'
   },
 
@@ -230,6 +233,7 @@ const TASK_CARDS = [
     desc:'今天早晨英雄包三件事全部自己完成，不用提醒',
     tip:'📌 三件事：\n①自己穿好衣服\n②洗脸刷牙\n③好好吃早饭\n全部自己做到，来领这张卡！',
     score:5, unlockAt:0, unlocked:true,
+    recommendWeight:28,   // Phase1主推，已解锁，高权重
     speech:'早晨英雄！早晨三件事全部自己完成，穿衣洗脸吃饭都搞定，得5分！'
   },
   {
@@ -238,6 +242,7 @@ const TASK_CARDS = [
     name:'睡前小英雄', sub:'睡前三件事，不等大人说！🌙',
     desc:'今天睡前英雄包三件事全部自己做到，没等大人催',
     score:5, unlockAt:15, unlocked:false,
+    recommendWeight:12,  // 锁定卡，低权重
     speech:'睡前小英雄！洗澡收拾书包按时上床三件事全做到，不用催，得5分！需要15分解锁！'
   },
   {
@@ -246,6 +251,7 @@ const TASK_CARDS = [
     name:'全天英雄包', sub:'早晨+睡前全套，一天都赢了！👑',
     desc:'今天早晨英雄包和睡前英雄包全部完成',
     score:8, unlockAt:40, unlocked:false,
+    recommendWeight:8,   // 高级锁定卡，很低权重
     speech:'全天英雄包！早晨和睡前两套全部完成，今天全赢了，得8分！需要40分解锁！'
   },
 
@@ -257,6 +263,7 @@ const TASK_CARDS = [
     desc:'画出你心目中最厉害的英雄，画完讲给爸爸或妈妈听',
     tip:'📌 怎么画：\n①想一想你最喜欢的英雄\n②用画笔画出他的样子\n③画完讲给爸爸妈妈：他叫什么？有什么能力？\n每幅画都是世界上独一无二的🌟',
     score:5, unlockAt:0, unlocked:true,
+    recommendWeight:20,  // 兴趣卡，中等权重
     speech:'英雄图鉴！画出你心目中最厉害的英雄，画完讲给爸爸妈妈听，得5分！'
   },
   {
@@ -265,6 +272,7 @@ const TASK_CARDS = [
     name:'我的恐龙世界', sub:'画一幅恐龙世界，越大越好！🦕',
     desc:'画一幅恐龙世界的画，至少有3只不同的恐龙',
     score:6, unlockAt:20, unlocked:false,
+    recommendWeight:8,   // 锁定卡，低权重
     speech:'我的恐龙世界！画一幅有三只不同恐龙的世界，得6分！需要20分解锁！'
   },
   {
@@ -274,6 +282,7 @@ const TASK_CARDS = [
     desc:'闭上眼睛听一首曲子，说出至少3个感受词',
     tip:'📌 怎么玩：\n①爸爸播放一首曲子\n②闭上眼睛认真听\n③说出你的感受，越具体越好！\n比如：这首曲子让我想到了恐龙在奔跑！',
     score:4, unlockAt:0, unlocked:true,
+    recommendWeight:18,  // 兴趣卡，中等权重
     speech:'音乐小侦探！闭上眼睛听一首曲子，说出三个感受，越具体越好，得4分！'
   },
 

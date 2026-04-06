@@ -61,7 +61,7 @@
 <!-- 顶部导航 -->
 <header class="app-header">
   <div class="header-left">
-    <div class="header-title">🦸 小英雄成长计划</div>
+    <div class="header-title">🦸 小英雄子渊成长计划</div>
     <div class="header-subtitle" id="headerMotto">每天进步一点点，今天的你比昨天更厉害 💪</div>
   </div>
   <div class="header-score">
@@ -81,12 +81,11 @@
 <nav class="tab-nav">
   <button class="tab-btn" data-tab="kid">🦸 写给子渊的信</button>
   <button class="tab-btn active" data-tab="daily">⚡ 今日出击</button>
-  <button class="tab-btn" data-tab="cards">⚔️ 英雄挑战</button>
   <button class="tab-btn" data-tab="weekly">📅 本周战报</button>
-  <button class="tab-btn" data-tab="achievements">👑 英雄勋章</button>
+  <button class="tab-btn" data-tab="cards">⚔️ 英雄挑战</button>
   <button class="tab-btn" data-tab="shop">🎁 宝藏屋</button>
-  <button class="tab-btn" data-tab="rope">💨 极速训练</button>
-  <button class="tab-btn" data-tab="math">🔢 口算</button>
+  <button class="tab-btn" data-tab="rope">🪢 跳绳英雄榜</button>
+  <button class="tab-btn" data-tab="math">🔢 闪电侠速算</button>
   <button class="tab-btn parent-tab-btn" data-tab="parent">🔐 审核</button>
   <button class="tab-btn" data-tab="dad">💌 爸爸妈妈要牢记</button>
 </nav>
@@ -158,12 +157,25 @@
 <div class="tab-content" id="tab-weekly">
   <!-- 阶段横幅 -->
   <div id="phaseBanner"></div>
+  <!-- 分类积分进度条（阶段勋章进度） -->
+  <div id="categoryProgressBars"></div>
+  <!-- 英雄档案（从英雄勋章tab迁移） -->
+  <div class="ach-hero-card" id="achHeroCard">
+    <div class="ach-hero-avatar" id="achHeroAvatar">🦸</div>
+    <div class="ach-hero-info">
+      <div class="ach-hero-name">英雄成长档案</div>
+      <div class="ach-hero-score">累计 <span id="achTotalScore">0</span> 分</div>
+      <div class="ach-hero-level" id="achHeroLevel">探索者</div>
+    </div>
+  </div>
   <!-- 周度成就 -->
   <div id="weeklyAchievementBanner"></div>
   <!-- 本周标题 + 进度条 -->
   <div class="weekly-header">
     <div class="weekly-title-row">
-      <div class="weekly-title">📅 本周任务总览</div>
+      <div class="weekly-title">📅 本周任务总览
+        <button class="speak-btn" title="点我听说明" onclick="event.stopPropagation();speakText('这里是本周任务总览！你可以看到这周累计得了多少分。这页有三个重点：上方是你的专注力紫色条和计划性紫色条，攒满就能获得勋章；中间是本周英雄挑战，是你这周每天都能完成的积分任务；下方是你这周可以兑换的宝藏奖励！',this)" style="background:none;border:none;font-size:1rem;cursor:pointer;vertical-align:middle;margin-left:4px">🔈</button>
+      </div>
       <div class="weekly-date-range" id="weeklyDateRange"></div>
     </div>
     <div class="weekly-score-row">
@@ -190,64 +202,30 @@
 
   <!-- 本周宝藏屋目标 -->
   <div class="weekly-section">
-    <div class="weekly-section-title">🎁 本周宝藏屋目标 <span class="weekly-section-sub">攒够分就能换</span></div>
+    <div class="weekly-section-title">🎁 本周宝藏屋目标 <span class="weekly-section-sub">攒够分就能换</span><button class="speak-btn" id="shopGoalSpeakBtn" title="点我听说明" onclick="event.stopPropagation();speakText('这里是本周宝藏屋目标！你攒的每一分都可以来这里换奖励！绿色标记的是你现在就能换的，灰色的是还要再努力一点的。点击任意奖励卡片，就能跳到宝藏屋去兑换！',this)" style="background:none;border:none;font-size:1rem;cursor:pointer;vertical-align:middle;margin-left:6px">🔈</button></div>
     <div id="weeklyShopGoal"></div>
   </div>
 </div>
 
 <!-- ═══ TAB: 英雄勋章 ═══ -->
-<div class="tab-content" id="tab-achievements">
-  <!-- 英雄档案 -->
-  <div class="ach-hero-card" id="achHeroCard">
-    <div class="ach-hero-avatar" id="achHeroAvatar">🦸</div>
-    <div class="ach-hero-info">
-      <div class="ach-hero-name">英雄成长档案</div>
-      <div class="ach-hero-score">累计 <span id="achTotalScore">0</span> 分</div>
-      <div class="ach-hero-level" id="achHeroLevel">探索者</div>
-    </div>
-  </div>
-
-  <!-- 已解锁徽章 -->
-  <div class="ach-section">
-    <div class="ach-section-title">🏅 我的徽章收藏</div>
-    <div class="ach-badges-tip">完成各类任务后自动解锁</div>
-    <div class="ach-badges-grid" id="achBadges"></div>
-  </div>
-
-  <!-- 任务卡系列进度 -->
-  <div class="ach-section">
-    <div class="ach-section-title">⚔️ 英雄挑战系列进度</div>
-    <div class="ach-series-list" id="achSeriesList"></div>
-  </div>
-
-  <!-- 父子演出里程碑 -->
-  <div class="ach-section">
-    <div class="ach-section-title">🎤 演出里程碑</div>
-    <div class="ach-show-list" id="achShowList"></div>
-  </div>
-
-  <!-- 跳绳里程碑 -->
-  <div class="ach-section">
-    <div class="ach-section-title">🪢 跳绳里程碑</div>
-    <div class="ach-rope-list" id="achRopeList"></div>
-  </div>
-</div>
-
 <!-- ═══ TAB: 英雄挑战 ═══ -->
 <div class="tab-content" id="tab-cards">
-  <div class="cards-filter">
-    <button class="filter-btn active" data-filter="all">全部</button>
-    <button class="filter-btn" data-filter="🌙 习惯养成">🌙 习惯</button>
-    <button class="filter-btn" data-filter="💃 舞蹈挑战">💃 舞蹈</button>
-    <button class="filter-btn" data-filter="📚 阅读探索">📚 阅读</button>
-    <button class="filter-btn" data-filter="🎨 创造挑战">🎨 创造</button>
-    <button class="filter-btn" data-filter="🧠 独立思考">🧠 思考</button>
-    <button class="filter-btn" data-filter="⚡ 数学专项">⚡ 数学</button>
-    <button class="filter-btn" data-filter="🌍 英语专项">🌍 英语</button>
-    <button class="filter-btn" data-filter="🎨 绘画成长">🎨 绘画</button>
-    <button class="filter-btn" data-filter="🪢 跳绳挑战">🪢 跳绳</button>
+  <!-- 顶部：钥匙徽章 -->
+  <div class="maze-key-badge" id="mazeKeyBadge">
+    <span class="key-icon">🔑</span>
+    <span class="key-score" id="mazeKeyScore">0</span>
+    <span class="key-unit">分</span>
+    <div class="key-progress-bar"><div class="key-progress-fill" id="mazeKeyFill"></div></div>
+    <span class="key-next-gate" id="mazeNextGate"></span>
   </div>
-  <div id="cardsGrid"></div>
+  <!-- 迷宫容器 -->
+  <div class="maze-container" id="mazeContainer"></div>
+  <!-- 底部：卡牌列表入口 -->
+  <div class="maze-all-cards-toggle" id="mazeAllCardsToggle" style="display:none;">
+    <button class="filter-btn active" onclick="toggleAllCardsView()">📜 查看全部挑战卡</button>
+  </div>
+  <!-- 原有卡牌网格（默认隐藏，迷宫优先） -->
+  <div id="cardsGrid" style="display:none;"></div>
 </div>
 
 <!-- ═══ TAB: 宝藏屋 ═══ -->
@@ -292,12 +270,12 @@
   <div id="dadPage"></div>
 </div>
 
-<!-- ═══ TAB: 口算练习 ═══ -->
+<!-- ═══ TAB: 闪电侠速算 ═══ -->
 <div class="tab-content" id="tab-math">
 
   <!-- 状态：首次测试引导 -->
   <div id="mathHome">
-    <div class="section-title">🔢 闪电侠速算训练站</div>
+    <div class="section-title">🔢 闪电侠速算</div>
 
     <!-- 当前水平显示 -->
     <div class="math-level-card" id="mathLevelCard">

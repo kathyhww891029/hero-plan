@@ -105,7 +105,7 @@ function updateWelcomeArea() {
   const motto = document.getElementById('headerMotto');
   if (nameEl) {
     const hour = new Date().getHours();
-    const greeting = hour < 12 ? '早上好，小英雄！🌅' : hour < 18 ? '下午好，小英雄！☀️' : '晚上好，小英雄！🌙';
+    const greeting = hour < 12 ? '早上好，小英雄子渊！🌅' : hour < 18 ? '下午好，小英雄子渊！☀️' : '晚上好，小英雄子渊！🌙';
     nameEl.textContent = greeting;
   }
   if (motto) {
@@ -127,10 +127,11 @@ let state = loadState();
 function defaultState() {
   return {
     totalScore: 0,
+    mazeKnightNode: 'n_start',  // 骑士当前位置节点
     pendingAdditions: [],    // [{type, taskId, name, score, date, isSelf}] 待审加分，审核通过后才正式入账
     reviewedSelfLog: {},    // { "2026-04": { "2026-04-05": true, ... } } 记录每月自律（自主完成且审核通过）的日期
     todayChecked: {},         // { taskId: true }
-    yesterdayMakeups: [],     // [{taskId, type, name, score}] 今日已提交的昨日补卡记录
+
     cardClaims: {},           // { cardId: count }
     shopHistory: [],          // [{ id, name, cost, date }]
     ropeRecords: [],          // [{ date, count }]
@@ -164,6 +165,7 @@ function defaultState() {
     focusOvertime: false,     // 超时继续（超级专注徽章）
     // 周度成就
     weeklyCardCount: 0,       // 本周已完成任务卡数
+    weeklyCardClaims: {},     // 本周每张卡领取次数 {cardId: count}
     weeklyAchievement: null,  // 本周成就等级
     // 当前培养阶段（爸妈设置）
     currentPhase: 1,
@@ -173,6 +175,13 @@ function defaultState() {
     // 今日自选挑战卡
     selfPickCard: null,       // 今日选择的挑战卡 id（每天可换）
     selfPickClaimed: false,   // 今日自选卡是否已领分
+    // 勋章系统
+    medalClaims: {},          // { medalId: timestamp } 已获得的勋章
+    categoryPoints: {         // 分类积分（用于解锁）
+      focus: 0, habit: 0, plan: 0, challenge: 0,
+      reflect: 0, creative: 0, read: 0, sport: 0
+    },
+    ropeStreak: { count: 0, lastDate: '' }, // 跳绳连续天数
   };
 }
 function loadState() {
@@ -192,6 +201,15 @@ function todayStr() {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+function yesterdayStr() {
+  // 获取昨天的日期字符串
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 function getWeekStart() {
   const d = new Date();
   const day = d.getDay() || 7;
@@ -202,8 +220,31 @@ function getWeekStart() {
   return `${y}-${m}-${dd}`;
 }
 
+// ── 数据格式迁移（v66：weeklyCardClaims[id] 从数字改为日期数组）──
+function migrateWeeklyCardClaims() {
+  if (!state.weeklyCardClaims) return;
+  let changed = false;
+  for (const id in state.weeklyCardClaims) {
+    const val = state.weeklyCardClaims[id];
+    // 旧格式：数字（领取次数）→ 新格式：日期数组
+    if (typeof val === 'number') {
+      const today = todayStr();
+      const weekStart = getWeekStart();
+      // 如果是本周内，且领取次数>0，则假设领取在今天（粗略迁移）
+      state.weeklyCardClaims[id] = val > 0 ? [today] : [];
+      changed = true;
+    } else if (!Array.isArray(val)) {
+      // 未知格式 → 空数组
+      state.weeklyCardClaims[id] = [];
+      changed = true;
+    }
+  }
+  if (changed) saveState();
+}
+
 // ── 初始化 ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  migrateWeeklyCardClaims(); // 先迁移旧数据格式
   checkWeekUnlock();
   checkDayReset();
   renderAll();
@@ -330,7 +371,11 @@ function renderMonthlyCalendar() {
     if (hasRecord) className += ' has-record';
     if (isFuture) className += ' future';
     
-    html += `<div class="${className}">${d}</div>`;
+    // 只有过去的日期可以补卡（昨天及以前），可重复点击补多张卡
+    var canBackfill = !isFuture && !isToday;
+    if (canBackfill) className += ' can-backfill';
+    
+    html += `<div class="${className}" onclick="onCalendarDayClick('${dateStr}')">${d}</div>`;
   }
   
   html += '</div>';
@@ -349,28 +394,340 @@ function changeCalendarMonth(delta) {
   renderMonthlyCalendar();
 }
 
+// ── 日历补卡 ───────────────────────────────────────────────────
+
+// 点击日历日期格子
+function onCalendarDayClick(dateStr) {
+  const today = todayStr();
+  
+  // 不能补今天的卡（今天在主页打卡）
+  if (dateStr === today) return;
+  // 不能补未来的卡
+  if (dateStr > today) return;
+  
+  // 显示补卡弹窗（具体哪项由用户在弹窗中选择；同一日期可多次点击补多张卡）
+  showHistoricalCheckinModal(dateStr);
+}
+
+// 历史补卡弹窗
+function showHistoricalCheckinModal(dateStr) {
+  // dateStr 格式：'2026-04-05'
+  const date = new Date(dateStr);
+  const monthDay = `${date.getMonth()+1}月${date.getDate()}日`;
+  const weekDay = ['周日','周一','周二','周三','周四','周五','周六'][date.getDay()];
+  
+  // 判断是"昨天"还是更早
+  const yesterday = yesterdayStr();
+  const isYesterday = dateStr === yesterday;
+  const dateLabel = isYesterday ? '昨晚' : monthDay;
+  
+  // 移除已有弹窗
+  const existing = document.getElementById('historicalCheckinModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'historicalCheckinModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+      <div style="font-size:1.8rem;margin-bottom:8px;">📅</div>
+      <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e;margin-bottom:4px;">${monthDay} ${weekDay}</div>
+      <div style="font-size:0.9rem;color:#888;margin-bottom:20px;">选择完成的任务来补卡</div>
+      
+      <div style="text-align:left;">
+        <div style="font-size:0.85rem;color:#888;margin-bottom:8px;">🌅 早晨英雄包</div>
+        ${MORNING_PACK.map(item => {
+          const taskId = `morning_${item.id}_${dateStr}`;
+          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
+          return `
+          <button class="backfill-task-btn" data-type="morning" data-id="${item.id}" data-name="${item.name}" data-icon="${item.icon}" data-score="${item.score}" ${disabled}
+            style="width:100%;padding:14px 16px;margin-bottom:8px;border-radius:12px;border:2px solid ${alreadySubmitted?'#ccc':'#E8F4FD'};background:${alreadySubmitted?'#f5f5f5':'#F0F8FF'};text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.4rem;">${item.icon}</span>
+            <span style="flex:1;">
+              <span style="font-weight:600;color:${alreadySubmitted?'#aaa':'#1a1a2e'};">${item.name}</span>
+              <span style="font-size:0.8rem;color:#888;margin-left:6px;">+${item.score}分${alreadySubmitted?' ✓':''}</span>
+            </span>
+          </button>`;
+        }).join('')}
+        
+        <div style="font-size:0.85rem;color:#888;margin:16px 0 8px;">🌙 睡前英雄包</div>
+        ${NIGHT_PACK.map(item => {
+          const taskId = `night_${item.id}_${dateStr}`;
+          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
+          return `
+          <button class="backfill-task-btn" data-type="night" data-id="${item.id}" data-name="${item.name}" data-icon="${item.icon}" data-score="${item.score}" ${disabled}
+            style="width:100%;padding:14px 16px;margin-bottom:8px;border-radius:12px;border:2px solid ${alreadySubmitted?'#ccc':'#FFF3E0'};background:${alreadySubmitted?'#f5f5f5':'#FFF8F0'};text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.4rem;">${item.icon}</span>
+            <span style="flex:1;">
+              <span style="font-weight:600;color:${alreadySubmitted?'#aaa':'#1a1a2e'};">${item.name}</span>
+              <span style="font-size:0.8rem;color:#888;margin-left:6px;">+${item.score}分${alreadySubmitted?' ✓':''}</span>
+            </span>
+          </button>`;
+        }).join('')}
+
+        <div style="font-size:0.85rem;color:#888;margin:16px 0 8px;">📚 写作业</div>
+        ${[1,2,3].map(n => {
+          const taskId = `homework_block_${n}_${dateStr}`;
+          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
+          return `
+          <button class="backfill-task-btn" data-pack="homework" data-hw-blocks="${n}" data-name="🍅专注块×${n}" data-icon="📚" data-score="${n}" ${disabled}
+            style="width:100%;padding:14px 16px;margin-bottom:8px;border-radius:12px;border:2px solid ${alreadySubmitted?'#ccc':'#E8F8F0'};background:${alreadySubmitted?'#f5f5f5':'#F0FFFB'};text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.4rem;">🍅</span>
+            <span style="flex:1;">
+              <span style="font-weight:600;color:${alreadySubmitted?'#aaa':'#1a1a2e'};">专注块×${n}（每块10分钟）</span>
+              <span style="font-size:0.8rem;color:#888;margin-left:6px;">+${n}分${alreadySubmitted?' ✓':''}</span>
+            </span>
+          </button>`;
+        }).join('')}
+        ${(() => {
+          const taskId = `homework_complete_${dateStr}`;
+          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
+          return `
+          <button class="backfill-task-btn" data-pack="homework" data-hw-complete="1" data-name="📖写完作业" data-icon="📚" data-score="2" ${disabled}
+            style="width:100%;padding:14px 16px;margin-bottom:8px;border-radius:12px;border:2px solid ${alreadySubmitted?'#ccc':'#FFF9C4'};background:${alreadySubmitted?'#f5f5f5':'#FFFFF0'};text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.4rem;">📖</span>
+            <span style="flex:1;">
+              <span style="font-weight:600;color:${alreadySubmitted?'#aaa':'#1a1a2e'};">写完作业</span>
+              <span style="font-size:0.8rem;color:#888;margin-left:6px;">+2分${alreadySubmitted?' ✓':''}</span>
+            </span>
+          </button>`;
+        })()}
+      </div>
+      
+      <button id="_hcCloseBtn" style="margin-top:16px;padding:12px 24px;border-radius:12px;border:none;background:#f0f0f0;color:#666;font-size:0.95rem;cursor:pointer;">关闭</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  // 关闭按钮
+  document.getElementById('_hcCloseBtn').onclick = () => modal.remove();
+  // 点击背景关闭
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  
+  // 任务按钮点击 → 弹出自律确认
+  modal.querySelectorAll('.backfill-task-btn').forEach(btn => {
+    btn.onclick = () => {
+      // 区分早包/晚包 与 写作业
+      const isHomework = btn.dataset.pack === 'homework';
+      const packType = btn.dataset.type;  // 'morning' | 'night'
+      const itemId = btn.dataset.id;
+      const itemName = btn.dataset.name;
+      const itemIcon = btn.dataset.icon;
+      const itemScore = parseInt(btn.dataset.score);
+      
+      if (isHomework) {
+        // ── 写作业补卡 ─────────────────────────────────
+        const blocks = parseInt(btn.dataset.hwBlocks || '0');
+        const isComplete = !!btn.dataset.hwComplete;
+        const taskId = blocks > 0 ? `homework_block_${blocks}_${dateStr}` : `homework_complete_${dateStr}`;
+
+        if ((state.pendingAdditions||[]).some(p => p.taskId === taskId)) return;
+
+        if (blocks > 0) {
+          // 专注块直接提交
+          submitHomeworkBackfill(blocks, false, dateStr, true);
+          modal.remove();
+          showHistoricalCheckinModal(dateStr);
+        } else if (isComplete) {
+          // 写完作业需要自律确认
+          showSelfReportUnified(
+            `backfill_${taskId}`,
+            '📚 📖写完作业',
+            2,
+            '📚',
+            (isSelf) => {
+              submitHomeworkBackfill(0, true, dateStr, isSelf);
+              modal.remove();
+              showHistoricalCheckinModal(dateStr);
+            }
+          );
+        }
+        return;
+        return;
+      }
+
+      // ── 早包/晚包补卡 ────────────────────────────────
+      // 防止重复提交（disabled 的按钮理论上不会触发，但多加一层保险）
+      const taskId = `${packType}_${itemId}_${dateStr}`;
+      if ((state.pendingAdditions||[]).some(p => p.taskId === taskId)) return;
+      
+      // 弹出自律确认
+      showSelfReportUnified(
+        `backfill_${packType}_${itemId}_${dateStr}`,
+        `${itemIcon} ${itemName}`,
+        itemScore,
+        packType === 'morning' ? '🌅' : '🌙',
+        (isSelf) => {
+          // 补卡提交
+          submitBackfillTask(packType, itemId, itemName, itemIcon, itemScore, dateStr, isSelf);
+          // 不关闭弹窗，重新渲染（刚提交项变灰），用户可继续补其他项
+          modal.remove();
+          showHistoricalCheckinModal(dateStr);
+        }
+      );
+    };
+  });
+}
+
+// 提交补卡任务
+function submitBackfillTask(packType, itemId, itemName, itemIcon, score, dateStr, isSelf) {
+  const today = todayStr();
+  const packKey = packType === 'morning' ? 'morningPack' : 'nightPack';
+  const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
+  const fullScore = packType === 'morning' ? MORNING_PACK_FULL : NIGHT_PACK_FULL;
+  const label = (packType === 'morning' ? '早晨' : '睡前') + '英雄包·' + itemName;
+  
+  // 加入待审加分池（区分补卡标记）
+  // taskId 包含实际日期，保证唯一性
+  state.pendingAdditions.push({
+    type: 'pack',
+    taskId: `${packType}_${itemId}_${dateStr}`,
+    name: label,
+    icon: itemIcon,
+    score: score,
+    date: today,           // 提交日期（审核用）
+    actualDate: dateStr,   // 实际完成日期（补卡日期）
+    isSelf: isSelf,
+    isBackfill: true      // 标记为补卡
+  });
+  
+  // 先加积分（审核驳回时再扣）
+  state.totalScore += score;
+
+  // ── 全套奖励差额计算 ─────────────────────────────────
+  // 统计该日期该包已补卡件数（不含今日正常打卡，因为那是不同日期）
+  const doneForDate = state.pendingAdditions.filter(p =>
+    p.type === 'pack' && p.actualDate === dateStr && p.taskId.startsWith(packType + '_')
+  ).length;
+  const totalDone = doneForDate; // 当前已含刚 push 的一条
+  const isFull = totalDone >= pack.length;
+  const isFirstFull = isFull && totalDone === pack.length; // 刚达成的全套
+
+  let bonusGain = 0;
+  if (isFirstFull) {
+    // 全套首次达成：补发全套与已发单件之和的差额
+    const prevPts = Math.max(0, totalDone - 1);
+    bonusGain = fullScore - prevPts;
+    state.totalScore += bonusGain;
+    // 更新连续天数（基于实际完成日期）
+    updateStreakWithDate(packType === 'morning' ? 'morning' : 'night', dateStr);
+  }
+
+  saveState();
+  
+  // 同步到 Firebase（taskId 带日期后缀，让爸妈能看到是补卡）
+  const totalGain = score + bonusGain;
+  if (window._firebaseReady) {
+    submitPending('pack', `${packType}_${itemId}_${dateStr}`, label, score, dateStr, isSelf);
+    if (bonusGain > 0) {
+      submitPending('pack', `${packType}_full_${dateStr}`, (packType === 'morning' ? '早晨' : '睡前') + '英雄包全套奖励', bonusGain, dateStr, isSelf);
+    }
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + totalGain);
+    });
+  }
+  
+  renderAll();
+  const bonusHint = bonusGain > 0 ? `（全套奖励+${bonusGain}分）` : '';
+  showCelebration('📅', `📅补卡成功！${itemIcon}${itemName}`, `+${totalGain}分${bonusHint}，等爸妈审核！`);
+}
+
+// 提交写作业补卡
+// blocks: 0-3（专注块数），isComplete: 是否写完作业，dateStr: 实际日期，isSelf: 是否自主完成
+function submitHomeworkBackfill(blocks, isComplete, dateStr, isSelf) {
+  const today = todayStr();
+  const entries = [];   // 本次要加入 pendingAdditions 的条目
+
+  if (blocks > 0) {
+    entries.push({
+      type: 'homework',
+      taskId: `homework_block_${blocks}_${dateStr}`,
+      name: `📚写作业·🍅专注块×${blocks}`,
+      icon: '📚',
+      score: blocks,   // 每块1分
+      date: today,
+      actualDate: dateStr,
+      isSelf: isSelf,
+      isBackfill: true
+    });
+  }
+
+  if (isComplete) {
+    entries.push({
+      type: 'homework',
+      taskId: `homework_complete_${dateStr}`,
+      name: '📚写作业·写完作业',
+      icon: '📚',
+      score: 2,         // 写完+2分
+      date: today,
+      actualDate: dateStr,
+      isSelf: isSelf,
+      isBackfill: true
+    });
+  }
+
+  if (entries.length === 0) return;
+
+  // 一次性加入待审池
+  entries.forEach(e => state.pendingAdditions.push(e));
+
+  // 计算本次总积分
+  const totalGain = entries.reduce((sum, e) => sum + e.score, 0);
+  state.totalScore += totalGain;
+
+  // 更新连续天数（只要提交了作业任何一项就更新 streak）
+  updateStreakWithDate('homework', dateStr);
+
+  saveState();
+
+  // Firebase 同步
+  if (window._firebaseReady) {
+    entries.forEach(e => {
+      submitPending('homework', e.taskId, e.name, e.score, dateStr, isSelf);
+    });
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + totalGain);
+    });
+  }
+
+  renderAll();
+  showCelebration('📚', `📅补卡成功！写作业`, `+${totalGain}分，等爸妈审核！`);
+}
+
 // ── 渲染每日任务 ───────────────────────────────────────────────
 
 // 连续天数更新：key = 'morning' | 'night' | 'homework' | 'focus'
 function updateStreak(key) {
-  const today = todayStr();
+  updateStreakWithDate(key, todayStr());
+}
+
+// 基于实际完成日期的 streak 更新（支持补卡）
+function updateStreakWithDate(key, actualDate) {
   if (!state.streaks) {
     state.streaks = { morning:{count:0,lastDate:''}, night:{count:0,lastDate:''}, homework:{count:0,lastDate:''}, focus:{count:0,lastDate:''} };
   }
   const s = state.streaks[key] || { count: 0, lastDate: '' };
-  if (s.lastDate === today) return; // 今天已经算过，不重复
+  if (s.lastDate === actualDate) return; // 这个日期已经算过，不重复
 
-  // 计算昨天的日期字符串
-  const d = new Date();
+  // 计算 actualDate 的前一天
+  const d = new Date(actualDate);
   d.setDate(d.getDate() - 1);
-  const yesterday = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const dayBefore = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
-  if (s.lastDate === yesterday) {
-    s.count += 1; // 昨天完成了，连续 +1
+  if (s.lastDate === dayBefore) {
+    s.count += 1; // 前一天完成了，连续 +1
   } else {
     s.count = 1;  // 断开了，从1重新开始
   }
-  s.lastDate = today;
+  s.lastDate = actualDate;
   state.streaks[key] = s;
   saveState();
 }
@@ -536,32 +893,66 @@ function renderOptionalTasks() {
   el.innerHTML = renderOptionalList();
 }
 
-// ── 今日自选挑战卡 ─────────────────────────────────────────────
+// ── 推荐引擎：系统按权重自动选「今日英雄使命」──────────────────
+function getTodayRecommendCard() {
+  const today = todayStr();
+  const historyKey = 'heroPlan_recentRecommendHistory';
+  const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
+
+  // 清理7天前的历史
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const recentIds = Object.entries(history)
+    .filter(([date]) => new Date(date) >= cutoff)
+    .flatMap(([, ids]) => ids);
+
+  // 获取所有Phase1且已解锁的卡
+  const pool = TASK_CARDS.filter(c => c.phase === 1 && isCardUnlocked(c));
+  if (pool.length === 0) return null;
+
+  // 计算加权分数：基础权重 - 最近推荐折扣（同id已推过则降权）
+  const scored = pool.map(c => {
+    let weight = c.recommendWeight || 10;
+    const recencyCount = recentIds.filter(id => id === c.id).length;
+    weight -= recencyCount * 15; // 同一张卡每出现一次，权重-15
+    // 专注/成就类有70%比例加成（数值越高越容易被选中）
+    if (c.recommendType === 'focus') weight = Math.round(weight * 1.4);
+    return { card: c, weight: Math.max(weight, 1) };
+  });
+
+  // 权重随机抽签
+  const totalWeight = scored.reduce((s, item) => s + item.weight, 0);
+  let random = Math.random() * totalWeight;
+  let selected = scored[0].card;
+  for (const item of scored) {
+    random -= item.weight;
+    if (random <= 0) { selected = item.card; break; }
+  }
+
+  // 记录今日推荐历史
+  history[today] = [...(history[today] || []), selected.id];
+  localStorage.setItem(historyKey, JSON.stringify(history));
+
+  return selected;
+}
+
+// ── 今日自选挑战卡（Phase1：单卡推荐模式）───────────────────────
 function renderSelfPick() {
   const el = document.getElementById('dailySelfPick');
   if (!el) return;
 
-  const pickedId = state.selfPickCard;
-  const claimed  = !!state.selfPickClaimed;
-  const card     = pickedId ? TASK_CARDS.find(c => c.id === pickedId) : null;
+  const today = todayStr();
+  const claimed = !!state.selfPickClaimed;
+  const card   = state.selfPickCard ? TASK_CARDS.find(c => c.id === state.selfPickCard) : null;
 
-  // 获取今日可选卡列表：已解锁 + 未在本周完成过（或可重复）
-  const claimedIds = Object.keys(state.cardClaims || {});
-  const available = TASK_CARDS.filter(c => {
-    if (!isCardUnlocked(c)) return false;
-    // 可重复挑战的卡（如 m2 速度挑战）不过滤，其余过滤已完成
-    if (c.repeatable) return true;
-    return !claimedIds.includes(c.id);
-  });
-
+  // ── 已完成态 ───────────────────────────────────────────────
   if (claimed && card) {
-    // 已领分态
     el.innerHTML = `
       <div class="focus-time-card ft-complete">
         <div class="ft-header">
           <span class="ft-icon">${card.icon || card.stars}</span>
           <div class="ft-title-area">
-            <div class="ft-title">🎯 今日我的挑战 ${speakBtn(card.speech||'')}</div>
+            <div class="ft-title">🎯 今日英雄使命 ${speakBtn(card.speech||'')}</div>
             <div class="ft-sub">✅ 「${card.name}」已完成！</div>
           </div>
           <div class="ft-score">+${card.score}分</div>
@@ -569,77 +960,146 @@ function renderSelfPick() {
         <div class="ft-done-summary">
           <div class="ft-done-activity">${card.series} · ${card.name} 挑战完成 🎉</div>
         </div>
-        <button onclick="cancelSelfPick()" style="margin:10px 4px 0;padding:10px 16px;border-radius:10px;border:none;background:#f0f0f5;color:#666;font-size:0.9rem;font-weight:600;cursor:pointer;">
-          ↩️ 点此撤销
-        </button>
       </div>`;
     return;
   }
 
+  // ── 已选待完成态（展示单卡） ─────────────────────────────────
   if (card) {
-    // 已选、未领分态
     const tipHtml = card.tip
-      ? `<div style="margin:8px 0 4px;background:#fffbe6;border-radius:8px;padding:8px 12px;font-size:0.83rem;color:#7a5c00;white-space:pre-line">${card.tip}</div>`
+      ? `<div style="margin:10px 0 6px;background:#fffbe6;border-radius:8px;padding:8px 12px;font-size:0.83rem;color:#7a5c00;white-space:pre-line">${card.tip}</div>`
       : '';
     el.innerHTML = `
       <div class="focus-time-card ft-active">
         <div class="ft-header">
           <span class="ft-icon">${card.stars}</span>
           <div class="ft-title-area">
-            <div class="ft-title">🎯 今日我的挑战 ${speakBtn(card.speech||'')}</div>
-            <div class="ft-sub">已选：「${card.name}」</div>
+            <div class="ft-title">🎯 今日英雄使命 ${speakBtn(card.speech||'')}</div>
+            <div class="ft-sub">⭐ 系统推荐任务</div>
           </div>
           <div class="ft-score">+${card.score}分</div>
         </div>
         <div style="padding:0 4px">
-          <div style="font-size:0.9rem;color:#333;margin-bottom:4px;">✅ ${card.desc}</div>
+          <div style="font-size:0.95rem;color:#333;margin-bottom:4px;font-weight:500">🎯 ${card.name}</div>
+          <div style="font-size:0.88rem;color:#555;margin-bottom:4px">${card.sub}</div>
+          <div style="font-size:0.88rem;color:#666;margin-bottom:4px">${card.desc}</div>
           ${tipHtml}
         </div>
         <div class="ft-actions">
-          <button class="btn-ft-done" onclick="claimSelfPick()" style="margin-top:6px">
+          <button class="btn-ft-done" onclick="claimSelfPick()">
             ✅ 我完成了！领取 +${card.score}分
           </button>
-          <button onclick="cancelSelfPick()" style="margin-top:6px;background:none;border:none;color:#aaa;font-size:0.82rem;cursor:pointer">
-            ↩ 重新选一张
+          <button onclick="showCardPicker()" style="margin-top:6px;background:none;border:none;color:#aaa;font-size:0.82rem;cursor:pointer">
+            ↩ 换一张任务
           </button>
         </div>
       </div>`;
     return;
   }
 
-  // 未选态：展示可选卡片菜单（按系列分组，每组最多显示3张）
-  const groups = {};
-  available.forEach(c => {
-    const s = c.series || '其他';
-    if (!groups[s]) groups[s] = [];
-    if (groups[s].length < 3) groups[s].push(c);
-  });
-  const seriesList = Object.keys(groups).slice(0, 8); // 最多显示8个系列
+  // ── 未选态：系统自动推荐一张 ─────────────────────────────────
+  const recommended = getTodayRecommendCard();
+  if (!recommended) {
+    el.innerHTML = `
+      <div class="focus-time-card">
+        <div style="text-align:center;color:#aaa;padding:20px">🎉 所有挑战卡都完成啦！太厉害了！</div>
+      </div>`;
+    return;
+  }
 
+  // 自动写入 state（不触发 saveState 持久化，次日会重新推荐）
+  state.selfPickCard    = recommended.id;
+  state.selfPickClaimed = false;
+
+  const tipHtml = recommended.tip
+    ? `<div style="margin:10px 0 6px;background:#fffbe6;border-radius:8px;padding:8px 12px;font-size:0.83rem;color:#7a5c00;white-space:pre-line">${recommended.tip}</div>`
+    : '';
   el.innerHTML = `
-    <div class="focus-time-card">
+    <div class="focus-time-card ft-active">
       <div class="ft-header">
-        <span class="ft-icon">🎯</span>
+        <span class="ft-icon">${recommended.stars}</span>
         <div class="ft-title-area">
-          <div class="ft-title">今日我的挑战</div>
-          <div class="ft-sub">选一张你今天想挑战的任务卡，完成了来领分！</div>
+          <div class="ft-title">🎯 今日英雄使命 ${speakBtn(recommended.speech||'')}</div>
+          <div class="ft-sub">⭐ 系统推荐任务</div>
         </div>
+        <div class="ft-score">+${recommended.score}分</div>
       </div>
-      <div class="ft-menu-label">👇 选一张今天想做的：</div>
-      <div style="max-height:260px;overflow-y:auto;padding:0 2px">
-        ${seriesList.map(s => `
-          <div style="margin-bottom:8px">
-            <div style="font-size:0.78rem;color:#888;font-weight:600;margin-bottom:4px;padding-left:2px">${s}</div>
-            ${groups[s].map(c => `
-              <div class="ft-menu-item" style="justify-content:space-between;padding:7px 10px;margin-bottom:4px"
-                   onclick="selectSelfPick('${c.id}')">
-                <span style="font-size:0.9rem">${c.stars} ${c.name}</span>
-                <span style="color:#F9A825;font-weight:700;font-size:0.9rem">+${c.score}分</span>
-              </div>`).join('')}
-          </div>`).join('')}
-        ${available.length === 0 ? '<div style="text-align:center;color:#aaa;padding:16px">🎉 所有挑战卡都完成啦！太厉害了！</div>' : ''}
+      <div style="padding:0 4px">
+        <div style="font-size:0.95rem;color:#333;margin-bottom:4px;font-weight:500">🎯 ${recommended.name}</div>
+        <div style="font-size:0.88rem;color:#555;margin-bottom:4px">${recommended.sub}</div>
+        <div style="font-size:0.88rem;color:#666;margin-bottom:4px">${recommended.desc}</div>
+        ${tipHtml}
+      </div>
+      <div class="ft-actions">
+        <button class="btn-ft-done" onclick="claimSelfPick()">
+          ✅ 我完成了！领取 +${recommended.score}分
+        </button>
+        <button onclick="showCardPicker()" style="margin-top:6px;background:none;border:none;color:#aaa;font-size:0.82rem;cursor:pointer">
+          ↩ 换一张任务
+        </button>
       </div>
     </div>`;
+}
+
+// ── 换卡选择器（展示所有Phase1已解锁卡）────────────────────────
+function showCardPicker() {
+  const pool = TASK_CARDS.filter(c => c.phase === 1 && isCardUnlocked(c));
+  if (pool.length === 0) return;
+
+  const groups = {};
+  pool.forEach(c => {
+    const s = c.series || '其他';
+    if (!groups[s]) groups[s] = [];
+    groups[s].push(c);
+  });
+
+  const modal = document.createElement('div');
+  modal.id = 'cardPickerModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:24px 20px;max-width:340px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:1.1rem;font-weight:700;color:#1a1a2e">📋 今日英雄使命</div>
+        <div style="font-size:0.82rem;color:#888;margin-top:4px">选择今天想挑战的任务</div>
+      </div>
+      <div style="flex:1;overflow-y:auto;">
+        ${Object.entries(groups).map(([series, cards]) => `
+          <div style="margin-bottom:12px">
+            <div style="font-size:0.75rem;color:#aaa;font-weight:600;margin-bottom:6px;padding-left:2px">${series}</div>
+            ${cards.map(c => `
+              <div class="ft-menu-item" style="justify-content:space-between;padding:8px 10px;margin-bottom:4px;cursor:pointer;border-radius:10px"
+                   onclick="selectSelfPick('${c.id}');document.getElementById('cardPickerModal').remove()">
+                <span style="font-size:0.88rem;color:#333">${c.stars} ${c.name}</span>
+                <span style="color:#F9A825;font-weight:700;font-size:0.88rem">+${c.score}分</span>
+              </div>`).join('')}
+          </div>`).join('')}
+      </div>
+      <button onclick="document.getElementById('cardPickerModal').remove()"
+        style="margin-top:12px;width:100%;padding:10px;border-radius:10px;border:none;background:#f0f0f0;color:#888;font-size:0.9rem;cursor:pointer">
+        取消
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+}
+
+// ── 选卡（选自换卡选择器） ─────────────────────────────────────
+function selectSelfPick(id) {
+  state.selfPickCard    = id;
+  state.selfPickClaimed = false;
+  saveState();
+  renderSelfPick();
+}
+
+// ── 取消选卡（已提交后不可撤销；提交前退回推荐态）──────────────
+function cancelSelfPick() {
+  state.selfPickCard    = null;
+  state.selfPickClaimed = false;
+  saveState();
+  renderSelfPick();
 }
 
 function selectSelfPick(id) {
@@ -649,27 +1109,8 @@ function selectSelfPick(id) {
   renderSelfPick();
 }
 
+// 换卡（提交前可换，提交后不可撤销）
 function cancelSelfPick() {
-  // 如果已经claim过，需要撤销积分
-  if (state.selfPickClaimed && state.selfPickCard) {
-    const card = TASK_CARDS.find(c => c.id === state.selfPickCard);
-    if (card) {
-      // 撤销cardClaims
-      if (state.cardClaims && state.cardClaims[card.id]) {
-        state.cardClaims[card.id]--;
-        if (state.cardClaims[card.id] <= 0) {
-          delete state.cardClaims[card.id];
-          // 如果是该卡片第一次被claim，撤销周度计数
-          state.weeklyCardCount = Math.max(0, (state.weeklyCardCount || 0) - 1);
-        }
-      }
-      // 撤销阅读计数
-      if (card.series && card.series.includes('阅读')) {
-        state.readCount = Math.max(0, (state.readCount || 0) - 1);
-      }
-      showCelebration('↩️', '已撤销', `「${card.name}」挑战打卡已撤销`);
-    }
-  }
   state.selfPickCard = null;
   state.selfPickClaimed = false;
   saveState();
@@ -693,6 +1134,7 @@ function claimSelfPick() {
 
 // ── 通用自律自报弹窗（所有模块共用）─────────────────────────
 // taskId: 唯一key用于统计 | taskName: 显示名 | score: 分值 | icon: emoji | onConfirm: 完成后回调
+// ── 打卡日期选择弹窗（支持补昨天）────────────────────────────
 function showSelfReportUnified(taskId, taskName, score, icon, onConfirm) {
   const today = todayStr();
   // 移除已有弹窗，避免叠加
@@ -750,10 +1192,11 @@ function togglePackItem(packType, id, score) {
   const fullScore = packType === 'morning' ? MORNING_PACK_FULL : NIGHT_PACK_FULL;
   const bonusKey = packType === 'morning' ? 'morningPackBonus' : 'nightPackBonus';
 
+  // ── 取消打卡逻辑（不变）──────────────────────────────
   if (state[packKey][id]) {
     // 取消：从待审加分池移除，同时扣减已加的积分
     const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
-    const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.name === label);
+    const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.name === label && p.actualDate === undefined);
     let deductGain = 0;
     if (idx !== -1) {
       deductGain = state.pendingAdditions[idx].score || 0;
@@ -782,63 +1225,70 @@ function togglePackItem(packType, id, score) {
     return;
   }
 
-  state[packKey][id] = true;
-  const doneCnt = Object.keys(state[packKey]).length;
-  const isFull = doneCnt >= pack.length;
+  // ── 新打卡逻辑 ─────────────────────────────────────
+  // 睡前包和早晨包都直接用今天日期（补卡从日历入口做）
+  doCheckIn(packType, id, score);
+}
 
-  // 计算本次新增分：全套触发时发全套分，否则发1分
+// 执行打卡
+function doCheckIn(packType, id, score) {
+  const packKey = packType === 'morning' ? 'morningPack' : 'nightPack';
+  const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
+  const fullScore = packType === 'morning' ? MORNING_PACK_FULL : NIGHT_PACK_FULL;
+  const today = todayStr();
+
+  // 存入今日打卡
+  state[packKey][id] = true;
+
+  // 计算已完成的件数
+  const todayDone = Object.keys(state[packKey]).length;
+  const isFull = todayDone >= pack.length;
+  const isFirstOfDay = todayDone === 1;
+
+  // 计算本次新增分
   let gain = 1;
-  if (isFull && !state[bonusKey]) {
-    // 全套触发：发全套分，减去之前单件已发的分
-    const prevPts = doneCnt - 1; // 之前已得分
+  if (isFull && isFirstOfDay) {
+    const prevPts = Math.max(0, todayDone - 1);
     gain = fullScore - prevPts;
-    state[bonusKey] = true;
-    updateStreak(packType === 'morning' ? 'morning' : 'night');
+    updateStreakWithDate(packType === 'morning' ? 'morning' : 'night', today);
   }
 
-  // 加入待审加分池（带 isSelf=null，等弹窗确定）
-  const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
+  // 加入待审加分池
+  const label = (packType === 'morning' ? '早晨' : '睡前') + '英雄包·' + id;
   state.pendingAdditions.push({
     type: 'pack',
     taskId: id,
     name: label,
     score: gain,
-    date: todayStr(),
+    date: today,
+    actualDate: today,
     isSelf: null
   });
+
   // 立即加积分
   state.totalScore += gain;
   saveState();
+
   // 立即同步到 Firebase
   if (window._firebaseReady) {
     window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
       window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + gain);
     });
   }
+
   renderAll();
+
   const packIcon = packType === 'morning' ? '🌅' : '🌙';
-  const packLabel = packType === 'morning' ? '早晨英雄包' : '睡前英雄包';
   const packItemName = pack.find(t => t.id === id)?.name || id;
-  if (isFull && gain > 1) {
-    // 全套完成：弹自律弹窗，确定后再提交审核
-    showSelfReportUnified(`${packType}_full_${todayStr()}`, `${packLabel}全套完成`, gain, packIcon, (isSelf) => {
-      if (window._firebaseReady) submitPending('pack', id, label, gain, '', isSelf);
-      const today = todayStr();
-      const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === id && p.date === today);
-      if (entry) { entry.isSelf = isSelf; saveState(); }
-      showCelebration('🎉', `${packLabel}全套！`, `太棒了！全套完成+${fullScore}分！`);
-      setTimeout(() => tryShowShopBoost(gain, false), 1600);
-    });
-  } else {
-    // 单件完成：弹自律弹窗，确定后再提交审核
-    showSelfReportUnified(`${packType}_${id}`, packItemName, 1, packIcon, (isSelf) => {
-      if (window._firebaseReady) submitPending('pack', id, label, 1, '', isSelf);
-      const today = todayStr();
-      const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === id && p.date === today);
-      if (entry) { entry.isSelf = isSelf; saveState(); }
-      showCelebration('✅', '完成一件！', `已完成${doneCnt}/${pack.length}件，${isFull?'全套达成！':'再完成'+(pack.length-doneCnt)+'件有惊喜！'}`);
-    });
-  }
+
+  // 弹自律确认
+  showSelfReportUnified(`${packType}_${id}_${today}`, packItemName, gain, packIcon, (isSelf) => {
+    if (window._firebaseReady) submitPending('pack', id, label, gain, '', isSelf);
+    const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === id && p.date === today && p.actualDate === today);
+    if (entry) { entry.isSelf = isSelf; saveState(); }
+    const toastMsg = `已完成${todayDone}/${pack.length}件，${isFull ? '全套达成！' : '再完成' + (pack.length - todayDone) + '件有惊喜！'}`;
+    showCelebration('✅', '完成一件！', toastMsg);
+  });
 }
 
 // ── 写作业（简化版）──────────────────────────────────────────
@@ -945,9 +1395,7 @@ function toggleFocusBlock(idx) {
       submitPending('homework', 'hw_block_'+state.hwBlocks, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock);
     }
     renderAll();
-    showSelfReportUnified(`hw_block_${state.hwBlocks}`, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock, '🍅', (isSelf) => {
-      showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
-    });
+    showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
   }
 }
 
@@ -1330,11 +1778,31 @@ function renderDisciplineBar() {
 }
 
 function calcTodayScore() {
-  return Object.keys(state.todayChecked).reduce((sum, id) => {
+  const today = todayStr();
+  const todayStart = new Date(today).setHours(0, 0, 0, 0);
+  const todayEnd = new Date(today).setHours(23, 59, 59, 999);
+
+  // 1. 固定任务 + 可选任务 + 作业（从 todayChecked）
+  const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
     const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
     const t = all.find(x => x.id === id);
     return sum + (t ? t.score : 0);
   }, 0);
+
+  // 2. 待审加分池（挑战卡、早晨包、睡前包等）当天提交的
+  const pendingScore = (state.pendingAdditions || [])
+    .filter(p => p.date === today)
+    .reduce((sum, p) => sum + (p.score || 0), 0);
+
+  // 3. 勋章奖励（当天领取的）
+  const medalScore = Object.entries(state.medalClaims || {})
+    .filter(([id, ts]) => ts >= todayStart && ts <= todayEnd)
+    .reduce((sum, [medalId, ts]) => {
+      const medal = MEDALS.find(m => m.id === medalId);
+      return sum + (medal ? medal.bonus : 0);
+    }, 0);
+
+  return taskScore + pendingScore + medalScore;
 }
 
 function updateTodayScore() {
@@ -1390,14 +1858,471 @@ function onParentReject(taskType, taskId, isSelf, deductScore) {
   renderAll();
 }
 
-// ── 渲染任务卡 ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// 🗺️ 迷宫系统：子渊的奇幻城堡迷宫
+// ═══════════════════════════════════════════════════════════════
+
+// 迷宫地图数据结构
+// phases: phaseId -> { name, unlockScore, bgColor, nodeColor, pathColor, fogColor, nodes[], paths[], fogPath }
+// nodes: [{ id, x, y, cardId, label, isGate }]
+// paths: [{ id, d, phase }]
+// fogPath: SVG path data for fog area
+const MAZE_MAP = {
+  phases: {
+    // ── Phase 1：英雄花园（绿色）────────────────────
+    1: {
+      name: '🌿 英雄花园',
+      unlockScore: 0,         // 始终可见
+      bgColor: '#E8F5E9',
+      nodeColor: '#4CAF50',
+      pathColor: '#A5D6A7',
+      fogColor: 'rgba(200,230,201,0)',
+      pathWidth: 14,
+      nodes: [
+        // 起点城堡大门
+        { id: 'n_start', x: 400, y: 680, label: '城堡大门', isGate: true },
+        // 左翼·习惯道
+        { id: 'n_p1_habit1', x: 200, y: 590, cardId: 'p1_habit1',  label: '早晨英雄' },
+        { id: 'n_p1_habit2', x: 120, y: 490, cardId: 'p1_habit2',  label: '睡前小英雄' },
+        // 中央·创意道
+        { id: 'n_center', x: 400, y: 540, label: '花园广场' },
+        { id: 'n_p1_interest1', x: 300, y: 430, cardId: 'p1_interest1', label: '英雄图鉴' },
+        { id: 'n_p1_interest2', x: 180, y: 340, cardId: 'p1_interest2', label: '我的恐龙世界', deadEnd: true },
+        { id: 'n_p1_interest3', x: 500, y: 430, cardId: 'p1_interest3', label: '音乐小侦探' },
+        // 右翼·专注道
+        { id: 'n_p1_focus1', x: 600, y: 590, cardId: 'p1_focus1',  label: '专注小勇士' },
+        { id: 'n_p1_focus2', x: 700, y: 490, cardId: 'p1_focus2',  label: '专注升级版', deadEnd: true },
+        { id: 'n_p1_habit3', x: 600, y: 340, cardId: 'p1_habit3',  label: '全天英雄包' },
+        // 终点·专注大师
+        { id: 'n_p1_focus3', x: 400, y: 250, cardId: 'p1_focus3',  label: '专注大师' },
+      ],
+      // SVG路径定义（与节点id对应）
+      paths: [
+        { id: 'p1_1', d: 'M 400 680 L 400 590 L 200 590 L 200 540' },  // 入口→广场→左岔
+        { id: 'p1_2', d: 'M 200 540 L 120 540 L 120 490' },             // →睡前小英雄(死路)
+        { id: 'p1_3', d: 'M 400 590 L 600 590' },                        // 入口→右岔
+        { id: 'p1_4', d: 'M 600 590 L 700 590 L 700 490' },             // →专注升级版(死路折返)
+        { id: 'p1_5', d: 'M 400 540 L 400 480' },                        // 广场→中央干道
+        { id: 'p1_6', d: 'M 400 480 L 300 480 L 300 430' },             // →英雄图鉴
+        { id: 'p1_7', d: 'M 300 430 L 300 380 L 180 380 L 180 340' },  // →恐龙世界(死路)
+        { id: 'p1_8', d: 'M 400 480 L 500 480 L 500 430' },             // →音乐小侦探
+        { id: 'p1_9', d: 'M 500 430 L 600 430 L 600 340' },             // →全天英雄包
+        { id: 'p1_10', d: 'M 400 430 L 400 250' },                       // 中央干道→专注大师
+      ]
+    },
+    // ── Phase 2：神秘城堡（蓝色）────────────────────
+    2: {
+      name: '🏰 神秘城堡',
+      unlockScore: 30,        // Phase1累计30分解锁
+      bgColor: '#E3F2FD',
+      nodeColor: '#1976D2',
+      pathColor: '#90CAF9',
+      fogColor: 'rgba(25,118,210,0.55)',
+      pathWidth: 12,
+      nodes: [
+        // Phase1完成后进入的城堡大门
+        { id: 'n_p2_gate', x: 400, y: 190, label: '城堡大门', isGate: true },
+        // 左翼·创意道
+        { id: 'n_p2_creative1', x: 200, y: 90, cardId: 'p2_creative1', label: '故事连环画' },
+        { id: 'n_p2_creative2', x: 120, y: 30, cardId: 'p2_creative2', label: '我的发明', deadEnd: true },
+        // 中央·计划道
+        { id: 'n_p2_center', x: 400, y: 90, label: '城堡广场' },
+        { id: 'n_p2_plan1', x: 400, y: 10, cardId: 'p2_plan1',  label: '我来定时间' },
+        // 右翼·挑战道
+        { id: 'n_p2_plan2', x: 300, y: 30, cardId: 'p2_plan2',  label: '今日计划官' },
+        { id: 'n_p2_challenge1', x: 600, y: 90, cardId: 'p2_challenge1', label: '专注12分钟' },
+        { id: 'n_p2_challenge2', x: 680, y: 30, cardId: 'p2_challenge2', label: '不被提醒的一天', deadEnd: true },
+        // 汇聚点
+        { id: 'n_p2_top', x: 400, y: -50, label: '城堡塔楼' },
+      ],
+      paths: [
+        { id: 'p2_1', d: 'M 400 190 L 400 140' },                        // 入口→下层
+        { id: 'p2_2', d: 'M 400 140 L 200 140 L 200 90' },              // →创意分叉
+        { id: 'p2_3', d: 'M 200 90 L 200 50 L 120 50 L 120 30' },      // →我的发明(死路)
+        { id: 'p2_4', d: 'M 400 140 L 400 90' },                        // →计划道
+        { id: 'p2_5', d: 'M 400 90 L 400 10' },                         // →我来定时间
+        { id: 'p2_6', d: 'M 400 90 L 300 90 L 300 30' },               // →今日计划官
+        { id: 'p2_7', d: 'M 400 140 L 600 140 L 600 90' },             // →挑战分叉
+        { id: 'p2_8', d: 'M 600 90 L 680 90 L 680 30' },               // →不被提醒(死路)
+        { id: 'p2_9', d: 'M 200 90 L 400 90 M 600 90 L 400 90' },     // 左右汇聚
+        { id: 'p2_10', d: 'M 400 90 L 400 -10 L 400 -50' },            // →城堡塔楼
+      ]
+    },
+    // ── Phase 3：宝藏殿堂（金色）────────────────────
+    3: {
+      name: '👑 宝藏殿堂',
+      unlockScore: 90,        // Phase2累计90分解锁
+      bgColor: '#FFF8E1',
+      nodeColor: '#F57F17',
+      pathColor: '#FFE082',
+      fogColor: 'rgba(245,127,23,0.5)',
+      pathWidth: 10,
+      nodes: [
+        // Phase2完成后进入的殿堂大门
+        { id: 'n_p3_gate', x: 400, y: -150, label: '宝藏殿堂', isGate: true },
+        // 左翼·复盘道
+        { id: 'n_p3_reflect1', x: 200, y: -210, cardId: 'p3_reflect1', label: '今日最自豪' },
+        { id: 'n_p3_reflect2', x: 120, y: -270, cardId: 'p3_reflect2', label: '我想做得更好', deadEnd: true },
+        // 中央·自定义道
+        { id: 'n_p3_center', x: 400, y: -210, label: '宝藏广场' },
+        { id: 'n_p3_reflect3', x: 300, y: -300, cardId: 'p3_reflect3', label: '进步对比' },
+        // 右翼·挑战道
+        { id: 'n_p3_custom1', x: 500, y: -270, cardId: 'p3_custom1', label: '我的本周挑战' },
+        { id: 'n_p3_custom2', x: 600, y: -330, cardId: 'p3_custom2', label: '我设计任务卡', deadEnd: true },
+        // 汇聚点·终极宝藏
+        { id: 'n_p3_treasure', x: 400, y: -390, label: '终极宝藏', isTreasure: true },
+      ],
+      paths: [
+        { id: 'p3_1', d: 'M 400 -150 L 400 -180' },                    // 入口→下层
+        { id: 'p3_2', d: 'M 400 -180 L 200 -180 L 200 -210' },        // →复盘分叉
+        { id: 'p3_3', d: 'M 200 -210 L 200 -250 L 120 -250 L 120 -270' }, // →我想做得更好(死路)
+        { id: 'p3_4', d: 'M 400 -180 L 400 -210' },                   // →中央广场
+        { id: 'p3_5', d: 'M 400 -210 L 300 -210 L 300 -300' },        // →进步对比
+        { id: 'p3_6', d: 'M 400 -210 L 500 -210 L 500 -270' },        // →自定义分叉
+        { id: 'p3_7', d: 'M 500 -270 L 600 -270 L 600 -330' },        // →我设计任务卡(死路)
+        { id: 'p3_8', d: 'M 200 -210 L 400 -210 M 500 -210 L 400 -210' }, // 左右汇聚
+        { id: 'p3_9', d: 'M 400 -210 L 400 -390' },                    // →终极宝藏
+      ]
+    }
+  }
+};
+
+// ── 获取节点状态 ──────────────────────────────────────────────
+function getMazeNodeState(node) {
+  if (!node.cardId) return 'gateway';  // 普通路径节点（起点广场等）
+  const card = TASK_CARDS.find(c => c.id === node.cardId);
+  if (!card) return 'locked';
+  const unlocked = isCardUnlocked(card);
+  if (!unlocked) return 'locked';
+  // 检查本周是否已完成
+  const weekStart = getWeekStart();
+  if (state.weekStart !== weekStart) return 'available';
+  const claimed = state.weeklyCardClaims[node.cardId];
+  if (Array.isArray(claimed)) {
+    return claimed.length > 0 ? 'done' : 'available';
+  }
+  return claimed > 0 ? 'done' : 'available';
+}
+
+// ── 获取下一个关卡目标 ──────────────────────────────────────
+function getNextGateInfo(score) {
+  const gates = [
+    { score: 30, label: '🏰 神秘城堡（还差', suffix: '分解锁）' },
+    { score: 90, label: '👑 宝藏殿堂（还差', suffix: '分解锁）' },
+    { score: Infinity, label: '👑 已达最高阶段！', suffix: '' },
+  ];
+  for (const g of gates) {
+    if (score < g.score) return { target: g.score, label: g.label, suffix: g.suffix };
+  }
+  return gates[gates.length - 1];
+}
+
+// ── 更新钥匙徽章 ─────────────────────────────────────────────
+function updateMazeKeyBadge() {
+  const score = state.totalScore;
+  const gate = getNextGateInfo(score);
+  const el = document.getElementById('mazeKeyScore');
+  if (el) el.textContent = score;
+  const fill = document.getElementById('mazeKeyFill');
+  if (fill) {
+    if (gate.target === Infinity) {
+      fill.style.width = '100%';
+    } else {
+      const pct = Math.min(100, (score / gate.target) * 100);
+      fill.style.width = pct + '%';
+    }
+  }
+  const nextGate = document.getElementById('mazeNextGate');
+  if (nextGate && gate.target !== Infinity) {
+    nextGate.textContent = gate.label + (gate.target - score) + gate.suffix;
+  } else if (nextGate) {
+    nextGate.textContent = gate.label;
+  }
+}
+
+// ── 迷雾检测与散去 ──────────────────────────────────────────
+function checkPhaseFogReveal() {
+  Object.entries(MAZE_MAP.phases).forEach(([phaseId, phase]) => {
+    const el = document.getElementById(`phaseFog${phaseId}`);
+    if (!el) return;
+    const revealed = state.totalScore >= phase.unlockScore;
+    if (revealed) {
+      el.classList.add('revealed');
+    } else {
+      el.classList.remove('revealed');
+    }
+  });
+}
+
+// ── 移动骑士 ────────────────────────────────────────────────
+function moveKnight(targetNodeId, callback) {
+  const node = findMazeNode(targetNodeId);
+  if (!node) { if (callback) callback(); return; }
+  const group = document.getElementById('mazeKnightGroup');
+  if (!group) { if (callback) callback(); return; }
+  // CSS transition on SVG transform attribute
+  group.style.transition = 'transform 1.2s cubic-bezier(0.4, 0, 0.2, 1)';
+  group.classList.add('moving');
+  group.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+  setTimeout(() => {
+    group.classList.remove('moving');
+    group.style.transition = '';
+    if (callback) callback();
+  }, 1400);
+}
+
+// ── 查找迷宫节点 ─────────────────────────────────────────────
+function findMazeNode(nodeId) {
+  for (const phase of Object.values(MAZE_MAP.phases)) {
+    const node = phase.nodes.find(n => n.id === nodeId);
+    if (node) return node;
+  }
+  return null;
+}
+
+// ── 根据卡ID找迷宫节点 ──────────────────────────────────────
+function findMazeNodeByCardId(cardId) {
+  for (const phase of Object.values(MAZE_MAP.phases)) {
+    const node = phase.nodes.find(n => n.cardId === cardId);
+    if (node) return node.id;
+  }
+  return null;
+}
+
+// ── 打开迷宫节点 ─────────────────────────────────────────────
+function openMazeNode(nodeId) {
+  const node = findMazeNode(nodeId);
+  if (!node || !node.cardId) return;
+  openCardModal(node.cardId);
+}
+
+// ── 渲染完整迷宫 ─────────────────────────────────────────────
+function renderMaze() {
+  const container = document.getElementById('mazeContainer');
+  if (!container) return;
+
+  // 更新钥匙徽章
+  updateMazeKeyBadge();
+
+  // 构建SVG
+  let svg = `<svg class="maze-svg" viewBox="0 0 800 900" xmlns="http://www.w3.org/2000/svg">`;
+
+  // ── 背景渐变定义 ─────────────────────────────────────
+  svg += `<defs>
+    <linearGradient id="mazeBg1" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#C8E6C9"/>
+      <stop offset="100%" stop-color="#A5D6A7"/>
+    </linearGradient>
+    <linearGradient id="mazeBg2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#BBDEFB"/>
+      <stop offset="100%" stop-color="#90CAF9"/>
+    </linearGradient>
+    <linearGradient id="mazeBg3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFE082"/>
+      <stop offset="100%" stop-color="#FFD54F"/>
+    </linearGradient>
+    <filter id="fog">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>`;
+
+  // ── Phase 3 背景（金色殿堂区）─────────────────────────
+  svg += `<rect x="0" y="0" width="800" height="200" fill="url(#mazeBg3)" rx="0"/>`;
+  // Phase 3 迷雾
+  svg += `<rect id="phaseFog3" class="phase-fog" x="0" y="0" width="800" height="200" fill="rgba(245,127,23,0.5)" filter="url(#fog)" style="${state.totalScore >= 90 ? 'opacity:0' : 'opacity:1'}"/>`;
+
+  // ── Phase 2 背景（蓝色城堡区）────────────────────────
+  svg += `<rect x="0" y="200" width="800" height="340" fill="url(#mazeBg2)" rx="0"/>`;
+  // Phase 2 迷雾
+  svg += `<rect id="phaseFog2" class="phase-fog" x="0" y="200" width="800" height="340" fill="rgba(25,118,210,0.5)" filter="url(#fog)" style="${state.totalScore >= 30 ? 'opacity:0' : 'opacity:1'}"/>`;
+
+  // ── Phase 1 背景（绿色花园区）─────────────────────────
+  svg += `<rect x="0" y="540" width="800" height="360" fill="url(#mazeBg1)" rx="0"/>`;
+
+  // ── 阶段分隔线 ──────────────────────────────────────
+  svg += `<line x1="0" y1="540" x2="800" y2="540" stroke="#FFF" stroke-width="2" stroke-dasharray="8 6" opacity="0.6"/>`;
+  svg += `<line x1="0" y1="200" x2="800" y2="200" stroke="#FFF" stroke-width="2" stroke-dasharray="8 6" opacity="0.6"/>`;
+
+  // ── 阶段标签 ─────────────────────────────────────────
+  svg += `<text x="10" y="225" font-size="11" fill="#1565C0" font-weight="700" opacity="0.8">🏰 神秘城堡</text>`;
+  svg += `<text x="10" y="560" font-size="11" fill="#2E7D32" font-weight="700" opacity="0.8">🌿 英雄花园</text>`;
+  svg += `<text x="10" y="25" font-size="11" fill="#E65100" font-weight="700" opacity="0.8">👑 宝藏殿堂</text>`;
+
+  // ── 绘制所有路径 ─────────────────────────────────────
+  Object.entries(MAZE_MAP.phases).forEach(([phaseId, phase]) => {
+    phase.paths.forEach(path => {
+      svg += `<path class="maze-path" d="${path.d}" stroke="${phase.pathColor}" stroke-width="${phase.pathWidth}" opacity="0.8"/>`;
+      // 路径高亮边框
+      svg += `<path class="maze-path" d="${path.d}" stroke="${phase.nodeColor}" stroke-width="2" opacity="0.3"/>`;
+    });
+  });
+
+  // ── 绘制所有节点 ─────────────────────────────────────
+  Object.entries(MAZE_MAP.phases).forEach(([phaseId, phase]) => {
+    const phaseRevealed = state.totalScore >= phase.unlockScore;
+    phase.nodes.forEach(node => {
+      const nodeState = getMazeNodeState(node);
+      const revealed = phaseRevealed;
+      const isClickable = node.cardId && revealed;
+
+      // 节点颜色
+      let fillColor, strokeColor;
+      if (node.isGate) {
+        fillColor = '#8D6E63'; strokeColor = '#5D4037';
+      } else if (node.isTreasure) {
+        fillColor = '#FFD700'; strokeColor = '#E65100';
+      } else if (!revealed) {
+        fillColor = '#9E9E9E'; strokeColor = '#616161';
+      } else if (nodeState === 'done') {
+        fillColor = phase.nodeColor; strokeColor = '#fff';
+      } else if (nodeState === 'available') {
+        fillColor = '#FFEB3B'; strokeColor = phase.nodeColor;
+      } else {
+        fillColor = '#BDBDBD'; strokeColor = '#757575';
+      }
+
+      // 发光效果（已完成节点）
+      const glowClass = nodeState === 'done' && !node.isGate ? 'maze-node-glow' : '';
+
+      // 点击事件
+      const onclick = isClickable ? `openMazeNode('${node.id}')` : '';
+
+      // 节点圆
+      const r = node.isGate ? 22 : node.isTreasure ? 26 : 18;
+      svg += `<g class="maze-node ${glowClass}" ${onclick ? `style="cursor:pointer"` : ''} onclick="${onclick}">`;
+      svg += `<circle cx="${node.x}" cy="${node.y}" r="${r + 4}" fill="none" stroke="${strokeColor}" stroke-width="1" opacity="0.2"/>`;
+      svg += `<circle class="maze-node-circle" cx="${node.x}" cy="${node.y}" r="${r}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2.5"/>`;
+
+      // 节点图标/文字
+      if (node.isGate) {
+        svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="16">🚪</text>`;
+      } else if (node.isTreasure) {
+        svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="18">👑</text>`;
+      } else if (node.cardId) {
+        const card = TASK_CARDS.find(c => c.id === node.cardId);
+        if (card) {
+          // 已完成打勾
+          if (nodeState === 'done') {
+            svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">✅</text>`;
+          } else if (!revealed) {
+            svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">🔒</text>`;
+          } else {
+            svg += `<text x="${node.x}" y="${node.y + 4}" text-anchor="middle" font-size="10" fill="${strokeColor}" font-weight="700">${card.stars || '⭐'}</text>`;
+          }
+        }
+      }
+
+      // 节点名称（淡色底）
+      if (node.label && (revealed || node.isGate || node.isTreasure)) {
+        const labelY = node.y + r + 14;
+        svg += `<rect x="${node.x - 36}" y="${labelY - 8}" width="72" height="14" rx="6" fill="rgba(255,255,255,0.7)"/>`;
+        svg += `<text x="${node.x}" y="${labelY + 3}" text-anchor="middle" class="maze-node-label">${node.label}</text>`;
+      }
+
+      // 死路标记
+      if (node.deadEnd && revealed) {
+        svg += `<text x="${node.x}" y="${node.y - r - 4}" text-anchor="middle" font-size="9" fill="#EF5350">死路</text>`;
+      }
+
+      svg += `</g>`;
+    });
+  });
+
+  // ── 骑士角色 ─────────────────────────────────────────
+  // 骑士画在(0,0)，通过transform定位（与moveKnight/positionKnightImmediate配合）
+  const knightNodeId = state.mazeKnightNode || 'n_start';
+  const knightNode = findMazeNode(knightNodeId) || findMazeNode('n_start');
+  svg += `<g id="mazeKnightGroup" class="maze-knight" transform="translate(${knightNode.x}, ${knightNode.y})">`;
+  svg += `<circle cx="0" cy="0" r="16" fill="#FF6F00" stroke="#E65100" stroke-width="2.5"/>`;
+  svg += `<text x="0" y="5" text-anchor="middle" font-size="16">🦸</text>`;
+  svg += `</g>`;
+
+  svg += `</svg>`;
+
+  // 渲染到容器
+  container.innerHTML = svg;
+
+  // 更新迷雾状态
+  checkPhaseFogReveal();
+
+  // 更新骑士位置（JS控制，支持动画）
+  positionKnightImmediate(knightNodeId);
+
+  // 显示全部卡牌入口
+  const toggleEl = document.getElementById('mazeAllCardsToggle');
+  if (toggleEl) toggleEl.style.display = 'flex';
+}
+
+// ── 骑士立即定位（不动画）──────────────────────────────────
+function positionKnightImmediate(nodeId) {
+  const node = findMazeNode(nodeId || state.mazeKnightNode || 'n_start');
+  if (!node) return;
+  const group = document.getElementById('mazeKnightGroup');
+  if (!group) return;
+  group.style.transition = 'none';
+  group.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+  group.getBoundingClientRect(); // force reflow
+  group.style.transition = '';
+}
+
+// ── 全部卡牌视图切换 ───────────────────────────────────────
+let mazeShowAllCards = false;
+function toggleAllCardsView() {
+  mazeShowAllCards = !mazeShowAllCards;
+  const grid = document.getElementById('cardsGrid');
+  const mazeEl = document.getElementById('mazeContainer');
+  const keyBadge = document.getElementById('mazeKeyBadge');
+  const toggleEl = document.getElementById('mazeAllCardsToggle');
+  const toggleBtn = toggleEl ? toggleEl.querySelector('button') : null;
+  if (mazeShowAllCards) {
+    if (mazeEl) mazeEl.style.display = 'none';
+    if (keyBadge) keyBadge.style.display = 'none';
+    grid.style.display = 'grid';
+    if (toggleEl) toggleEl.style.display = 'none';
+    if (toggleBtn) toggleBtn.textContent = '🗺️ 回到迷宫';
+  } else {
+    if (mazeEl) mazeEl.style.display = 'block';
+    if (keyBadge) keyBadge.style.display = 'flex';
+    grid.style.display = 'none';
+    if (toggleEl) toggleEl.style.display = 'flex';
+    if (toggleBtn) toggleBtn.textContent = '📜 查看全部挑战卡';
+  }
+}
+
+// ── 渲染任务卡（迷宫优先） ──────────────────────────────────
 let currentFilter = 'all';
 function renderCards() {
   const grid = document.getElementById('cardsGrid');
+  const mazeEl = document.getElementById('mazeContainer');
+  const keyBadge = document.getElementById('mazeKeyBadge');
+  const toggleEl = document.getElementById('mazeAllCardsToggle');
+
+  // ── 迷宫模式（默认） ─────────────────────────────────────
+  if (!mazeShowAllCards) {
+    renderMaze();
+    return;
+  }
+
+  // ── 全部卡牌模式 ────────────────────────────────────────
+  if (mazeEl) mazeEl.style.display = 'none';
+  if (keyBadge) keyBadge.style.display = 'none';
+  if (toggleEl) toggleEl.style.display = 'none';
+  grid.style.display = 'grid';
+
   let cards = TASK_CARDS.filter(c => {
     if (currentFilter !== 'all' && c.series !== currentFilter) return false;
     return true;
   });
+
+  // 检查周是否过期，过期则重置
+  const weekStart = getWeekStart();
+  if (state.weekStart !== weekStart) {
+    state.weekStart = weekStart;
+    state.weeklyCardClaims = {};
+    state.weeklyCardCount = 0;
+    state.weeklyAchievement = null;
+    saveState();
+  }
 
   // 按系列分组
   const groups = {};
@@ -1411,11 +2336,14 @@ function renderCards() {
     html += `<div class="series-divider">${series}</div>`;
     cards.forEach(c => {
       const isUnlocked = isCardUnlocked(c);
+      const claimedThisWeek = (state.weeklyCardClaims[c.id] || 0) >= 1;
       const lockIcon = isUnlocked ? '' : '<div class="card-lock-badge">🔒</div>';
       const weekBadge = c.weekUnlock && !state.weekUnlocked ?
         `<div class="week-unlock-badge">第一周后解锁</div>` : '';
+      const claimedBadge = claimedThisWeek && isUnlocked ?
+        `<div class="claimed-badge">✅ 本周已完成</div>` : '';
       html += `
-        <div class="task-card ${isUnlocked?'':'locked'}"
+        <div class="task-card ${isUnlocked?'':'locked'} ${claimedThisWeek?'claimed':''}"
              style="background:${c.lightColor}"
              onclick="openCardModal('${c.id}')">
           ${lockIcon}
@@ -1423,6 +2351,7 @@ function renderCards() {
           <div class="card-name">${c.name}</div>
           <div class="card-sub">${c.sub}</div>
           <div class="card-score">+${c.score}分</div>
+          ${claimedBadge}
           ${!isUnlocked && !c.weekUnlock ? `<div class="card-unlock">${
             c.unlockRope !== undefined ? '🪢 跳绳达到'+c.unlockRope+'个解锁' :
             c.unlockMathCount !== undefined ? '⚡ 口算练习'+c.unlockMathCount+'次解锁' :
@@ -1488,40 +2417,125 @@ function openCardModal(id) {
     speakContainer.innerHTML = card.speech ? speakBtn(card.speech) : '';
   }
 
+  // 检查本周是否已领取
+  const weekStart = getWeekStart();
+  if (state.weekStart !== weekStart) {
+    state.weekStart = weekStart;
+    state.weeklyCardClaims = {};
+    state.weeklyCardCount = 0;
+    state.weeklyAchievement = null;
+    saveState();
+  }
+  const claimedThisWeek = (state.weeklyCardClaims[id] || 0) >= 1;
+  const alreadyPending = state.pendingAdditions.some(p => p.type === 'card' && p.taskId === id);
+  const canClaim = unlocked && !claimedThisWeek && !alreadyPending;
+  
   const btn = document.getElementById('btnCardClaim');
   btn.onclick = () => claimCardWithReport(id);
-  btn.disabled = !unlocked;
-  btn.style.opacity = unlocked ? '1' : '0.4';
-  btn.textContent = unlocked ? '✅ 我完成了！领取积分' : '🔒 还没解锁';
+  btn.disabled = !canClaim;
+  btn.style.opacity = canClaim ? '1' : '0.4';
+  btn.textContent = claimedThisWeek ? '✅ 本周已完成' : alreadyPending ? '⏳ 等待审核中' : unlocked ? '✅ 我完成了！领取积分' : '🔒 还没解锁';
 
   document.getElementById('cardModal').style.display = 'flex';
   window._currentCardId = id;
 }
 
-// 挑战卡领取入口：先弹自律弹窗，再执行 claimCard
+// 挑战卡领取入口：先弹自律弹窗，再执行 claimCard（带 isSelf）
 function claimCardWithReport(id) {
   const card = TASK_CARDS.find(c => c.id === id);
   if (!card || !isCardUnlocked(card)) return;
   showSelfReportUnified(card.id, card.name, card.score, '🃏', (isSelf) => {
-    claimCard(id);
+    claimCard(id, isSelf);
   });
 }
 
-function claimCard(id) {
+function claimCard(id, isSelf) {
   const card = TASK_CARDS.find(c => c.id === id);
   if (!card || !isCardUnlocked(card)) return;
+  
+  // ── 防刷检查：每周英雄挑战卡可领取7次（每天1次），其他卡1次 ──
+  const weekStart = getWeekStart();
+  if (state.weekStart !== weekStart) {
+    // 新的一周，重置周计数
+    state.weekStart = weekStart;
+    state.weeklyCardClaims = {};
+    state.weeklyCardCount = 0;
+    state.weeklyAchievement = null;
+  }
+
+  const isHeroCard = card.phase === 1;
+  const maxClaims = isHeroCard ? 7 : 1;
+  // weeklyCardClaims[id] 存的是已领取的日期数组
+  const claimedDates = state.weeklyCardClaims[id] || [];
+  if (claimedDates.length >= maxClaims) {
+    if (isHeroCard) {
+      showCelebration('🏆', '本周7次全完成！', `「${card.name}」这周每天都完成啦！下周继续加油！🎯`);
+    } else {
+      showCelebration('🚫', '本周已领取！', `「${card.name}」本周完成过了，下周再来挑战其他卡吧！🎯`);
+    }
+    return;
+  }
+  
+  // 检查是否在待审核列表中已有该卡（防止重复提交）
+  const alreadyPending = state.pendingAdditions.some(p => p.type === 'card' && p.taskId === id);
+  if (alreadyPending) {
+    showCelebration('⏳', '正在审核中！', `「${card.name}」已经在等爸爸妈妈审核了，耐心等待哦！`);
+    return;
+  }
+  
+  // ── 正常领取逻辑 ──
+  const today = todayStr();
+  // weeklyCardClaims[id] 存的是日期字符串数组，同一天不重复追加
+  const existing = state.weeklyCardClaims[id] || [];
+  if (!existing.includes(today)) {
+    state.weeklyCardClaims[id] = [...existing, today];
+  }
   state.cardClaims[id] = (state.cardClaims[id] || 0) + 1;
-  // 周度成就计数（每张只计一次）
-  if (state.cardClaims[id] === 1) {
+  state._weeklyCardOpen = null; // 清除本周战报展开状态
+  // 周度成就计数（每张卡首次领取时+1，同一张卡多次领取不重复计数）
+  if (existing.length === 0) {
     state.weeklyCardCount = (state.weeklyCardCount || 0) + 1;
   }
   // 阅读卡联动：每次领取阅读系列卡累计readCount
   if (card.series && card.series.includes('阅读')) {
     state.readCount = (state.readCount || 0) + 1;
   }
+  // 走本地 pendingAdditions（与早晨包/睡前包一致）
+  state.pendingAdditions.push({
+    type: 'card',
+    taskId: id,
+    name: card.name,
+    icon: card.stars ? '🃏' : '🎴',
+    score: card.score,
+    date: today,
+    isSelf: isSelf
+  });
+  // 先加积分（审核驳回时再扣）
+  state.totalScore += card.score;
+  // 分类积分（用于阶段勋章进度条）
+  if (card.recommendType) {
+    if (!state.categoryPoints) state.categoryPoints = {};
+    state.categoryPoints[card.recommendType] = (state.categoryPoints[card.recommendType] || 0) + card.score;
+  }
   saveState();
+  // 迷宫骑士移动到该节点
+  const nodeForCard = findMazeNodeByCardId(id);
+  if (nodeForCard) {
+    state.mazeKnightNode = nodeForCard;
+    saveState();
+    // 延迟等模态框关闭后再动
+    setTimeout(() => {
+      moveKnight(nodeForCard, () => {
+        checkPhaseFogReveal();
+      });
+    }, 400);
+  }
+  // 同步到 Firebase（同时走 submitPending，让爸妈能在 Firebase 后台看到）
   if (window._firebaseReady) {
-    submitPending('card', id, card.name, card.score);
+    submitPending('card', id, card.name, card.score, '', isSelf);
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + card.score);
+    });
   }
   closeModal('cardModal');
   renderAll();
@@ -1637,21 +2651,14 @@ function redeemItem(id, name, cost, isEgg) {
 function renderRope() {
   document.getElementById('ropeCurrent').textContent = state.ropeMax || 0;
 
-  // 里程碑
+  // 里程碑入口提示（跳绳里程碑已并入英雄挑战卡）
   const mEl = document.getElementById('ropeMilestones');
-  mEl.innerHTML = ROPE_MILESTONES.map(m => {
-    const achieved = state.ropeMax >= m.target;
-    return `
-      <div class="milestone-item ${achieved?'achieved':''}">
-        <div class="milestone-icon">${achieved?'✅':'🎯'}</div>
-        <div class="milestone-info">
-          <div class="milestone-target">${m.target} 个${speakBtn(m.speech)}</div>
-          <div class="milestone-label">${m.label}</div>
-        </div>
-        <div class="milestone-bonus">+${m.bonus}分</div>
-        <div class="milestone-check">${achieved?'🏆':''}</div>
-      </div>`;
-  }).join('');
+  mEl.innerHTML = `
+    <div class="rope-milestone-hint">
+      <div style="font-size:1rem;font-weight:600;color:#E53935;margin-bottom:6px;">🏅 跳绳里程碑奖励在英雄挑战卡里！</div>
+      <div style="font-size:0.85rem;color:#888;">去「英雄挑战卡」页面，领取对应跳绳挑战卡的奖励！</div>
+    </div>
+  `;
 
   // 历史记录
   const hEl = document.getElementById('ropeHistory');
@@ -1675,18 +2682,20 @@ document.getElementById('btnRopeSubmit').addEventListener('click', () => {
 
   if (val > prev) {
     state.ropeMax = val;
-    // 检查里程碑 → 提交待审
+    // 里程碑奖励改为挑战卡领取（rope1-5），此处只刷新卡片解锁状态
+    saveState();
+    // 检查是否有新的里程碑卡片解锁，显示提示
+    const newlyUnlocked = [];
     ROPE_MILESTONES.forEach(m => {
-      if (val >= m.target && prev < m.target &&
-          !state.ropeMilestonesAchieved.includes(m.target)) {
-        state.ropeMilestonesAchieved.push(m.target);
-        saveState();
-        if (window._firebaseReady) {
-          submitPending('rope', 'rope_' + m.target, `跳绳里程碑 ${m.target}个`, m.bonus, m.label);
-        }
-        showCelebration('🪢', `里程碑解锁！${m.target}个！`, `${m.label}\n等爸妈审核后 +${m.bonus}分入账！`);
+      if (val >= m.target && prev < m.target) {
+        newlyUnlocked.push(m.target);
       }
     });
+    if (newlyUnlocked.length > 0) {
+      setTimeout(() => {
+        showCelebration('🪢', `新里程碑解锁！`, `去英雄挑战卡领取对应奖励！`);
+      }, 500);
+    }
   }
   saveState();
   document.getElementById('ropeInput').value = '';
@@ -1841,6 +2850,27 @@ document.getElementById('btnDadSleep').addEventListener('click', () => {
   showCelebration('😴', '爸爸睡着了...', '哈哈！拍下来存证！下次再来挑战！📸');
 });
 document.getElementById('btnEggClose').addEventListener('click', () => closeModal('eggModal'));
+
+// ── 简单提示 Toast ─────────────────────────────────────────────
+function showToast(msg, duration) {
+  const existing = document.getElementById('toastMsg');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.id = 'toastMsg';
+  toast.style.cssText = `
+    position:fixed;top:80px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,0.8);color:#fff;padding:12px 24px;border-radius:20px;
+    font-size:14px;z-index:99999;opacity:0;transition:opacity 0.3s;
+    pointer-events:none;white-space:nowrap;
+  `;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.style.opacity = '1');
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, duration || 2000);
+}
 
 // ── 庆祝弹窗 ───────────────────────────────────────────────────
 function showCelebration(emoji, title, desc) {
@@ -2076,6 +3106,115 @@ function renderWeeklyAchievement() {
   </div>`;
 }
 
+// ── 本周战报：展开/收起英雄挑战卡 ─────────────────────────────
+function toggleWeeklyCard(id) {
+  if (state._weeklyCardOpen === id) {
+    state._weeklyCardOpen = null; // 再次点击收起
+  } else {
+    state._weeklyCardOpen = id;   // 展开该卡，收起其他
+  }
+  // 仅重新渲染卡片区
+  const cardsDiv = document.getElementById('weeklyCards');
+  if (!cardsDiv) return;
+  const p1Cards = TASK_CARDS.filter(c => c.phase === 1 && isCardUnlocked(c));
+  if (p1Cards.length === 0) {
+    cardsDiv.innerHTML = '<div style="text-align:center;color:#aaa;padding:16px;font-size:0.85rem;">🎉 今日挑战已完成！</div>';
+    return;
+  }
+  cardsDiv.innerHTML = p1Cards.map(c => renderWeeklyCard(c)).join('');
+}
+
+// ── 本周打卡槽位辅助函数 ──────────────────────────────────────
+// 返回本周7天（周一~周日）的日期字符串数组
+function getWeekDays() {
+  const now = new Date();
+  const day = now.getDay(); // 0=周日
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d.toISOString().split('T')[0]); // YYYY-MM-DD
+  }
+  return days;
+}
+
+// 返回指定卡本周各天的领取状态
+// status: 'done' | 'today' | 'future' | 'empty'（过去未完成=empty）
+function getCardWeeklySlots(cardId) {
+  const weekDays = getWeekDays(); // ['2026-04-06','2026-04-07',...]
+  const today = todayStr();
+  const claimed = state.weeklyCardClaims[cardId] || []; // 本周已领取的日期数组
+  return weekDays.map(day => {
+    if (claimed.includes(day)) return { day, status: 'done' };
+    if (day === today)         return { day, status: 'today' };
+    if (day > today)           return { day, status: 'future' };
+    return { day, status: 'empty' }; // 过去的空白天（不应出现）
+  });
+}
+
+// 渲染本周战报中单张英雄挑战卡（被 toggleWeeklyCard 和 renderWeekly 共用）
+function renderWeeklyCard(c) {
+  const card = c;
+  const slots = getCardWeeklySlots(card.id);
+  const doneCount = slots.filter(s => s.status === 'done').length;
+  const allDone = doneCount >= 7;
+  const todaySlot = slots.find(s => s.day === todayStr());
+  const open = state._weeklyCardOpen === card.id && !allDone;
+  const canClaimToday = todaySlot && todaySlot.status === 'today';
+  const dayLabels = ['周一','周二','周三','周四','周五','周六','周日'];
+
+  // ── 打卡槽位HTML ──
+  const slotsHtml = allDone
+    ? `<div style="text-align:center;padding:10px 0">
+         <div style="font-size:1.5rem">🏆</div>
+         <div style="font-size:0.8rem;color:#06D6A0;font-weight:700">本周7次全部完成！等下周刷新~</div>
+       </div>`
+    : `<div style="display:flex;gap:4px;flex-wrap:wrap;padding:6px 2px">
+         ${slots.map((s, i) => {
+           const lbl = dayLabels[i];
+           if (s.status === 'done') {
+             return `<div style="flex:1;min-width:36px;text-align:center;padding:5px 2px;border-radius:8px;background:#06D6A0;color:#fff;font-size:0.68rem;font-weight:700">${lbl}<br>✅</div>`;
+           } else if (s.status === 'today') {
+             return `<div onclick="event.stopPropagation();toggleWeeklyCard('${card.id}')" style="flex:1;min-width:36px;text-align:center;padding:5px 2px;border-radius:8px;background:#FFF3CD;border:2px solid #F9A825;color:#7a5c00;font-size:0.68rem;font-weight:700;cursor:pointer;animation:pulse 1.5s infinite">${lbl}<br>▶</div>`;
+           } else {
+             return `<div style="flex:1;min-width:36px;text-align:center;padding:5px 2px;border-radius:8px;background:#f0f0f0;color:#bbb;font-size:0.68rem;font-weight:700">${lbl}<br>🔒</div>`;
+           }
+         }).join('')}
+       </div>`;
+
+  const bg = allDone ? '#EDFFF9' : (open ? '#EEF6FF' : '#F8F9FF');
+  const border = allDone ? '#06D6A0' : card.color;
+
+  return `
+  <div id="wcard-${card.id}" style="margin-bottom:12px;border-radius:14px;background:${bg};border-left:5px solid ${border};overflow:hidden;transition:all 0.2s">
+    <div onclick="${allDone?'':`toggleWeeklyCard('${card.id}')`}" style="padding:12px;display:flex;align-items:center;gap:10px;cursor:${allDone?'default':'pointer'}">
+      <span style="font-size:1.3rem">${card.stars}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.9rem;font-weight:600;color:${allDone?'#06D6A0':'#333'}">${card.name}</div>
+        <div style="font-size:0.75rem;color:#999">${card.sub}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:0.9rem;font-weight:700;color:#F9A825">+${card.score}分</div>
+        ${!allDone ? `<div style="font-size:0.7rem;color:#aaa;margin-top:2px">${doneCount}/7天</div>` : ''}
+      </div>
+    </div>
+    ${slotsHtml}
+    ${open && canClaimToday ? `
+    <div style="padding:0 12px 12px;border-top:1px dashed #e0e0e0">
+      <div style="display:flex;align-items:flex-start;gap:6px;margin-top:10px">
+        <div style="font-size:0.88rem;color:#555;line-height:1.6;flex:1">${card.desc}</div>
+        <button class="speak-btn" title="点我听任务" onclick="event.stopPropagation();speakText('${card.desc.replace(/'/g,"\'")}',this)" style="background:none;border:none;font-size:1rem;cursor:pointer;flex-shrink:0;margin-top:2px">🔈</button>
+      </div>
+      ${card.tip ? `<div style="margin-top:8px;background:#fffbe6;border-radius:8px;padding:8px 12px;font-size:0.83rem;color:#7a5c00;white-space:pre-line">💡 ${card.tip}</div>` : ''}
+      <button onclick="claimCardWithReport('${card.id}')" style="margin-top:10px;width:100%;padding:10px;border:none;border-radius:10px;background:linear-gradient(135deg,#06D6A0,#00C9A7);color:#fff;font-size:0.95rem;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(6,214,160,0.3)">
+        ✅ 我完成了！点亮今天 +${card.score}分
+      </button>
+    </div>` : ''}
+  </div>`;
+}
+
 // ── 渲染每周任务总览 ──────────────────────────────────────────
 function renderWeekly() {
   // ── 阶段横幅 ─────────────────────────────────────────────────
@@ -2107,6 +3246,39 @@ function renderWeekly() {
     if (!state.phaseStartDate) { state.phaseStartDate = todayStr(); saveState(); }
   }
 
+  // ── 分类积分进度条（阶段勋章进度）──────────────────────────
+  const catBarsEl = document.getElementById('categoryProgressBars');
+  if (catBarsEl) {
+    const cp = state.categoryPoints || {};
+    // 阶段勋章对应分类：focus≥30, plan≥30, reflect≥20
+    const catMeta = [
+      { key:'focus',   icon:'🎯', name:'专注力', target:30, color:'#E53935' },
+      { key:'plan',    icon:'📅', name:'计划性', target:30, color:'#8E24AA' },
+      { key:'reflect', icon:'🪞', name:'回顾小达人', target:20, color:'#00897B' },
+    ];
+    catBarsEl.innerHTML = `
+      <div style="background:#F8F9FF;border-radius:14px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:0.8rem;font-weight:700;color:#888;margin-bottom:8px;display:flex;align-items:center;gap:6px;">🏆 阶段勋章进度
+          <button class="speak-btn" title="点我听说明" onclick="event.stopPropagation();speakText('这里是阶段勋章进度！你完成不同类型的任务会获得不同颜色的能量条。专注力任务获得红色能量，计划性任务获得紫色能量，回顾小达人任务获得青色能量。每个能量条攒满就能获得对应勋章！',this)" style="background:none;border:none;font-size:1rem;cursor:pointer;vertical-align:middle">🔈</button>
+        </div>
+        ${catMeta.map(cat => {
+          const val = cp[cat.key] || 0;
+          const pct = Math.min(100, Math.round(val / cat.target * 100));
+          const done = val >= cat.target;
+          return `<div style="margin-bottom:6px;">
+            <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:3px;">
+              <span>${cat.icon} ${cat.name}</span>
+              <span style="color:${done?'#06D6A0':cat.color};font-weight:600;">${val}/${cat.target}${done?' ✅':''}</span>
+            </div>
+            <div style="background:#e0e0e0;border-radius:6px;height:6px;">
+              <div style="background:${done?'#06D6A0':cat.color};border-radius:6px;height:6px;width:${pct}%;transition:width 0.4s;"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  }
+
   // 日期范围
   const now = new Date();
   const dayOfWeek = now.getDay() || 7;
@@ -2126,7 +3298,7 @@ function renderWeekly() {
   // 统计数字（顶部三格）
   const score = state.totalScore || 0;
   const checkedToday = Object.keys(state.todayChecked || {}).length;
-  const cardsDone = Object.values(state.cardClaims || {}).reduce((a,b)=>a+(b>0?1:0),0);
+  const cardsDone = state.weeklyCardCount || 0;
   const wsEl = document.getElementById('weeklyTotalScore');
   if (wsEl) wsEl.textContent = score;
   const wdEl = document.getElementById('weeklyTaskDone');
@@ -2134,157 +3306,31 @@ function renderWeekly() {
   const wcEl = document.getElementById('weeklyCardDone');
   if (wcEl) wcEl.textContent = cardsDone;
 
-  // ── ① 今日完成情况（因果链第一环：今天做了什么）──────────────
-  const todayStatusDiv = document.getElementById('weeklyTodayStatus');
-  if (todayStatusDiv) {
-    const allDailyTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
-    const doneCount = allDailyTasks.filter(t => state.todayChecked[t.id]).length;
-    const totalCount = allDailyTasks.length;
-    const todayEarned = allDailyTasks.reduce((sum, t) => {
-      return sum + (state.todayChecked[t.id] ? t.score : 0);
-    }, 0);
-
-    // 进度条颜色
-    const pct = Math.round(doneCount / totalCount * 100);
-    const barColor = pct >= 80 ? '#06D6A0' : pct >= 50 ? '#FFB703' : '#EF476F';
-
-    const taskRows = allDailyTasks.map(t => {
-      const st = state.todayChecked[t.id];
-      let badge = '', cls = '';
-      if (st === 'approved') { badge = '<span class="wtask-badge done">✅</span>'; cls = 'done'; }
-      else if (st === 'pending') { badge = '<span class="wtask-badge pending">⏳</span>'; cls = 'pending'; }
-      else { badge = '<span class="wtask-badge none">—</span>'; }
-      return `<div class="wtask-row ${cls}">
-        <span class="wtask-icon">${t.icon}</span>
-        <span class="wtask-name">${t.name}</span>
-        <span class="wtask-score">+${t.score}分</span>
-        ${badge}
-      </div>`;
-    }).join('');
-
-    todayStatusDiv.innerHTML = `
-      <div style="background:#F8F9FF;border-radius:14px;padding:14px;margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">今日完成 ${doneCount}/${totalCount} 件</span>
-          <span style="font-weight:800;font-size:1.1rem;color:#118AB2;">+${todayEarned}分</span>
-        </div>
-        <div style="background:#e0e0e0;border-radius:8px;height:8px;margin-bottom:12px;">
-          <div style="background:${barColor};border-radius:8px;height:8px;width:${pct}%;transition:width 0.5s;"></div>
-        </div>
-        ${taskRows}
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;padding:10px 12px;background:#FFF8E7;border-radius:10px;font-size:0.85rem;color:#888;border-left:3px solid #FFB703;">
-        ⬇️ 做完任务 → 积分入账 → 攒够就能换奖励！
-      </div>
-    `;
+  // ── 英雄挑战卡（仅Phase1，可展开）────────────────────────────
+  // 在 section title 旁注入语音引导按钮（孩子不认识字，需要听）
+  const weeklySectionTitle = document.querySelector('.weekly-section-title');
+  if (weeklySectionTitle && !weeklySectionTitle.querySelector('.speak-btn')) {
+    const safeText = '这里是本周英雄挑战！这些是你每天都会遇到的挑战卡，每天都能完成一次，这周最多可以完成七次哦！点击卡片展开，看看是什么任务，完成后就能领取分数！';
+    const btn = document.createElement('button');
+    btn.className = 'speak-btn';
+    btn.title = '点我听任务说明';
+    btn.style.cssText = 'margin-left:6px;background:none;border:none;font-size:1rem;cursor:pointer;vertical-align:middle';
+    btn.onclick = function(e) { e.stopPropagation(); speakText(safeText, btn); };
+    btn.textContent = '🔈';
+    weeklySectionTitle.appendChild(btn);
   }
 
-  // ── ② 每日任务清单（因果链第二环：每件任务得多少分）────────────
-  const taskListDiv = document.getElementById('weeklyTaskList');
-  if (taskListDiv) {
-    const fixedSection = DAILY_FIXED.map(t => `
-      <div class="weekly-task-card fixed">
-        <div class="wtc-left">
-          <span class="wtc-icon">${t.icon}</span>
-          <div>
-            <div class="wtc-name">${t.name} <span style="font-size:11px;color:#aaa;font-weight:400;">必做</span></div>
-            <div class="wtc-sub">${t.sub}</div>
-          </div>
-        </div>
-        <div class="wtc-score">+${t.score}<span class="wtc-unit">分</span></div>
-      </div>`).join('');
-
-    const optAll = [...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
-    const optSection = optAll.map(t => `
-      <div class="weekly-task-card optional">
-        <div class="wtc-left">
-          <span class="wtc-icon">${t.icon}</span>
-          <div>
-            <div class="wtc-name">${t.name} <span style="font-size:11px;color:#06D6A0;font-weight:400;">自愿</span></div>
-            <div class="wtc-sub">${t.sub}</div>
-          </div>
-        </div>
-        <div class="wtc-score">+${t.score}<span class="wtc-unit">分</span></div>
-      </div>`).join('');
-
-    // 计算今日可得总分
-    const maxDaily = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK].reduce((s,t)=>s+t.score,0);
-
-    taskListDiv.innerHTML = `
-      <div style="padding:8px 4px;font-size:12px;color:#888;margin-bottom:4px;">
-        ⭐ <strong>必做任务</strong>（每天都要完成，每天最多可得 ${DAILY_FIXED.reduce((s,t)=>s+t.score,0)} 分）
-      </div>
-      ${fixedSection}
-      <div style="padding:8px 4px;font-size:12px;color:#888;margin:6px 0 4px;">
-        🎯 <strong>选做任务</strong>（做了来领，不做不扣，每天还可得 ${optAll.reduce((s,t)=>s+t.score,0)}+ 分）
-      </div>
-      ${optSection}
-      <div style="margin-top:10px;padding:10px 12px;background:#EDFFF9;border-radius:10px;font-size:12px;color:#00897B;text-align:center;font-weight:600;">
-        今天全部完成可得 ${maxDaily}+ 分 ⚡
-      </div>
-    `;
-  }
-
-  // ── ③ 本周可做任务卡（因果链第三环：英雄挑战额外加分）────────────
   const cardsDiv = document.getElementById('weeklyCards');
   if (cardsDiv) {
-    const unlocked = TASK_CARDS.filter(c => isCardUnlocked(c));
-    const locked = TASK_CARDS.filter(c => !isCardUnlocked(c));
-    const groups = {};
-    unlocked.forEach(c => {
-      if (!groups[c.series]) groups[c.series] = [];
-      groups[c.series].push(c);
-    });
-
-    let html = '';
-    if (unlocked.length > 0) {
-      html += '<div class="wcard-subtitle">⚔️ 现在可以做的挑战（完成额外得分！）</div>';
-      Object.entries(groups).forEach(([series, cards]) => {
-        html += `<div class="wcard-series-label">${series}</div>`;
-        html += cards.map(c => {
-          const done = (state.cardClaims||{})[c.id] > 0;
-          return `<div class="wcard-row ${done?'done':''}" onclick="switchToCardsTab('${c.id}')">
-            <span class="wcard-stars">${c.stars}</span>
-            <div class="wcard-info">
-              <div class="wcard-name">${c.name}</div>
-              <div class="wcard-desc">${c.desc}</div>
-            </div>
-            <div class="wcard-right">
-              <div class="wcard-score">+${c.score}</div>
-              ${done ? '<div class="wcard-done-badge">✅</div>' : '<div style="font-size:11px;color:#888;">点击完成</div>'}
-            </div>
-          </div>`;
-        }).join('');
-      });
+    const p1Cards = TASK_CARDS.filter(c => c.phase === 1 && isCardUnlocked(c));
+    if (p1Cards.length === 0) {
+      cardsDiv.innerHTML = '<div style="text-align:center;color:#aaa;padding:16px;font-size:0.85rem;">🎉 今日挑战已完成！</div>';
+    } else {
+      cardsDiv.innerHTML = p1Cards.map(c => renderWeeklyCard(c)).join('');
     }
-
-    if (locked.length > 0) {
-      const nearLocked = locked
-        .filter(c => !c.weekUnlock && c.unlockAt > 0)
-        .sort((a,b) => a.unlockAt - b.unlockAt)
-        .slice(0, 3);
-      if (nearLocked.length > 0) {
-        html += '<div class="wcard-subtitle locked-tip">🔒 再攒一点就能解锁</div>';
-        html += nearLocked.map(c => {
-          const gap = c.unlockAt - score;
-          return `<div class="wcard-row locked">
-            <span class="wcard-stars">🔒</span>
-            <div class="wcard-info">
-              <div class="wcard-name">${c.name}</div>
-              <div class="wcard-desc">${c.desc}</div>
-            </div>
-            <div class="wcard-right">
-              <div class="wcard-score" style="color:#aaa">+${c.score}</div>
-              <div class="wcard-unlock-gap">还差${gap}分</div>
-            </div>
-          </div>`;
-        }).join('');
-      }
-    }
-    cardsDiv.innerHTML = html || '<div class="empty-tip">暂无可用任务卡</div>';
   }
 
-  // ── ④ 本周兑换目标（因果链第四环：积分→奖励） ────────────────────
+  // ── 积分兑换目标 ────────────────────────────────────────────
   const shopDiv = document.getElementById('weeklyShopGoal');
   if (shopDiv) {
     const allItems = SHOP.flatMap(g => g.items.map(i => ({ ...i, type: g.type, typeColor: g.color })));
@@ -2300,7 +3346,7 @@ function renderWeekly() {
       if (canBuyItems.length > 0) {
         html += `<div style="padding:8px 4px;font-size:12px;color:#06D6A0;font-weight:700;margin-bottom:4px;">🎉 现在就可以兑换！</div>`;
         html += canBuyItems.map(item => `
-          <div class="wshop-row can-buy" onclick="document.querySelector('[data-tab=\'shop\']').click()">
+          <div class="wshop-row can-buy" style="cursor:pointer" onclick="redeemItem('${item.id}','${item.name}',${item.cost},${!!item.isEgg});renderWeekly();">
             <span class="wshop-icon">${item.icon}</span>
             <div class="wshop-info">
               <div class="wshop-name">${item.name}</div>
@@ -2308,7 +3354,7 @@ function renderWeekly() {
             </div>
             <div class="wshop-right">
               <div class="wshop-cost">${item.cost}分</div>
-              <div class="wshop-badge can">✅ 点击去兑换</div>
+              <div class="wshop-badge can">✅ 点击兑换</div>
             </div>
           </div>`).join('');
       }
@@ -3067,11 +4113,31 @@ function renderDisciplineBar() {
 }
 
 function calcTodayScore() {
-  return Object.keys(state.todayChecked).reduce((sum, id) => {
+  const today = todayStr();
+  const todayStart = new Date(today).setHours(0, 0, 0, 0);
+  const todayEnd = new Date(today).setHours(23, 59, 59, 999);
+
+  // 1. 固定任务 + 可选任务 + 作业（从 todayChecked）
+  const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
     const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
     const t = all.find(x => x.id === id);
     return sum + (t ? t.score : 0);
   }, 0);
+
+  // 2. 待审加分池（挑战卡、早晨包、睡前包等）当天提交的
+  const pendingScore = (state.pendingAdditions || [])
+    .filter(p => p.date === today)
+    .reduce((sum, p) => sum + (p.score || 0), 0);
+
+  // 3. 勋章奖励（当天领取的）
+  const medalScore = Object.entries(state.medalClaims || {})
+    .filter(([id, ts]) => ts >= todayStart && ts <= todayEnd)
+    .reduce((sum, [medalId, ts]) => {
+      const medal = MEDALS.find(m => m.id === medalId);
+      return sum + (medal ? medal.bonus : 0);
+    }, 0);
+
+  return taskScore + pendingScore + medalScore;
 }
 
 function updateTodayScore() {
@@ -3080,6 +4146,241 @@ function updateTodayScore() {
   // 同步顶部今日得分
   const el = document.getElementById('headerTodayScore');
   if (el) el.textContent = today > 0 ? `+${today}` : '+0';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   🏆 勋章体系 v1.0（测试版）
+   三层结构：阶段勋章 + 分类勋章 + 坚持勋章
+══════════════════════════════════════════════════════════════ */
+
+// ── 勋章数据定义 ──────────────────────────────────────────────
+const MEDALS = [
+  // 【阶段勋章】3个
+  { id:'phase1', icon:'🥉', name:'专注小英雄', category:'phase',
+    desc:'专注类积分达到30分', bonus:50,
+    check: s => (s.categoryPoints?.focus||0) >= 30 },
+  { id:'phase2', icon:'🥈', name:'计划小达人', category:'phase',
+    desc:'计划类积分达到30分', bonus:50,
+    check: s => (s.categoryPoints?.plan||0) >= 30 },
+  { id:'phase3', icon:'🥇', name:'自我英雄', category:'phase',
+    desc:'复盘类积分达到20分', bonus:50,
+    check: s => (s.categoryPoints?.reflect||0) >= 20 },
+
+  // 【分类勋章】8个
+  { id:'cat_focus', icon:'🎯', name:'专注小苗', category:'cat',
+    cat:'focus', desc:'完成第一张专注挑战卡', bonus:15,
+    check: s => Object.keys(s.cardClaims||{}).some(id => {
+      const c = TASK_CARDS.find(tc => tc.id === id);
+      return c && c.recommendType === 'focus' && s.cardClaims[id] > 0;
+    }) },
+  { id:'cat_habit', icon:'🌟', name:'自律小标兵', category:'cat',
+    cat:'habit', desc:'连续7天完成早晨英雄包', bonus:15,
+    check: s => (s.streaks?.morning?.count||0) >= 7 },
+  { id:'cat_plan', icon:'📅', name:'计划小能人', category:'cat',
+    cat:'plan', desc:'完成第一张计划挑战卡', bonus:15,
+    check: s => Object.keys(s.cardClaims||{}).some(id => {
+      const c = TASK_CARDS.find(tc => tc.id === id);
+      return c && c.recommendType === 'plan' && s.cardClaims[id] > 0;
+    }) },
+  { id:'cat_challenge', icon:'💪', name:'挑战小勇士', category:'cat',
+    cat:'challenge', desc:'本周完成3张挑战卡', bonus:15,
+    check: s => (s.weeklyCardCount||0) >= 3 },
+  { id:'cat_reflect', icon:'🪞', name:'反思小智者', category:'cat',
+    cat:'reflect', desc:'完成第一张复盘卡', bonus:15,
+    check: s => Object.keys(s.cardClaims||{}).some(id => {
+      const c = TASK_CARDS.find(tc => tc.id === id);
+      return c && c.recommendType === 'reflect' && s.cardClaims[id] > 0;
+    }) },
+  { id:'cat_creative', icon:'🎨', name:'创意小艺术家', category:'cat',
+    cat:'creative', desc:'完成第一张创意挑战卡', bonus:15,
+    check: s => Object.keys(s.cardClaims||{}).some(id => {
+      const c = TASK_CARDS.find(tc => tc.id === id);
+      return c && c.recommendType === 'creative' && s.cardClaims[id] > 0;
+    }) },
+  { id:'cat_read', icon:'📚', name:'阅读小博士', category:'cat',
+    cat:'read', desc:'累计完成10次阅读挑战', bonus:15,
+    check: s => (s.readCount||0) >= 10 },
+  { id:'cat_sport', icon:'🪢', name:'运动小健将', category:'cat',
+    cat:'sport', desc:'跳绳连续7天打卡', bonus:15,
+    check: s => (s.ropeStreak?.count||0) >= 7 },
+
+  // 【坚持勋章】6个
+  { id:'streak_3', icon:'🔥', name:'点火仪式', category:'streak',
+    desc:'连续3天打卡', bonus:5,
+    check: s => Object.values(s.streaks||{}).some(st => st.count >= 3) },
+  { id:'streak_7', icon:'🔥', name:'小火苗', category:'streak',
+    desc:'连续7天打卡', bonus:10,
+    check: s => Object.values(s.streaks||{}).some(st => st.count >= 7) },
+  { id:'streak_14', icon:'🔥', name:'熊熊火焰', category:'streak',
+    desc:'连续14天打卡', bonus:20,
+    check: s => Object.values(s.streaks||{}).some(st => st.count >= 14) },
+  { id:'streak_30', icon:'🔥', name:'燎原之势', category:'streak',
+    desc:'连续30天打卡', bonus:50,
+    check: s => Object.values(s.streaks||{}).some(st => st.count >= 30) },
+  { id:'morning_7', icon:'🌅', name:'早起鸟', category:'streak',
+    desc:'连续7天完成早晨英雄包', bonus:15,
+    check: s => (s.streaks?.morning?.count||0) >= 7 },
+  { id:'night_7', icon:'🌙', name:'准时入睡', category:'streak',
+    desc:'连续7天完成睡前英雄包', bonus:15,
+    check: s => (s.streaks?.night?.count||0) >= 7 },
+];
+
+// ── 勋章弹窗 ──────────────────────────────────────────────────
+function showMedalsModal() {
+  const medalClaims = state.medalClaims || {};
+  const totalMedals = MEDALS.length;
+  const earnedCount = Object.keys(medalClaims).filter(id => medalClaims[id]).length;
+
+  // 分类统计
+  const phaseMedals = MEDALS.filter(m => m.category === 'phase');
+  const catMedals = MEDALS.filter(m => m.category === 'cat');
+  const streakMedals = MEDALS.filter(m => m.category === 'streak');
+
+  let html = `
+    <div id="medalsModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)closeMedalsModal()">
+      <div style="background:#fff;border-radius:20px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+        <div style="background:linear-gradient(135deg,#FFD700,#FFA500);padding:20px;border-radius:20px 20px 0 0;text-align:center;">
+          <div style="font-size:2rem;font-weight:800;color:#333;">🏆 我的勋章墙</div>
+          <div style="color:#555;margin-top:6px;">已获得 <b>${earnedCount}</b> / ${totalMedals} 枚</div>
+        </div>
+        <div style="padding:16px;">
+          <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:1.5rem;">🏆</span>
+              <span style="font-weight:700;">阶段勋章</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              ${phaseMedals.map(m => renderMedalItem(m, medalClaims)).join('')}
+            </div>
+          </div>
+
+          <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:1.5rem;">🎯</span>
+              <span style="font-weight:700;">分类勋章</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              ${catMedals.map(m => renderMedalItem(m, medalClaims)).join('')}
+            </div>
+          </div>
+
+          <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:1.5rem;">🔥</span>
+              <span style="font-weight:700;">坚持勋章</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              ${streakMedals.map(m => renderMedalItem(m, medalClaims)).join('')}
+            </div>
+          </div>
+
+          <button onclick="closeMedalsModal()" style="width:100%;padding:14px;border:none;border-radius:12px;background:#333;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;margin-top:8px;">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function renderMedalItem(medal, medalClaims) {
+  const earned = medalClaims[medal.id] || false;
+  const unlocked = medal.check(state);
+  const canClaim = unlocked && !earned;
+  const status = earned ? '✅' : (unlocked ? '✨' : '🔒');
+  const bgColor = earned ? 'linear-gradient(135deg,#FFD700,#FFA500)' : (unlocked ? 'linear-gradient(135deg,#E8F5E9,#C8E6C9)' : '#f0f0f0');
+  const textColor = earned || unlocked ? '#333' : '#999';
+  const opacity = earned || unlocked ? '1' : '0.7';
+
+  return `
+    <div style="text-align:center;cursor:pointer;" onclick="showMedalDetail('${medal.id}')">
+      <div style="width:60px;height:60px;border-radius:50%;background:${bgColor};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:${opacity};box-shadow:${earned?'0 4px 12px rgba(255,165,0,0.4)':'none'};transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+        ${earned || unlocked ? medal.icon : '🔒'}
+      </div>
+      <div style="font-size:0.75rem;color:${textColor};margin-top:4px;font-weight:${earned?'700':'400'};max-width:70px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${medal.name}
+      </div>
+      ${canClaim ? '<div style="font-size:0.65rem;color:#06D6A0;font-weight:700;">可领取！</div>' : ''}
+    </div>`;
+}
+
+function showMedalDetail(medalId) {
+  const medal = MEDALS.find(m => m.id === medalId);
+  if (!medal) return;
+  const medalClaims = state.medalClaims || {};
+  const earned = medalClaims[medal.id] || false;
+  const unlocked = medal.check(state);
+
+  const modal = document.getElementById('medalsModal');
+  if (!modal) return;
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.onclick = e => { if (e.target === overlay) document.body.removeChild(overlay); };
+
+  const cardBg = earned ? 'linear-gradient(135deg,#FFD700,#FFA500)' : (unlocked ? 'linear-gradient(135deg,#E8F5E9,#81C784)' : '#f5f5f5');
+
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:24px;text-align:center;max-width:320px;width:100%;">
+      <div style="width:80px;height:80px;border-radius:50%;background:${cardBg};display:flex;align-items:center;justify-content:center;font-size:3rem;margin:0 auto 16px;box-shadow:0 8px 24px rgba(0,0,0,0.2);">
+        ${unlocked ? medal.icon : '🔒'}
+      </div>
+      <div style="font-size:1.4rem;font-weight:800;color:#333;margin-bottom:8px;">${medal.name}</div>
+      <div style="font-size:0.9rem;color:#666;margin-bottom:16px;">${medal.desc}</div>
+      <div style="background:#f8f9fa;border-radius:10px;padding:12px;margin-bottom:16px;text-align:left;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="color:#666;">状态</span>
+          <span style="color:${earned?'#06D6A0':(unlocked?'#FFB703':'#999')};font-weight:700;">
+            ${earned?'✅ 已获得':(unlocked?'✨ 可领取':'🔒 未解锁')}
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#666;">奖励</span>
+          <span style="color:#FF6B6B;font-weight:700;">+${medal.bonus}分</span>
+        </div>
+      </div>
+      ${unlocked && !earned ? `
+        <button onclick="claimMedal('${medal.id}');closeMedalDetail();" style="width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#06D6A0,#00B894);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;margin-bottom:8px;">
+          领取勋章！+${medal.bonus}分
+        </button>
+      ` : ''}
+      <button onclick="document.body.removeChild(this.closest('div'))" style="width:100%;padding:12px;border:2px solid #ddd;border-radius:12px;background:#fff;color:#666;font-size:0.95rem;font-weight:600;cursor:pointer;">
+        ${earned||unlocked?'返回':'我知道了'}
+      </button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+}
+
+function closeMedalDetail() {
+  const overlay = document.querySelector('div[style*="z-index:10001"]');
+  if (overlay) document.body.removeChild(overlay);
+}
+
+function claimMedal(medalId) {
+  const medal = MEDALS.find(m => m.id === medalId);
+  if (!medal) return;
+  if (!state.medalClaims) state.medalClaims = {};
+  if (state.medalClaims[medalId]) return; // 已领取
+  if (!medal.check(state)) return; // 未解锁
+
+  // 领取勋章
+  state.medalClaims[medalId] = Date.now();
+  state.totalScore += medal.bonus;
+  saveState();
+
+  // 显示领取成功
+  showToast(`🏆 获得「${medal.name}」！+${medal.bonus}分`, 'success');
+
+  // 刷新弹窗
+  const modal = document.getElementById('medalsModal');
+  if (modal) showMedalsModal(); // 简单刷新整个弹窗
+}
+
+function closeMedalsModal() {
+  const modal = document.getElementById('medalsModal');
+  if (modal) document.body.removeChild(modal);
 }
 
 // ── 渲染任务卡 ─────────────────────────────────────────────────

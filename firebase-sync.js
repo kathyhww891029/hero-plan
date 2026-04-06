@@ -147,6 +147,53 @@ function updatePendingSelf(type, taskId, date, isSelf) {
 }
 
 // ── 加载待审列表 ──────────────────────────────────────────────
+// 辅助函数：根据 taskId 和 type 获取任务图标
+function getTaskIcon(taskId, type) {
+  if (!taskId) return '📋';
+  
+  // 从 taskId 解析任务ID（去掉日期后缀）
+  // 格式：morning_mp1_2026-04-05 或 morning_mp1 或 night_np2
+  const parts = taskId.split('_');
+  const baseId = parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[parts.length - 1])
+    ? parts.slice(0, -1).join('_')  // 去掉末尾日期
+    : taskId;
+  
+  // 任务图标映射
+  const iconMap = {
+    // 早晨包
+    'morning_mp1': '👕', 'morning_mp2': '🦷', 'morning_mp3': '🍳',
+    // 睡前包
+    'night_np1': '🛁', 'night_np2': '🎒', 'night_np3': '🌛',
+    // 挑战卡（根据 taskId 前缀判断）
+  };
+  
+  if (iconMap[baseId]) return iconMap[baseId];
+  
+  // 挑战卡：taskId 包含卡片ID
+  if (type === 'card') return '🃏';
+  // 作业
+  if (baseId.includes('hw')) return '📚';
+  // 专注力
+  if (baseId.includes('focus')) return '⏱️';
+  // 每日任务
+  if (type === 'daily') return '🦸';
+  
+  return '📋';
+}
+
+// 辅助函数：判断是否是补卡记录
+function isBackfillItem(item) {
+  // 补卡记录的 extra 是日期格式（YYYY-MM-DD）
+  return item.extra && /^\d{4}-\d{2}-\d{2}$/.test(item.extra);
+}
+
+// 辅助函数：格式化补卡日期显示
+function formatBackfillDate(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  return `${parseInt(parts[1])}月${parseInt(parts[2])}日`;
+}
+
 function loadPendingList() {
   if (!window._firebaseReady) return;
   window._firebaseOnValue(fbRef('pending'), (snapshot) => {
@@ -164,12 +211,18 @@ function loadPendingList() {
     const items = Object.entries(data).map(([key, val]) => ({ key, ...val }));
     items.sort((a, b) => a.submittedAt - b.submittedAt);
 
-    el.innerHTML = items.map(item => `
+    el.innerHTML = items.map(item => {
+      const icon = getTaskIcon(item.taskId, item.type);
+      const isBackfill = isBackfillItem(item);
+      const backfillDate = isBackfill ? formatBackfillDate(item.extra) : '';
+      const backfillTag = isBackfill ? `<span class="backfill-tag">📅补卡：${backfillDate}</span>` : '';
+      
+      return `
       <div class="pending-item" id="pi-${item.key}" data-step="1">
         <div class="pending-info">
-          <div class="pending-name">${item.name}</div>
-          <div class="pending-meta">${item.date} ${item.time} · ${typeLabel(item.type)}</div>
-          ${item.extra ? `<div class="pending-extra">${item.extra}</div>` : ''}
+          <div class="pending-name">${icon} ${item.name}</div>
+          <div class="pending-meta">${item.date} ${item.time} · ${typeLabel(item.type)} ${backfillTag}</div>
+          ${item.extra && !isBackfill ? `<div class="pending-extra">${item.extra}</div>` : ''}
           ${item.isSelf === true ? `<div class="child-self-report child-self">💪 孩子自报：自己完成</div>` : ''}
           ${item.isSelf === false ? `<div class="child-self-report child-reminded">👋 孩子自报：爸妈提醒</div>` : ''}
           ${item.isSelf === null || item.isSelf === undefined ? `<div class="child-self-report child-unknown">❓ 等待父母审核</div>` : ''}
@@ -195,7 +248,8 @@ function loadPendingList() {
             <button class="btn-cancel" onclick="cancelStep2('${item.key}')">取消</button>
           </div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     batchBtns.style.display = 'flex';
   });
 }

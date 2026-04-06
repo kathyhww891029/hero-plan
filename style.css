@@ -213,6 +213,16 @@ body {
 }
 .task-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
 .task-card.locked { opacity: 0.55; filter: grayscale(0.4); }
+.task-card.claimed { opacity: 0.7; filter: grayscale(0.2); }
+.claimed-badge {
+  background: linear-gradient(135deg, #06D6A0, #00a878);
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
 .card-lock-badge {
   position: absolute;
   top: 8px;
@@ -239,6 +249,145 @@ body {
   padding: 2px 6px;
   border-radius: 8px;
 }
+
+/* ── 迷宫样式 ── */
+
+/* 顶部钥匙徽章 */
+.maze-key-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #FFF9C4, #FFF176);
+  border: 2px solid #FFD700;
+  border-radius: 16px;
+  padding: 8px 16px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #5D4037;
+}
+.key-icon { font-size: 20px; }
+.key-score { font-size: 22px; font-weight: 900; color: #E65100; }
+.key-unit { font-weight: 700; }
+.key-progress-bar {
+  flex: 1;
+  height: 10px;
+  background: #E0E0E0;
+  border-radius: 5px;
+  overflow: hidden;
+  min-width: 60px;
+}
+.key-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FFD700, #FF6D00);
+  border-radius: 5px;
+  transition: width 0.6s ease-out;
+}
+.key-next-gate {
+  font-size: 12px;
+  color: #8D6E63;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 迷宫容器 */
+.maze-container {
+  width: 100%;
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(180deg, #E8F5E9 0%, #C8E6C9 100%);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+/* 迷宫 SVG */
+.maze-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* 迷宫路径 */
+.maze-path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 节点（可点击挑战点） */
+.maze-node {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.maze-node:hover { transform: scale(1.1); }
+.maze-node-glow {
+  animation: nodeGlow 2s ease-in-out infinite alternate;
+}
+@keyframes nodeGlow {
+  from { filter: drop-shadow(0 0 4px #FFD700); }
+  to { filter: drop-shadow(0 0 12px #FF6D00); }
+}
+.maze-node-done .maze-node-circle {
+  fill: #4CAF50;
+  stroke: #2E7D32;
+}
+.maze-node-available .maze-node-circle {
+  fill: #FFEB3B;
+  stroke: #F57F17;
+}
+.maze-node-locked .maze-node-circle {
+  fill: #BDBDBD;
+  stroke: #757575;
+}
+
+/* 骑士角色 */
+.maze-knight {
+  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+.maze-knight.moving {
+  animation: knightBounce 0.3s ease-in-out infinite;
+}
+@keyframes knightBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* 迷雾层 */
+.phase-fog {
+  transition: opacity 2.5s ease-out;
+  pointer-events: none;
+}
+.phase-fog.revealed {
+  opacity: 0;
+}
+
+/* 节点名称标签 */
+.maze-node-label {
+  font-size: 10px;
+  font-weight: 700;
+  fill: #3E2723;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* 起点城堡门 */
+.maze-castle-gate {
+  cursor: default;
+}
+
+/* 阶段分隔线 */
+.phase-divider {
+  stroke: rgba(0,0,0,0.1);
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
+}
+
+/* 全部卡牌视图切换 */
+.maze-all-cards-toggle {
+  margin-top: 12px;
+  text-align: center;
+}
+#mazeAllCardsToggle { display: flex; justify-content: center; }
 
 /* ── 奖励商店 ── */
 .shop-balance {
@@ -1694,3 +1843,49 @@ body {
   background: linear-gradient(135deg, #ff9800, #ffd700);
 }
 .calendar-day.future { color: #ccc; }
+
+/* 补卡相关 */
+.calendar-day.can-backfill {
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  cursor: pointer;
+}
+.calendar-day.can-backfill:hover {
+  background: linear-gradient(135deg, #bbdefb, #90caf9);
+  transform: scale(1.05);
+}
+
+/* 补卡标签（父母审核页） */
+.backfill-tag {
+  display: inline-block;
+  background: linear-gradient(135deg, #FF6B35, #E65100);
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+/* 补卡任务按钮 */
+.backfill-task-btn {
+  transition: all 0.2s ease;
+}
+.backfill-task-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* 跳绳里程碑提示（已并入挑战卡） */
+.rope-milestone-hint {
+  background: linear-gradient(135deg, #FFEBEE, #FFCDD2);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  border-left: 4px solid #E53935;
+}
+
+/* 打卡槽位今日闪烁动画 */
+@keyframes pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249, 168, 37, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 4px rgba(249, 168, 37, 0.2); }
+}
