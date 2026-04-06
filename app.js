@@ -5,6 +5,24 @@
 // ── 语音朗读引擎 ───────────────────────────────────────────────
 let _currentUtterance = null;
 let _speakingBtn = null;
+let _zhCNVoice = null;  // 缓存选好的普通话声音
+
+// 预选普通话声音（明确排除 zh-HK 粤语）
+function pickZhCNVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return;
+  _zhCNVoice =
+    voices.find(v => v.lang === 'zh-CN' && (v.name.includes('Female') || v.name.includes('female') ||
+      v.name.includes('Tingting') || v.name.includes('Meijia') || v.name.includes('女'))) ||
+    voices.find(v => v.lang === 'zh-CN') ||
+    voices.find(v => v.lang.startsWith('zh-CN')) ||
+    voices.find(v => v.name.includes('Tingting') || v.name.includes('Meijia') || v.name.includes('普通话')) ||
+    null;
+}
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = pickZhCNVoice;
+  pickZhCNVoice(); // 部分浏览器同步可用
+}
 
 function speakText(text, btnEl) {
   if (!window.speechSynthesis) {
@@ -32,13 +50,9 @@ function speakText(text, btnEl) {
   utter.pitch = 1.1;   // 稍高音调，更活泼
   utter.volume = 1.0;
 
-  // 尝试选择女声（更温和）
-  const voices = window.speechSynthesis.getVoices();
-  const zhVoice = voices.find(v =>
-    v.lang.startsWith('zh') && (v.name.includes('Female') || v.name.includes('female') ||
-    v.name.includes('Tingting') || v.name.includes('Meijia') || v.name.includes('女'))
-  ) || voices.find(v => v.lang.startsWith('zh'));
-  if (zhVoice) utter.voice = zhVoice;
+  // 使用预选的普通话声音（已排除 zh-HK 粤语），缺省时靠 lang='zh-CN' 兜底
+  if (!_zhCNVoice) pickZhCNVoice();
+  if (_zhCNVoice) utter.voice = _zhCNVoice;
 
   _currentUtterance = utter;
   _speakingBtn = btnEl;
