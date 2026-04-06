@@ -1754,6 +1754,11 @@ function bindEvents() {
       btn.classList.add('active');
       document.getElementById(`tab-${tab}`).classList.add('active');
       renderAll();
+      // 如果切换到父母审核 tab，且已登录，则刷新待审列表
+      if (tab === 'parent' && typeof currentParent !== 'undefined' && currentParent) {
+        if (typeof loadPendingList === 'function') loadPendingList();
+        if (typeof loadReviewedList === 'function') loadReviewedList();
+      }
     });
   });
 
