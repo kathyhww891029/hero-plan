@@ -1144,7 +1144,7 @@ function toggleDaily(id, score) {
     return;
   }
 
-  // 可选/作业任务：先提交，再弹自律弹窗
+  // 可选/作业任务：先提交（isSelf=null），再弹自律弹窗，弹窗确定后更新 Firebase 中的 isSelf
   state.todayChecked[id] = 'pending';
   saveState();
   const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
@@ -1154,13 +1154,17 @@ function toggleDaily(id, score) {
   }
   renderAll();
   setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🎮', (isSelf) => {
-    // 可选/作业任务也要更新 pendingAdditions 中的 isSelf
+    // 更新 pendingAdditions 中的 isSelf（本地）
     if (task) {
       const today = todayStr();
       const entry = state.pendingAdditions.find(p => p.type === 'daily' && p.taskId === id && p.date === today);
       if (entry) {
         entry.isSelf = isSelf;
         saveState();
+      }
+      // 更新 Firebase pending 记录中的 isSelf
+      if (window._firebaseReady) {
+        updatePendingSelf('daily', id, todayStr(), isSelf);
       }
     }
     showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);

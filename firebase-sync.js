@@ -113,20 +113,37 @@ function parentLogout() {
 
 // ── 提交待审申请（孩子打卡时调用） ────────────────────────────
 function submitPending(type, id, name, score, extra, isSelf) {
-  if (!window._firebaseReady) return;
+  if (!window._firebaseReady) return null;
   const record = {
     type,       // 'daily' | 'card' | 'rope' | 'homework' | 'focus' | 'pack'
     taskId: id,
     name,
     score,
     extra: extra || '',
-    isSelf: isSelf !== undefined ? isSelf : true,  // 默认为自己完成
+    isSelf: isSelf !== undefined ? isSelf : null,  // null 表示待父母审核确认
     date: new Date().toISOString().slice(0, 10),
     time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'}),
     status: 'pending',
     submittedAt: Date.now()
   };
-  window._firebasePush(fbRef('pending'), record);
+  // 返回 push() 的 ThenableReference，从中获取 key
+  return window._firebasePush(fbRef('pending'), record).then(ref => ref.key);
+}
+
+// 更新待审记录的 isSelf（用于自律弹窗确定后更新 Firebase 中的记录）
+function updatePendingSelf(type, taskId, date, isSelf) {
+  if (!window._firebaseReady) return;
+  // 在 pending 中找到对应记录并更新 isSelf
+  window._firebaseGet(fbRef('pending')).then(snap => {
+    const data = snap.val();
+    if (!data) return;
+    const entry = Object.entries(data).find(([k, v]) =>
+      v.type === type && v.taskId === taskId && v.date === date
+    );
+    if (entry) {
+      window._firebaseSet(fbRef('pending/' + entry[0]), { ...entry[1], isSelf });
+    }
+  });
 }
 
 // ── 加载待审列表 ──────────────────────────────────────────────
@@ -153,6 +170,9 @@ function loadPendingList() {
           <div class="pending-name">${item.name}</div>
           <div class="pending-meta">${item.date} ${item.time} · ${typeLabel(item.type)}</div>
           ${item.extra ? `<div class="pending-extra">${item.extra}</div>` : ''}
+          ${item.isSelf === true ? `<div class="child-self-report child-self">💪 孩子自报：自己完成</div>` : ''}
+          ${item.isSelf === false ? `<div class="child-self-report child-reminded">👋 孩子自报：爸妈提醒</div>` : ''}
+          ${item.isSelf === null || item.isSelf === undefined ? `<div class="child-self-report child-unknown">❓ 等待父母审核</div>` : ''}
         </div>
         <div class="pending-score">+${item.score}分</div>
         <div class="pending-actions">
@@ -163,7 +183,7 @@ function loadPendingList() {
           </div>
           <!-- Step 2: 确认是否自主完成（仅在点了"完成了"之后出现）-->
           <div class="step2-self" style="display:none">
-            <div class="step2-label">自己完成的？</div>
+            <div class="step2-label">父母审核：自己完成的？</div>
             <button class="btn-self" onclick="confirmDone('${item.key}', true)">💪 是</button>
             <button class="btn-reminded" onclick="confirmDone('${item.key}', false)">👋 爸妈提醒</button>
             <button class="btn-cancel" onclick="cancelStep2('${item.key}')">取消</button>
