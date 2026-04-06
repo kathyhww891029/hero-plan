@@ -1038,12 +1038,12 @@ function renderDadGuide() {
 
       <!-- 切换Tab -->
       <div class="dad-tab-switch">
-        <button class="dad-switch-btn active" id="btnDadParent" onclick="dadSwitchTab('parent')">💌 写给爸爸妈妈</button>
-        <button class="dad-switch-btn" id="btnDadKid" onclick="dadSwitchTab('kid')">🦸 写给孩子的信</button>
+        <button class="dad-switch-btn active" id="btnDadKid" onclick="dadSwitchTab('kid')">🦸 写给子渊的信</button>
+        <button class="dad-switch-btn" id="btnDadParent" onclick="dadSwitchTab('parent')">💌 爸爸妈妈要牢记</button>
       </div>
 
       <!-- 爸爸妈妈页 -->
-      <div id="dadPageParent" class="dad-page">
+      <div id="dadPageParent" class="dad-page" style="display:none">
         <div class="dad-guide-header">${g.parentTitle}</div>
         <div class="dad-guide-body">
           <div class="dad-tip-box" style="background:#FFF0E6;border-left:4px solid #FF6B35">
@@ -1083,7 +1083,7 @@ function renderDadGuide() {
       </div>
 
       <!-- 孩子页 -->
-      <div id="dadPageKid" class="dad-page" style="display:none">
+      <div id="dadPageKid" class="dad-page">
         <div class="dad-guide-header">${g.kidTitle}</div>
         <div class="dad-guide-body">
           <div class="dad-tip-box" style="background:#FFF8E7;border-left:4px solid #F9A825">
@@ -1419,7 +1419,7 @@ function renderWeekly() {
     const start = new Date(startDate);
     const now2 = new Date();
     const elapsed = Math.floor((now2 - start) / (1000 * 60 * 60 * 24));
-    const total = 90; // 第一阶段90天
+    const total = 90;
     const remain = Math.max(0, total - elapsed);
     const progress = Math.min(100, Math.round(elapsed / total * 100));
     const { rate } = calcMonthlyDisciplineRate(now2.getFullYear(), now2.getMonth() + 1);
@@ -1438,16 +1438,12 @@ function renderWeekly() {
         </div>
       </div>
     `;
-    // 保存开始日期
-    if (!state.phaseStartDate) {
-      state.phaseStartDate = todayStr();
-      saveState();
-    }
+    if (!state.phaseStartDate) { state.phaseStartDate = todayStr(); saveState(); }
   }
 
   // 日期范围
   const now = new Date();
-  const dayOfWeek = now.getDay() || 7; // 1=周一
+  const dayOfWeek = now.getDay() || 7;
   const monday = new Date(now);
   monday.setDate(now.getDate() - dayOfWeek + 1);
   const sunday = new Date(monday);
@@ -1461,80 +1457,113 @@ function renderWeekly() {
   const todayEl = document.getElementById('weeklyTodayDate');
   if (todayEl) todayEl.textContent = `${now.getMonth()+1}月${now.getDate()}日 ${daysZh[now.getDay()]}`;
 
-  // 统计数字
-  const allDaily = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+  // 统计数字（顶部三格）
+  const score = state.totalScore || 0;
   const checkedToday = Object.keys(state.todayChecked || {}).length;
   const cardsDone = Object.values(state.cardClaims || {}).reduce((a,b)=>a+(b>0?1:0),0);
-
   const wsEl = document.getElementById('weeklyTotalScore');
-  if (wsEl) wsEl.textContent = state.totalScore || 0;
+  if (wsEl) wsEl.textContent = score;
   const wdEl = document.getElementById('weeklyTaskDone');
   if (wdEl) wdEl.textContent = checkedToday;
   const wcEl = document.getElementById('weeklyCardDone');
   if (wcEl) wcEl.textContent = cardsDone;
 
-  // ── 今日打卡情况 ────────────────────────────────────────────
-  const todayDiv = document.getElementById('weeklyToday');
-  if (todayDiv) {
+  // ── ① 今日完成情况（因果链第一环：今天做了什么）──────────────
+  const todayStatusDiv = document.getElementById('weeklyTodayStatus');
+  if (todayStatusDiv) {
     const allDailyTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
-    const items = allDailyTasks.map(t => {
+    const doneCount = allDailyTasks.filter(t => state.todayChecked[t.id]).length;
+    const totalCount = allDailyTasks.length;
+    const todayEarned = allDailyTasks.reduce((sum, t) => {
+      return sum + (state.todayChecked[t.id] ? t.score : 0);
+    }, 0);
+
+    // 进度条颜色
+    const pct = Math.round(doneCount / totalCount * 100);
+    const barColor = pct >= 80 ? '#06D6A0' : pct >= 50 ? '#FFB703' : '#EF476F';
+
+    const taskRows = allDailyTasks.map(t => {
       const st = state.todayChecked[t.id];
       let badge = '', cls = '';
-      if (st === 'approved') { badge = '<span class="wtask-badge done">✅ 已完成</span>'; cls = 'done'; }
-      else if (st === 'pending') { badge = '<span class="wtask-badge pending">⏳ 待审核</span>'; cls = 'pending'; }
-      else { badge = '<span class="wtask-badge none">未完成</span>'; }
+      if (st === 'approved') { badge = '<span class="wtask-badge done">✅</span>'; cls = 'done'; }
+      else if (st === 'pending') { badge = '<span class="wtask-badge pending">⏳</span>'; cls = 'pending'; }
+      else { badge = '<span class="wtask-badge none">—</span>'; }
       return `<div class="wtask-row ${cls}">
         <span class="wtask-icon">${t.icon}</span>
         <span class="wtask-name">${t.name}</span>
-        <span class="wtask-score">+${t.score}</span>
+        <span class="wtask-score">+${t.score}分</span>
         ${badge}
       </div>`;
-    });
-    todayDiv.innerHTML = items.join('');
+    }).join('');
+
+    todayStatusDiv.innerHTML = `
+      <div style="background:#F8F9FF;border-radius:14px;padding:14px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">今日完成 ${doneCount}/${totalCount} 件</span>
+          <span style="font-weight:800;font-size:1.1rem;color:#118AB2;">+${todayEarned}分</span>
+        </div>
+        <div style="background:#e0e0e0;border-radius:8px;height:8px;margin-bottom:12px;">
+          <div style="background:${barColor};border-radius:8px;height:8px;width:${pct}%;transition:width 0.5s;"></div>
+        </div>
+        ${taskRows}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding:10px 12px;background:#FFF8E7;border-radius:10px;font-size:0.85rem;color:#888;border-left:3px solid #FFB703;">
+        ⬇️ 做完任务 → 积分入账 → 攒够就能换奖励！
+      </div>
+    `;
   }
 
-  // ── 每日固定任务卡片 ────────────────────────────────────────
-  const fixedDiv = document.getElementById('weeklyFixed');
-  if (fixedDiv) {
-    fixedDiv.innerHTML = DAILY_FIXED.map(t => `
+  // ── ② 每日任务清单（因果链第二环：每件任务得多少分）────────────
+  const taskListDiv = document.getElementById('weeklyTaskList');
+  if (taskListDiv) {
+    const fixedSection = DAILY_FIXED.map(t => `
       <div class="weekly-task-card fixed">
         <div class="wtc-left">
           <span class="wtc-icon">${t.icon}</span>
           <div>
-            <div class="wtc-name">${t.name}</div>
+            <div class="wtc-name">${t.name} <span style="font-size:11px;color:#aaa;font-weight:400;">必做</span></div>
             <div class="wtc-sub">${t.sub}</div>
-            ${t.tip ? `<div class="wtc-tip">💡 ${t.tip}</div>` : ''}
           </div>
         </div>
         <div class="wtc-score">+${t.score}<span class="wtc-unit">分</span></div>
       </div>`).join('');
-  }
 
-  // ── 每日可选任务 ────────────────────────────────────────────
-  const optDiv = document.getElementById('weeklyOptional');
-  if (optDiv) {
     const optAll = [...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
-    optDiv.innerHTML = optAll.map(t => `
+    const optSection = optAll.map(t => `
       <div class="weekly-task-card optional">
         <div class="wtc-left">
           <span class="wtc-icon">${t.icon}</span>
           <div>
-            <div class="wtc-name">${t.name}</div>
+            <div class="wtc-name">${t.name} <span style="font-size:11px;color:#06D6A0;font-weight:400;">自愿</span></div>
             <div class="wtc-sub">${t.sub}</div>
-            ${t.tip ? `<div class="wtc-tip">💡 ${t.tip}</div>` : ''}
           </div>
         </div>
         <div class="wtc-score">+${t.score}<span class="wtc-unit">分</span></div>
       </div>`).join('');
+
+    // 计算今日可得总分
+    const maxDaily = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK].reduce((s,t)=>s+t.score,0);
+
+    taskListDiv.innerHTML = `
+      <div style="padding:8px 4px;font-size:12px;color:#888;margin-bottom:4px;">
+        ⭐ <strong>必做任务</strong>（每天都要完成，每天最多可得 ${DAILY_FIXED.reduce((s,t)=>s+t.score,0)} 分）
+      </div>
+      ${fixedSection}
+      <div style="padding:8px 4px;font-size:12px;color:#888;margin:6px 0 4px;">
+        🎯 <strong>选做任务</strong>（做了来领，不做不扣，每天还可得 ${optAll.reduce((s,t)=>s+t.score,0)}+ 分）
+      </div>
+      ${optSection}
+      <div style="margin-top:10px;padding:10px 12px;background:#EDFFF9;border-radius:10px;font-size:12px;color:#00897B;text-align:center;font-weight:600;">
+        今天全部完成可得 ${maxDaily}+ 分 ⚡
+      </div>
+    `;
   }
 
-  // ── 本周可做任务卡（已解锁的）──────────────────────────────
+  // ── ③ 本周可做任务卡（因果链第三环：英雄挑战额外加分）────────────
   const cardsDiv = document.getElementById('weeklyCards');
   if (cardsDiv) {
     const unlocked = TASK_CARDS.filter(c => isCardUnlocked(c));
     const locked = TASK_CARDS.filter(c => !isCardUnlocked(c));
-
-    // 按系列分组显示已解锁
     const groups = {};
     unlocked.forEach(c => {
       if (!groups[c.series]) groups[c.series] = [];
@@ -1543,7 +1572,7 @@ function renderWeekly() {
 
     let html = '';
     if (unlocked.length > 0) {
-      html += '<div class="wcard-subtitle">✅ 现在可以做的任务卡</div>';
+      html += '<div class="wcard-subtitle">⚔️ 现在可以做的挑战（完成额外得分！）</div>';
       Object.entries(groups).forEach(([series, cards]) => {
         html += `<div class="wcard-series-label">${series}</div>`;
         html += cards.map(c => {
@@ -1556,24 +1585,22 @@ function renderWeekly() {
             </div>
             <div class="wcard-right">
               <div class="wcard-score">+${c.score}</div>
-              ${done ? '<div class="wcard-done-badge">✅</div>' : ''}
+              ${done ? '<div class="wcard-done-badge">✅</div>' : '<div style="font-size:11px;color:#888;">点击完成</div>'}
             </div>
           </div>`;
         }).join('');
       });
     }
 
-    // 显示最近可解锁的（差多少分）
     if (locked.length > 0) {
       const nearLocked = locked
         .filter(c => !c.weekUnlock && c.unlockAt > 0)
         .sort((a,b) => a.unlockAt - b.unlockAt)
         .slice(0, 3);
-
       if (nearLocked.length > 0) {
-        html += '<div class="wcard-subtitle locked-tip">🔒 即将解锁（再攒一点就能用）</div>';
+        html += '<div class="wcard-subtitle locked-tip">🔒 再攒一点就能解锁</div>';
         html += nearLocked.map(c => {
-          const gap = c.unlockAt - state.totalScore;
+          const gap = c.unlockAt - score;
           return `<div class="wcard-row locked">
             <span class="wcard-stars">🔒</span>
             <div class="wcard-info">
@@ -1588,38 +1615,56 @@ function renderWeekly() {
         }).join('');
       }
     }
-
     cardsDiv.innerHTML = html || '<div class="empty-tip">暂无可用任务卡</div>';
   }
 
-  // ── 本周兑换目标 ────────────────────────────────────────────
+  // ── ④ 本周兑换目标（因果链第四环：积分→奖励） ────────────────────
   const shopDiv = document.getElementById('weeklyShopGoal');
   if (shopDiv) {
-    const score = state.totalScore || 0;
-    // 找出差距 ≤ 80分 的奖励
     const allItems = SHOP.flatMap(g => g.items.map(i => ({ ...i, type: g.type, typeColor: g.color })));
-    const reachable = allItems.filter(i => !i.isEgg && i.cost <= score + 80).sort((a,b) => a.cost - b.cost);
+    const reachable = allItems.filter(i => !i.isEgg && i.cost <= score + 100).sort((a,b) => a.cost - b.cost);
 
     if (reachable.length === 0) {
-      shopDiv.innerHTML = '<div class="empty-tip">再攒一些分，奖励就来了！⚡</div>';
+      shopDiv.innerHTML = '<div class="empty-tip">继续完成任务，奖励快来了！⚡</div>';
     } else {
-      shopDiv.innerHTML = reachable.map(item => {
-        const canBuy = score >= item.cost;
-        const gap = item.cost - score;
-        return `<div class="wshop-row ${canBuy?'can-buy':''}">
-          <span class="wshop-icon">${item.icon}</span>
-          <div class="wshop-info">
-            <div class="wshop-name">${item.name}</div>
-            <div class="wshop-type" style="color:${item.typeColor}">${item.type}</div>
-          </div>
-          <div class="wshop-right">
-            <div class="wshop-cost">${item.cost}分</div>
-            ${canBuy
-              ? '<div class="wshop-badge can">✅ 可兑换</div>'
-              : `<div class="wshop-badge gap">还差${gap}分</div>`}
-          </div>
-        </div>`;
-      }).join('');
+      const canBuyItems = reachable.filter(i => score >= i.cost);
+      const soonItems = reachable.filter(i => score < i.cost);
+
+      let html = '';
+      if (canBuyItems.length > 0) {
+        html += `<div style="padding:8px 4px;font-size:12px;color:#06D6A0;font-weight:700;margin-bottom:4px;">🎉 现在就可以兑换！</div>`;
+        html += canBuyItems.map(item => `
+          <div class="wshop-row can-buy" onclick="document.querySelector('[data-tab=\'shop\']').click()">
+            <span class="wshop-icon">${item.icon}</span>
+            <div class="wshop-info">
+              <div class="wshop-name">${item.name}</div>
+              <div class="wshop-type" style="color:${item.typeColor}">${item.type}</div>
+            </div>
+            <div class="wshop-right">
+              <div class="wshop-cost">${item.cost}分</div>
+              <div class="wshop-badge can">✅ 点击去兑换</div>
+            </div>
+          </div>`).join('');
+      }
+
+      if (soonItems.length > 0) {
+        html += `<div style="padding:8px 4px;font-size:12px;color:#888;margin:8px 0 4px;">⏳ 再努力一点就够了…</div>`;
+        html += soonItems.map(item => {
+          const gap = item.cost - score;
+          return `<div class="wshop-row">
+            <span class="wshop-icon">${item.icon}</span>
+            <div class="wshop-info">
+              <div class="wshop-name">${item.name}</div>
+              <div class="wshop-type" style="color:${item.typeColor}">${item.type}</div>
+            </div>
+            <div class="wshop-right">
+              <div class="wshop-cost">${item.cost}分</div>
+              <div class="wshop-badge gap">还差${gap}分</div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      shopDiv.innerHTML = html;
     }
   }
 }

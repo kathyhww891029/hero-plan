@@ -501,44 +501,93 @@ const TASK_CARDS = [
     score:15, unlockAt:100, unlocked:false,
     speech:'超级英雄基地！自己发明一个游戏，然后教爸爸妈妈怎么玩，你是规则制定者，得15分！需要100分解锁！'
   },
-  // 运动挑战系列·奥特曼主题
+  // 舞蹈挑战系列·敖丙主题
   {
-    id:'c13', series:'💪 运动挑战', theme:'奥特曼', color:'#FF6B35', lightColor:'#FFF0E6',
+    id:'c13', series:'💃 舞蹈挑战', theme:'敖丙', color:'#7B2FF7', lightColor:'#F3E8FF',
     level:1, stars:'⭐',
-    name:'奥特曼体能训练',
-    sub:'记录今天的数字！📊',
-    desc:'跳绳打卡，记录今天的数字',
+    name:'敖丙·初次亮相',
+    sub:'跟着音乐动起来！🎵',
+    desc:'跟爸爸一起跳舞，随便怎么跳都行',
     score:3, unlockAt:0, unlocked:true,
-    speech:'奥特曼体能训练！去跳绳，把今天跳了多少个记录下来，每次打卡都是进步，完成得3分！'
+    speech:'敖丙初次亮相！今天跟爸爸一起跳舞，随便怎么跳都行，动起来就得3分！'
   },
   {
-    id:'c14', series:'💪 运动挑战', theme:'奥特曼', color:'#FF6B35', lightColor:'#FFF0E6',
+    id:'c14', series:'💃 舞蹈挑战', theme:'敖丙', color:'#7B2FF7', lightColor:'#F3E8FF',
     level:2, stars:'⭐⭐',
-    name:'奥特曼·光线蓄力',
-    sub:'超过130个，光线蓄(xù)满！⚡',
-    desc:'跳绳超过130个',
+    name:'敖丙·学一个新动作',
+    sub:'跟爸爸学一个新舞步！💫',
+    desc:'请爸爸教一个新舞步，练习到能独立做出来',
     score:8, unlockAt:30, unlocked:false,
-    speech:'奥特曼光线蓄力！跳绳超过130个，光线就蓄满了，得8分！需要30分解锁！加油！'
+    speech:'敖丙学一个新动作！请爸爸教你一个新舞步，练习到能独立做出来就得8分！需要30分解锁！'
   },
   {
-    id:'c15', series:'💪 运动挑战', theme:'奥特曼', color:'#FF6B35', lightColor:'#FFF0E6',
+    id:'c15', series:'💃 舞蹈挑战', theme:'敖丙', color:'#7B2FF7', lightColor:'#F3E8FF',
     level:3, stars:'⭐⭐⭐',
-    name:'奥特曼·最终形态',
-    sub:'超过170个，进化了！🔥',
-    desc:'跳绳超过170个',
+    name:'敖丙·即兴表演',
+    sub:'听到音乐就起舞！🔥',
+    desc:'爸爸随机播放一首歌，子渊即兴跳至少30秒',
     score:12, unlockAt:60, unlocked:false,
-    speech:'奥特曼最终形态！跳绳超过170个就能进化，完成得12分！需要60分解锁！你可以的！'
+    speech:'敖丙即兴表演！爸爸随机播放一首歌，你即兴跳至少30秒，充分表现自己，得12分！需要60分解锁！'
   },
   {
-    id:'c16', series:'💪 运动挑战', theme:'奥特曼', color:'#FF6B35', lightColor:'#FFF0E6',
+    id:'c16', series:'💃 舞蹈挑战', theme:'敖丙', color:'#7B2FF7', lightColor:'#F3E8FF',
     level:4, stars:'⭐⭐⭐⭐',
-    name:'奥特曼·宇宙英雄',
-    sub:'200个！宇宙级英雄！🏆',
-    desc:'跳绳达到200个',
+    name:'敖丙·父子演出',
+    sub:'和爸爸一起完整表演一支舞！🏆',
+    desc:'和爸爸一起排练并完整表演一支舞（至少1分钟）',
     score:20, unlockAt:100, unlocked:false,
-    speech:'奥特曼宇宙英雄！跳绳达到200个，这是宇宙级别的英雄成就，得20分，还有爸爸的颁奖典礼！需要100分解锁！'
+    speech:'敖丙父子演出！和爸爸一起排练并完整表演一支舞，至少一分钟，这是最高舞蹈挑战，得20分！需要100分解锁！'
   },
-  // 独立思考系列·太乙真人主题
+  // 习惯养成系列·子渊日常主题
+  {
+    id:'h1', series:'🌙 习惯养成', theme:'小英雄日常', color:'#118AB2', lightColor:'#E8F4FD',
+    level:1, stars:'⭐',
+    name:'晨间英雄包·自主版',
+    sub:'早晨三件事，不等提醒自己做！🌅',
+    desc:'今天早晨穿衣、洗脸刷牙、吃早饭全部自己完成，没等大人提醒',
+    tip:'📌 三件事：\n①自己穿好衣服\n②洗脸刷牙\n③好好吃早饭\n全部自己做到，来领这张卡！',
+    score:5, unlockAt:0, unlocked:true,
+    speech:'晨间英雄包自主版！早晨三件事全部自己完成，穿衣洗脸吃饭都搞定，不用提醒，得5分！'
+  },
+  {
+    id:'h2', series:'🌙 习惯养成', theme:'小英雄日常', color:'#118AB2', lightColor:'#E8F4FD',
+    level:2, stars:'⭐⭐',
+    name:'睡前自律达人',
+    sub:'睡前四件事，自己全搞定！🌙',
+    desc:'今天睡前：洗澡/洗脸刷牙/收拾书包/按时上床，全部自己做，没等催',
+    tip:'📌 四件事：\n①洗澡或洗脸刷牙\n②整理好明天的书包\n③衣服放好\n④按时躺床上\n四件全做到来领分！',
+    score:6, unlockAt:15, unlocked:false,
+    speech:'睡前自律达人！洗澡整理书包按时上床四件事全做到，不用催，得6分！需要15分解锁！'
+  },
+  {
+    id:'h3', series:'🌙 习惯养成', theme:'小英雄日常', color:'#118AB2', lightColor:'#E8F4FD',
+    level:2, stars:'⭐⭐',
+    name:'东西放回原位',
+    sub:'用完的东西，自己放回去！📦',
+    desc:'今天所有用过的东西（玩具/书/文具），用完后自己放回原来的地方',
+    tip:'📌 规则：\n①玩完的玩具放回玩具箱\n②看完的书放回书架\n③文具放回文具盒\n④一整天都做到，来领分！',
+    score:5, unlockAt:10, unlocked:false,
+    speech:'东西放回原位！今天所有用过的东西用完后自己放回去，玩具书文具都整整齐齐，得5分！需要10分解锁！'
+  },
+  {
+    id:'h4', series:'🌙 习惯养成', theme:'小英雄日常', color:'#118AB2', lightColor:'#E8F4FD',
+    level:3, stars:'⭐⭐⭐',
+    name:'一整天不催人',
+    sub:'所有该做的事，都是自己想起来的！👑',
+    desc:'今天一整天，所有该做的事（吃饭、洗漱、写作业、收拾）都是自己主动做的，没等大人催',
+    score:10, unlockAt:40, unlocked:false,
+    speech:'一整天不催人！今天所有该做的事都自己主动做，没等大人催一次，这就是真正的自律，得10分！需要40分解锁！'
+  },
+  {
+    id:'h5', series:'🌙 习惯养成', theme:'小英雄日常', color:'#118AB2', lightColor:'#E8F4FD',
+    level:4, stars:'⭐⭐⭐⭐',
+    name:'连续三天全自律',
+    sub:'三天都做到「一整天不催人」！🏆',
+    desc:'连续三天，所有该做的事都是自己主动做的',
+    score:18, unlockAt:80, unlocked:false,
+    speech:'连续三天全自律！三天都做到所有事自己主动做，这是最高习惯养成成就，得18分！需要80分解锁！'
+  },
+    // 独立思考系列·太乙真人主题
   {
     id:'c17', series:'🧠 独立思考', theme:'太乙真人', color:'#00897B', lightColor:'#EDFFF9',
     level:1, stars:'⭐',
@@ -913,7 +962,7 @@ const DAD_GUIDE = {
   parentClosing: '这套系统会记录他的每一步\n但真正让他进步的\n是你看见他的那一刻 💛',
 
   // ── 写给孩子 ──
-  kidTitle: '💌 写给你的一封信',
+  kidTitle: '💌 写给子渊的一封信',
   kidOpening: '亲爱的小英雄，\n\n这个app是爸爸妈妈专门为你做的。\n\n不是因为你做错了什么\n也不是要检查你、管着你\n\n是因为我们想陪你一起\n发现你自己有多厉害',
   kidRules: [
     { icon:'🌅', title:'英雄包', desc:'早晨和睡前的小事\n穿衣服、刷牙、收书包……\n全部自己搞定，就是今天的第一场胜利' },

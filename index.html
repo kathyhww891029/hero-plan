@@ -85,8 +85,8 @@
   <button class="tab-btn" data-tab="achievements">👑 英雄勋章</button>
   <button class="tab-btn" data-tab="shop">🎁 宝藏屋</button>
   <button class="tab-btn" data-tab="rope">💨 极速训练</button>
-  <button class="tab-btn" data-tab="dad">💌 爸爸妈妈</button>
   <button class="tab-btn" data-tab="math">🔢 口算</button>
+  <button class="tab-btn" data-tab="dad">💌 爸爸妈妈要牢记</button>
   <button class="tab-btn parent-tab-btn" data-tab="parent">🔐 审核</button>
 </nav>
 
@@ -177,22 +177,16 @@
     </div>
   </div>
 
-  <!-- 今日打卡情况 -->
+  <!-- ① 今日完成情况（因果链第一环） -->
   <div class="weekly-section">
-    <div class="weekly-section-title">📋 今日打卡 <span class="weekly-section-sub" id="weeklyTodayDate"></span></div>
-    <div id="weeklyToday"></div>
+    <div class="weekly-section-title">📋 今天做了什么？<span class="weekly-section-sub" id="weeklyTodayDate"></span></div>
+    <div id="weeklyTodayStatus"></div>
   </div>
 
-  <!-- 每日固定任务说明 -->
+  <!-- ② 每日任务清单说明（什么任务得多少分，一次看清） -->
   <div class="weekly-section">
-    <div class="weekly-section-title">⭐ 每日固定任务 <span class="weekly-section-sub">每天都要完成的</span></div>
-    <div id="weeklyFixed"></div>
-  </div>
-
-  <!-- 每日可选任务说明 -->
-  <div class="weekly-section">
-    <div class="weekly-section-title">🎯 每日可领任务 <span class="weekly-section-sub">做了来领，不做不扣</span></div>
-    <div id="weeklyOptional"></div>
+    <div class="weekly-section-title">📌 每日任务清单 <span class="weekly-section-sub">今天做了几件？</span></div>
+    <div id="weeklyTaskList"></div>
   </div>
 
   <!-- 本周英雄挑战汇总 -->
@@ -251,9 +245,9 @@
   <div class="cards-filter">
     <button class="filter-btn active" data-filter="all">全部</button>
     <button class="filter-btn" data-filter="🌙 习惯养成">🌙 习惯</button>
+    <button class="filter-btn" data-filter="💃 舞蹈挑战">💃 舞蹈</button>
     <button class="filter-btn" data-filter="📚 阅读探索">📚 阅读</button>
     <button class="filter-btn" data-filter="🎨 创造挑战">🎨 创造</button>
-    <button class="filter-btn" data-filter="💪 运动挑战">💪 运动</button>
     <button class="filter-btn" data-filter="🧠 独立思考">🧠 思考</button>
     <button class="filter-btn" data-filter="⚡ 数学专项">⚡ 数学</button>
     <button class="filter-btn" data-filter="🌍 英语专项">🌍 英语</button>
