@@ -248,7 +248,12 @@ function renderHeader() {
   const d = new Date();
   const days = ['周日','周一','周二','周三','周四','周五','周六'];
   const dateEl = document.getElementById('todayDate');
-  if (dateEl) dateEl.textContent = `${d.getMonth()+1}月${d.getDate()}日 ${days[d.getDay()]}`;
+  if (dateEl) {
+    var h = String(d.getHours()).padStart(2,'0');
+    var m = String(d.getMinutes()).padStart(2,'0');
+    var s = String(d.getSeconds()).padStart(2,'0');
+    dateEl.textContent = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${days[d.getDay()]}  ${h}:${m}:${s}`;
+  }
   updateWelcomeArea();
 }
 
