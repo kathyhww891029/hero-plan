@@ -130,6 +130,7 @@ function defaultState() {
     pendingAdditions: [],    // [{type, taskId, name, score, date, isSelf}] 待审加分，审核通过后才正式入账
     reviewedSelfLog: {},    // { "2026-04": { "2026-04-05": true, ... } } 记录每月自律（自主完成且审核通过）的日期
     todayChecked: {},         // { taskId: true }
+    yesterdayMakeups: [],     // [{taskId, type, name, score}] 今日已提交的昨日补卡记录
     cardClaims: {},           // { cardId: count }
     shopHistory: [],          // [{ id, name, cost, date }]
     ropeRecords: [],          // [{ date, count }]
@@ -750,10 +751,14 @@ function togglePackItem(packType, id, score) {
   const bonusKey = packType === 'morning' ? 'morningPackBonus' : 'nightPackBonus';
 
   if (state[packKey][id]) {
-    // 取消：从待审加分池移除（审核通过前撤销，不扣分因为根本没入账）
+    // 取消：从待审加分池移除，同时扣减已加的积分
     const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
     const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.name === label);
-    if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+    let deductGain = 0;
+    if (idx !== -1) {
+      deductGain = state.pendingAdditions[idx].score || 0;
+      state.pendingAdditions.splice(idx, 1);
+    }
     delete state[packKey][id];
     // 如果之前已发全套奖励，扣回差额
     if (state[bonusKey]) {
@@ -764,7 +769,16 @@ function togglePackItem(packType, id, score) {
       state.totalScore = Math.max(0, state.totalScore - (prevScore - newScore));
       if (newDone < pack.length) state[bonusKey] = false;
     }
-    saveState(); renderAll();
+    // 扣减积分（因为在完成时已加）
+    state.totalScore = Math.max(0, state.totalScore - deductGain);
+    saveState();
+    // 同步到 Firebase
+    if (window._firebaseReady && deductGain > 0) {
+      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductGain));
+      });
+    }
+    renderAll();
     return;
   }
 
@@ -792,8 +806,15 @@ function togglePackItem(packType, id, score) {
     date: todayStr(),
     isSelf: null
   });
+  // 立即加积分
+  state.totalScore += gain;
   saveState();
-
+  // 立即同步到 Firebase
+  if (window._firebaseReady) {
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + gain);
+    });
+  }
   renderAll();
   const packIcon = packType === 'morning' ? '🌅' : '🌙';
   const packLabel = packType === 'morning' ? '早晨英雄包' : '睡前英雄包';
@@ -824,17 +845,23 @@ function togglePackItem(packType, id, score) {
 function undoHomework() {
   if (!state.hwCompleted) return;
   state.hwCompleted = false;
-  // 从待审加分池移除（审核通过前撤销，不扣分因为根本没入账）
+  // 从待审加分池移除，同时扣减已加的积分
   const idx = state.pendingAdditions.findIndex(p => p.type === 'homework' && p.taskId === 'hw_complete');
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+  // 扣减积分（因为在完成时已加）
+  state.totalScore = Math.max(0, state.totalScore - HOMEWORK_TASK.scoreComplete);
   // 撤销streak：清空今天的记录
   if (state.streaks && state.streaks.homework && state.streaks.homework.lastDate === todayStr()) {
     state.streaks.homework.count = 0;
     state.streaks.homework.lastDate = '';
   }
   saveState();
+  // 同步到 Firebase
   if (window._firebaseReady) {
-    // 删除pending记录（设为null）
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - HOMEWORK_TASK.scoreComplete));
+    });
+    // 删除pending记录
     submitPending('homework', 'hw_complete', null, null);
   }
   renderAll();
@@ -848,7 +875,7 @@ function completeHomework() {
     return;
   }
   state.hwCompleted = true;
-  // 加入待审加分池，等父母审核通过后才正式入账
+  // 加入待审加分池，同时立即加积分（等父母审核后确认，驳回则扣回）
   state.pendingAdditions.push({
     type: 'homework',
     taskId: 'hw_complete',
@@ -857,8 +884,16 @@ function completeHomework() {
     date: todayStr(),
     isSelf: null  // 等自律弹窗确定
   });
+  // 立即加积分
+  state.totalScore += HOMEWORK_TASK.scoreComplete;
   updateStreak('homework');
   saveState();
+  // 立即同步到 Firebase
+  if (window._firebaseReady) {
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + HOMEWORK_TASK.scoreComplete);
+    });
+  }
   renderAll();
   // 先弹自律自报弹窗，等用户选择后再提交审核
   showSelfReportUnified('hw_complete', '今日作业完成', HOMEWORK_TASK.scoreComplete, '📚', (isSelf) => {
@@ -882,11 +917,14 @@ function toggleFocusBlock(idx) {
   if (currentBlocks >= idx) {
     // 撤销：从 idx 块开始全部撤销
     const blocksToRemove = currentBlocks - idx + 1;
-    state.totalScore -= blocksToRemove * HOMEWORK_TASK.scorePerBlock;
-    if (state.totalScore < 0) state.totalScore = 0;
+    const deductPts = blocksToRemove * HOMEWORK_TASK.scorePerBlock;
+    state.totalScore = Math.max(0, state.totalScore - deductPts);
     state.hwBlocks = idx - 1;
     saveState();
     if (window._firebaseReady) {
+      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductPts));
+      });
       submitPending('homework', 'hw_block_' + idx, null, null);
     }
     renderAll();
@@ -901,6 +939,9 @@ function toggleFocusBlock(idx) {
     state.totalScore += HOMEWORK_TASK.scorePerBlock;
     saveState();
     if (window._firebaseReady) {
+      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + HOMEWORK_TASK.scorePerBlock);
+      });
       submitPending('homework', 'hw_block_'+state.hwBlocks, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock);
     }
     renderAll();
@@ -1028,6 +1069,8 @@ function formatFocusSecs(secs) {
 
 function undoFocusTime() {
   if (!state.focusCompleted) return;
+  // 计算要扣回的分数（和 completeFocusTime 中一致）
+  const pts = FOCUS_TIME.score + (state.focusOvertime ? FOCUS_TIME.bonusScore : 0);
   state.focusCompleted = false;
   state.focusOvertime = false;
   state.focusSelected = null;
@@ -1035,9 +1078,11 @@ function undoFocusTime() {
   _focusSeconds = 0;
   if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
   _focusTimerRunning = false;
-  // 从待审加分池移除（审核通过前撤销，不扣分因为根本没入账）
+  // 从待审加分池移除，同时扣减已加的积分
   const idx = state.pendingAdditions.findIndex(p => p.type === 'focus' && p.taskId === 'focus_time');
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+  // 扣减积分
+  state.totalScore = Math.max(0, state.totalScore - pts);
   // 撤销streak
   if (state.streaks && state.streaks.focus && state.streaks.focus.lastDate === todayStr()) {
     state.streaks.focus.count = 0;
@@ -1045,6 +1090,9 @@ function undoFocusTime() {
   }
   saveState();
   if (window._firebaseReady) {
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - pts));
+    });
     submitPending('focus', 'focus_time', null, null);
   }
   renderAll();
@@ -1062,7 +1110,7 @@ function completeFocusTime(isOvertime) {
   state.focusCompleted = true;
   state.focusOvertime = isOvertime;
   const pts = FOCUS_TIME.score + (isOvertime ? FOCUS_TIME.bonusScore : 0);
-  // 加入待审加分池，等父母审核通过后才正式入账
+  // 加入待审加分池，同时立即加积分（等父母审核后确认，驳回则扣回）
   state.pendingAdditions.push({
     type: 'focus',
     taskId: 'focus_time',
@@ -1071,8 +1119,16 @@ function completeFocusTime(isOvertime) {
     date: todayStr(),
     isSelf: null  // 等自律弹窗确定
   });
+  // 立即加积分
+  state.totalScore += pts;
   updateStreak('focus');
   saveState();
+  // 立即同步到 Firebase
+  if (window._firebaseReady) {
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + pts);
+    });
+  }
   renderAll();
   // 先弹自律自报弹窗，等用户选择后再提交审核
   showSelfReportUnified('focus_time', '专注力时光', pts, isOvertime ? '⚡' : '🧠', (isSelf) => {
@@ -1124,7 +1180,15 @@ function toggleDaily(id, score) {
       date: todayStr(),
       isSelf: null
     });
+    // 立即加积分
+    state.totalScore += score;
     saveState();
+    // 立即同步到 Firebase
+    if (window._firebaseReady) {
+      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + score);
+      });
+    }
     renderAll();
     // 弹出自律自报弹窗，确定后再提交审核
     setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🦸', (isSelf) => {
@@ -1146,16 +1210,30 @@ function toggleDaily(id, score) {
 
   // 可选/作业任务：先提交（isSelf=null），再弹自律弹窗，弹窗确定后更新 Firebase 中的 isSelf
   state.todayChecked[id] = 'pending';
+  const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+  const task2 = allTasks2.find(t => t.id === id);
+  // 加入待审加分池，同时立即加积分
+  state.pendingAdditions.push({
+    type: 'daily',
+    taskId: id,
+    name: task2 ? task2.name : id,
+    score: score,
+    date: todayStr(),
+    isSelf: null
+  });
+  state.totalScore += score;
   saveState();
-  const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
-  const task = allTasks.find(t => t.id === id);
-  if (task && window._firebaseReady) {
-    submitPending('daily', id, task.name, score);
+  // 立即同步到 Firebase
+  if (window._firebaseReady) {
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + score);
+    });
+    submitPending('daily', id, task2 ? task2.name : id, score);
   }
   renderAll();
-  setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🎮', (isSelf) => {
+  setTimeout(() => showSelfReportUnified(id, task2 ? task2.name : id, score, '🎮', (isSelf) => {
     // 更新 pendingAdditions 中的 isSelf（本地）
-    if (task) {
+    if (task2) {
       const today = todayStr();
       const entry = state.pendingAdditions.find(p => p.type === 'daily' && p.taskId === id && p.date === today);
       if (entry) {
@@ -1167,7 +1245,7 @@ function toggleDaily(id, score) {
         updatePendingSelf('daily', id, todayStr(), isSelf);
       }
     }
-    showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
+    showCelebration('⏳', '已提交！等待确认', `「${task2 ? task2.name : id}」等爸爸妈妈审核后积分确认 💪`);
     setTimeout(() => tryShowShopBoost(score, true), 1600);
   }), 400);
 }
@@ -1263,15 +1341,17 @@ function updateTodayScore() {
 }
 
 // ── 父母审核回调：本地积分处理 ──────────────────────────────────
-// 审核通过：将 effectiveScore 加入本地 totalScore，并从 pendingAdditions 移除
+// 审核通过：积分在孩子完成时已入账，只需从 pendingAdditions 移除并更新自律统计
 // isSelf: 是否自主完成（影响自律统计）
 function onParentApprove(taskType, taskId, effectiveScore, isSelf) {
   const today = todayStr();
   // 找到对应的待审加分记录并移除（按 type + taskId 匹配，同一天通常只有一条）
   const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
-  // 正式加分入账
-  state.totalScore += effectiveScore;
+  // 将 pending 标记改为 approved（今日积分仍应计入该任务）
+  if (taskId && state.todayChecked[taskId] === 'pending') {
+    state.todayChecked[taskId] = 'approved';  // 而非 delete，保证今日积分仍含此分
+  }
   // 自律统计：自主完成且审核通过，记录到月度自律日志
   if (isSelf === true) {
     const ym = today.slice(0, 7);  // e.g. "2026-04"
@@ -1282,12 +1362,25 @@ function onParentApprove(taskType, taskId, effectiveScore, isSelf) {
   renderAll();
 }
 
-// 审核驳回：从 pendingAdditions 移除（本地从未加分，无需扣减）
-// isSelf 参数保留（驳回不影响自律统计，因为本来就没计入）
-function onParentReject(taskType, taskId, isSelf) {
+// 审核驳回：从 pendingAdditions 移除，并扣减积分（孩子在完成时已得积分）
+function onParentReject(taskType, taskId, isSelf, deductScore) {
   const today = todayStr();
   const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+  // 清除 todayChecked 中的 pending 标记
+  if (taskId && state.todayChecked[taskId] === 'pending') {
+    delete state.todayChecked[taskId];
+  }
+  // 扣减积分（孩子在完成时已加）
+  if (deductScore && deductScore > 0) {
+    state.totalScore = Math.max(0, state.totalScore - deductScore);
+    // 同步到 Firebase
+    if (window._firebaseReady) {
+      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductScore));
+      });
+    }
+  }
   saveState();
   renderAll();
 }

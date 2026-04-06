@@ -246,7 +246,7 @@ function rejectOneConfirm(key) {
   window._firebaseGet(fbRef('pending/' + key)).then(snap => {
     const val = snap.val();
     if (!val) { showParentToast('记录不存在'); return; }
-    doRejectOne(key, val.name, val.taskId || '', val.type || 'daily');
+    doRejectOne(key, val.name, val.taskId || '', val.type || 'daily', val.score);
   });
 }
 
@@ -307,12 +307,8 @@ function doApproveOne(key, score, name, taskId, taskType, isSelf) {
     date: new Date().toISOString().slice(0, 10),
     scoreNote
   });
-  // 更新 Firebase 总分
-  window._firebaseGet(fbRef('syncScore')).then(snap2 => {
-    const cur = snap2.val() || 0;
-    window._firebaseSet(fbRef('syncScore'), cur + effectiveScore);
-  });
-  // 更新本地 totalScore（审核通过后才正式入账）+ 更新月度自律统计
+  // 更新 Firebase 总分（积分在孩子完成时已入账，审核通过时不再重复加）
+  // 更新月度自律统计
   if (typeof onParentApprove === 'function') {
     onParentApprove(taskType || 'daily', taskId || '', effectiveScore, isSelf);
   }
@@ -325,17 +321,22 @@ function doApproveOne(key, score, name, taskId, taskType, isSelf) {
 }
 
 // 内部实现：驳回单条
-function doRejectOne(key, name, taskId, taskType) {
+function doRejectOne(key, name, taskId, taskType, score) {
   if (!window._firebaseReady) return;
   window._firebasePush(fbRef('reviewed'), {
-    name, score: 0, result: 'rejected',
+    name, score: 0, originalScore: score, result: 'rejected',
     reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
     reviewedAt: Date.now(),
     date: new Date().toISOString().slice(0, 10)
   });
+  // 孩子完成时已加积分，驳回时需扣回
+  window._firebaseGet(fbRef('syncScore')).then(snap => {
+    const cur = snap.val() || 0;
+    window._firebaseSet(fbRef('syncScore'), Math.max(0, cur - (score || 0)));
+  });
   // 更新本地：审核驳回
   if (typeof onParentReject === 'function') {
-    onParentReject(taskType || 'daily', taskId || '', null);
+    onParentReject(taskType || 'daily', taskId || '', null, score || 0);
   }
   window._firebaseRemove(fbRef('pending/' + key));
   showParentToast(`❌ 已驳回「${name}」`);
@@ -392,9 +393,7 @@ function doApproveAllWithSelf(isSelf) {
       }
       window._firebaseRemove(fbRef('pending/' + key));
     });
-    window._firebaseGet(fbRef('syncScore')).then(s2 => {
-      window._firebaseSet(fbRef('syncScore'), (s2.val() || 0) + totalAdd);
-    });
+    // 积分在孩子完成时已入账，批量通过时不再重复加（totalAdd 仅用于提示）
     showParentToast(`✅ 全部通过！共 +${totalAdd}分！`);
   });
 }
@@ -406,19 +405,27 @@ function rejectAll() {
   window._firebaseGet(fbRef('pending')).then(snap => {
     const data = snap.val();
     if (!data) return;
+    let totalDeduct = 0;
     Object.entries(data).forEach(([key, val]) => {
+      totalDeduct += val.score || 0;
       window._firebasePush(fbRef('reviewed'), {
-        name: val.name, score: 0, result: 'rejected',
+        name: val.name, score: 0, originalScore: val.score, result: 'rejected',
         reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
-      // 更新本地：审核驳回
+      // 孩子完成时已加积分，驳回时需扣回
       if (typeof onParentReject === 'function') {
-        onParentReject(val.type || 'daily', val.taskId || '', null);
+        onParentReject(val.type || 'daily', val.taskId || '', null, val.score || 0);
       }
       window._firebaseRemove(fbRef('pending/' + key));
     });
+    // 扣减 Firebase 总分
+    if (totalDeduct > 0) {
+      window._firebaseGet(fbRef('syncScore')).then(s2 => {
+        window._firebaseSet(fbRef('syncScore'), Math.max(0, (s2.val() || 0) - totalDeduct));
+      });
+    }
     showParentToast('❌ 全部已驳回');
   });
 }
