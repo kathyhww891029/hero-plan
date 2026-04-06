@@ -595,6 +595,97 @@ function renderKidHeroHistory() {
 }
 
 
+// ══════════════════════════════════════════════════════════════
+// 🔐 受 PIN 保护的清空数据（测试阶段用）
+// ══════════════════════════════════════════════════════════════
+
+function showSecureClearModal() {
+  // 先检查是否设置了 PIN 码
+  const pins = getPins();
+  if (!pins.mom && !pins.dad) {
+    alert('❌ 还未设置 PIN 码，请先在「🔐 审核」页面设置 PIN 码！');
+    return;
+  }
+
+  // 创建弹窗
+  let modal = document.getElementById('secureClearModal');
+  if (modal) { modal.remove(); }
+
+  modal = document.createElement('div');
+  modal.id = 'secureClearModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px;width:300px;text-align:center">
+      <div style="font-size:20px;margin-bottom:8px">🔐</div>
+      <div style="font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:4px">请验证父母身份</div>
+      <div style="font-size:13px;color:#888;margin-bottom:16px">需要爸爸或妈妈的 PIN 码才能清空数据</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">
+        <button id="secureClearMom" style="flex:1;padding:10px;border:2px solid #FF6B35;border-radius:10px;background:#fff;color:#FF6B35;font-weight:700;font-size:14px;cursor:pointer">👩 妈妈</button>
+        <button id="secureClearDad" style="flex:1;padding:10px;border:2px solid #118AB2;border-radius:10px;background:#fff;color:#118AB2;font-weight:700;font-size:14px;cursor:pointer">👨 爸爸</button>
+      </div>
+      <div id="secureClearInputArea" style="display:none;margin-bottom:12px">
+        <input type="password" id="secureClearPin" maxlength="4" placeholder="请输入 PIN 码" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:10px;font-size:16px;text-align:center;letter-spacing:4px;box-sizing:border-box">
+        <div id="secureClearHint" style="font-size:12px;color:#e74c3c;margin-top:6px;min-height:16px"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button id="secureClearCancel" style="flex:1;padding:10px;border:none;border-radius:10px;background:#f0f0f0;color:#666;font-size:14px;cursor:pointer">取消</button>
+        <button id="secureClearConfirm" style="flex:1;padding:10px;border:none;border-radius:10px;background:#FF6B35;color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:none">确认清空</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  let selectedRole = null;
+
+  // 妈妈按钮
+  document.getElementById('secureClearMom').addEventListener('click', () => {
+    if (!pins.mom) {
+      alert('妈妈还未设置 PIN 码，请使用爸爸的 PIN 码！');
+      return;
+    }
+    selectedRole = 'mom';
+    document.getElementById('secureClearInputArea').style.display = 'block';
+    document.getElementById('secureClearConfirm').style.display = 'block';
+    document.getElementById('secureClearPin').focus();
+  });
+
+  // 爸爸按钮
+  document.getElementById('secureClearDad').addEventListener('click', () => {
+    if (!pins.dad) {
+      alert('爸爸还未设置 PIN 码，请使用妈妈的 PIN 码！');
+      return;
+    }
+    selectedRole = 'dad';
+    document.getElementById('secureClearInputArea').style.display = 'block';
+    document.getElementById('secureClearConfirm').style.display = 'block';
+    document.getElementById('secureClearPin').focus();
+  });
+
+  // 确认清空
+  document.getElementById('secureClearConfirm').addEventListener('click', () => {
+    const pin = document.getElementById('secureClearPin').value.trim();
+    const hint = document.getElementById('secureClearHint');
+    const storedPin = pins[selectedRole];
+
+    if (pin !== storedPin) {
+      hint.textContent = '❌ PIN 码错误，请重试';
+      hint.style.color = '#e74c3c';
+      document.getElementById('secureClearPin').value = '';
+      return;
+    }
+
+    // PIN 验证通过，关闭弹窗并执行清空
+    modal.remove();
+    if (typeof clearAllData === 'function') {
+      window._secureClearAuthorized = true; // 授权标志
+      clearAllData();
+    }
+  });
+
+  // 取消
+  document.getElementById('secureClearCancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
 // ── Firebase 就绪后启动监听 ───────────────────────────────────
 window.addEventListener('firebaseReady', () => {
   listenSyncScore();

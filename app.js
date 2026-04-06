@@ -1368,10 +1368,10 @@ function renderDadPage() {
         <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
           <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.parentClosing)}</div>
         </div>
-        <!-- 清空测试数据 -->
+        <!-- 清空测试数据（受 PIN 保护） -->
         <div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center">
           <div style="font-size:12px;color:#aaa;margin-bottom:8px">⚠️ 测试阶段专用，正式使用前请清空数据</div>
-          <button onclick="clearAllData()" style="background:#fff;border:2px solid #FF6B35;color:#FF6B35;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">
+          <button onclick="showSecureClearModal()" style="background:#fff;border:2px solid #FF6B35;color:#FF6B35;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">
             🗑️ 清空所有测试数据
           </button>
         </div>
@@ -1382,6 +1382,13 @@ function renderDadPage() {
 // dadSwitchTab 已移除（子渊页和爸妈页现为独立Tab）
 
 function clearAllData() {
+  // ── 安全检查：如果不是通过 showSecureClearModal 调用，直接拒绝 ──
+  if (!window._secureClearAuthorized) {
+    alert('❌ 请通过「爸爸妈妈要牢记」页面中的按钮来清空数据，需要父母 PIN 码验证！');
+    return;
+  }
+  window._secureClearAuthorized = false; // 重置标志
+
   if (!confirm('确定要清空所有测试数据吗？\n\n这会删除：\n• 所有积分（总积分 + 本周积分）\n• 所有打卡历史\n• 所有英雄包 / 今日作业记录\n• 英雄挑战 / 勋章进度\n• 口算历史 / 最高分\n• 极速训练（跳绳）记录\n• 兑换记录\n• 品格英雄行为记录\n• Firebase 云端数据\n\n⚠️ PIN 码将保留，清空后无法恢复！')) return;
 
   // ── 1. 清空 localStorage（保留 PIN 码）────────────────────
