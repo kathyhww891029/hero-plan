@@ -34,6 +34,14 @@
     "focusRecords": {
       ".read": true,
       ".write": false
+    },
+    "syncScore": {
+      ".read": true,
+      ".write": true
+    },
+    "reviewed": {
+      ".read": true,
+      ".write": true
     }
   }
 }
