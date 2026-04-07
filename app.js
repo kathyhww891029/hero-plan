@@ -800,6 +800,7 @@ function renderDaily() {
   renderFocusTime();
   renderSelfPick();
   renderOptionalTasks();
+  renderTempTasks();
   updateTodayScore();
 }
 
@@ -942,6 +943,30 @@ function renderOptionalTasks() {
   if (!el) return;
   el.innerHTML = renderOptionalList();
 }
+// 渲染临时任务
+function renderTempTasks() {
+  const el = document.getElementById('dailyTempTasks');
+  if (!el) return;
+  el.innerHTML = DAILY_TEMP_TASKS.map(t => {
+    const status = state.todayChecked[t.id];
+    const isPending = status === 'pending';
+    const isApproved = status === 'approved';
+    const pendingHtml = isPending ? '<div class="task-pending-label">⏳ 等待爸妈审核</div>' : '';
+    const itemClass = 'daily-item' + (isPending ? ' pending' : '') + (isApproved ? ' done' : '');
+    const onclickAttr = "toggleDaily('" + t.id + "'," + t.score + ")";
+    return '<div class="' + itemClass + '" onclick="' + onclickAttr + '">' +
+      '<div class="task-icon">' + t.icon + '</div>' +
+      '<div class="task-info">' +
+        '<div class="task-name">' + t.name + speakBtn(t.speech) + '</div>' +
+        '<div class="task-sub">' + t.sub + '</div>' +
+        pendingHtml +
+      '</div>' +
+      '<div class="task-score">+' + t.score + '</div>' +
+      '<div class="task-check">' + (isApproved ? '✓' : isPending ? '⏳' : '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
 
 // ── 推荐引擎：系统按权重自动选「今日英雄使命」──────────────────
 function getTodayRecommendCard() {
@@ -1848,7 +1873,7 @@ function calcTodayScore() {
 
   // 1. 固定任务 + 可选任务 + 作业（从 todayChecked）
   const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
-    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
     const t = all.find(x => x.id === id);
     return sum + (t ? t.score : 0);
   }, 0);

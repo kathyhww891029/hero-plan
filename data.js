@@ -179,6 +179,12 @@ const DAILY_OPTIONAL_FUN = [
     speech:'音画故事创作！听爸爸演奏一段曲子，把感受画出来，颜色形状故事都行，完成得3分！' },
 ];
 
+// ── 临时任务（每日重置，不入库）─────────────────────────────
+const DAILY_TEMP_TASKS = [
+  { id:'temp_water', icon:'💧', name:'每天喝完一瓶水', sub:'喝完来打卡！', score:2, type:'temp',
+    speech:'每天喝完一瓶水！喝完来打卡，得2分！' },
+];
+
 // 合并供旧逻辑使用
 const DAILY_OPTIONAL = [...DAILY_OPTIONAL_INTEREST, ...DAILY_OPTIONAL_FUN];
 const DAILY_HOMEWORK = []; // 作业已整合进DAILY_FIXED
