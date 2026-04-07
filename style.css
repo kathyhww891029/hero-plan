@@ -2421,3 +2421,337 @@ body {
   transition: all 0.15s;
 }
 .medal-btn-close:hover { border-color: #7C3AED; color: #7C3AED; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   🎉 增强庆祝动画系统 - 英雄成长计划
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* 1. 彩纸粒子容器 */
+.confetti-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+/* 2. 彩纸粒子样式 */
+.confetti {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  animation: confetti-fall 3s ease-out forwards;
+}
+
+.confetti-circle { border-radius: 50%; }
+.confetti-square { border-radius: 2px; transform: rotate(45deg); }
+.confetti-star {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  border-radius: 0;
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translateY(-20px) rotate(0deg) scale(0);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0) rotate(90deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100vh) rotate(720deg) scale(0.5);
+  }
+}
+
+/* 3. 星星爆炸效果 */
+.star-burst {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  animation: star-explode 0.8s ease-out forwards;
+}
+
+@keyframes star-explode {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5) rotate(180deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* 4. 分数飞入动画 */
+.score-fly {
+  position: fixed;
+  font-size: 28px;
+  font-weight: 900;
+  color: #FFD700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 2px 2px 0 #E5A500;
+  pointer-events: none;
+  z-index: 10001;
+  animation: score-fly-in 1.2s ease-out forwards;
+}
+
+@keyframes score-fly-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(50px);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.3) translateY(-20px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1) translateY(-40px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8) translateY(-80px);
+  }
+}
+
+/* 5. 增强庆祝弹窗动画 */
+.celeb-modal-content {
+  animation: celeb-bounce-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes celeb-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(100px);
+  }
+  50% {
+    transform: scale(1.1) translateY(-10px);
+  }
+  70% {
+    transform: scale(0.95) translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 6. 庆祝 Emoji 动画 */
+.celeb-emoji-anim {
+  animation: celeb-emoji-pop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes celeb-emoji-pop {
+  0% { transform: scale(0) rotate(-20deg); }
+  50% { transform: scale(1.3) rotate(10deg); }
+  70% { transform: scale(0.9) rotate(-5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* 7. 庆祝标题动画 */
+.celeb-title-anim {
+  animation: celeb-title-slide 0.5s ease-out 0.2s both;
+}
+
+@keyframes celeb-title-slide {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 8. 庆祝描述动画 */
+.celeb-desc-anim {
+  animation: celeb-desc-slide 0.5s ease-out 0.4s both;
+}
+
+@keyframes celeb-desc-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 9. 宝箱开箱动画 */
+.treasure-chest {
+  position: relative;
+  display: inline-block;
+}
+
+.treasure-chest-opening {
+  animation: chest-open 0.6s ease-out forwards;
+  transform-origin: bottom center;
+}
+
+@keyframes chest-open {
+  0% { transform: scale(1) rotateX(0deg); }
+  30% { transform: scale(1.1) rotateX(10deg); }
+  50% { transform: scale(1.2) rotateX(-10deg); }
+  70% { transform: scale(1.15) rotateX(5deg); }
+  100% { transform: scale(1) rotateX(0deg); }
+}
+
+.chest-lid {
+  transform-origin: bottom center;
+  animation: lid-open 0.5s ease-out 0.2s forwards;
+}
+
+@keyframes lid-open {
+  0% { transform: rotateX(0deg); }
+  100% { transform: rotateX(-120deg); }
+}
+
+.chest-glow {
+  animation: chest-glow-pulse 1s ease-in-out infinite;
+}
+
+@keyframes chest-glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+  50% { box-shadow: 0 0 40px rgba(255, 215, 0, 0.9), 0 0 60px rgba(255, 215, 0, 0.5); }
+}
+
+/* 10. 阶段升级大型庆祝 */
+.phase-upgrade-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: phase-fade-in 0.3s ease-out;
+}
+
+@keyframes phase-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.phase-upgrade-content {
+  text-align: center;
+  animation: phase-zoom-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes phase-zoom-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.1) rotate(-10deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(2deg);
+  }
+  70% {
+    transform: scale(0.95) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.phase-title {
+  font-size: 48px;
+  font-weight: 900;
+  color: #FFD700;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.8), 0 4px 8px rgba(0, 0, 0, 0.5);
+  margin-bottom: 20px;
+  animation: phase-title-glow 2s ease-in-out infinite;
+}
+
+@keyframes phase-title-glow {
+  0%, 100% { text-shadow: 0 0 20px rgba(255, 215, 0, 0.8), 0 4px 8px rgba(0, 0, 0, 0.5); }
+  50% { text-shadow: 0 0 40px rgba(255, 215, 0, 1), 0 4px 8px rgba(0, 0, 0, 0.5); }
+}
+
+.phase-subtitle {
+  font-size: 24px;
+  color: white;
+  margin-bottom: 30px;
+}
+
+/* 11. 脉冲光环效果 */
+.pulse-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 3px solid #FFD700;
+  animation: pulse-expand 1s ease-out forwards;
+}
+
+@keyframes pulse-expand {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 1;
+  }
+  100% {
+    width: 200px;
+    height: 200px;
+    opacity: 0;
+    margin-left: -100px;
+    margin-top: -100px;
+  }
+}
+
+/* 12. 弹跳按钮效果 */
+.celeb-btn-bounce {
+  animation: btn-bounce-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s both;
+}
+
+@keyframes btn-bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 13. 数字滚动效果 */
+.score-counter {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  animation: score-bounce 0.5s ease-out;
+}
+
+@keyframes score-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.3); color: #FFD700; }
+  100% { transform: scale(1); }
+}
+
+/* 14. 彩虹渐变文字 */
+.rainbow-text {
+  background: linear-gradient(90deg, #FF6B6B, #FFE66D, #4ECDC4, #45B7D1, #96CEB4, #FFEAA7, #DDA0DD, #FF6B6B);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: rainbow-shift 3s linear infinite;
+}
+
+@keyframes rainbow-shift {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}

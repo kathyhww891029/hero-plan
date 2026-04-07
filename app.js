@@ -330,6 +330,7 @@ function renderAll() {
   renderWeekly();
   renderAchievements();
   // 英雄行为历史（子渊Tab）
+  renderDisciplineBar();
   if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
 }
 
@@ -634,12 +635,13 @@ function submitBackfillTask(packType, itemId, itemName, itemIcon, score, dateStr
   const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
   const fullScore = packType === 'morning' ? MORNING_PACK_FULL : NIGHT_PACK_FULL;
   const label = (packType === 'morning' ? '早晨' : '睡前') + '英雄包·' + itemName;
+  const fullTaskId = `${packType}_${itemId}_${dateStr}`;
   
   // 加入待审加分池（区分补卡标记）
   // taskId 包含实际日期，保证唯一性
   state.pendingAdditions.push({
     type: 'pack',
-    taskId: `${packType}_${itemId}_${dateStr}`,
+    taskId: fullTaskId,
     name: label,
     icon: itemIcon,
     score: score,
@@ -648,6 +650,9 @@ function submitBackfillTask(packType, itemId, itemName, itemIcon, score, dateStr
     isSelf: isSelf,
     isBackfill: true      // 标记为补卡
   });
+  
+  // 添加到 todayChecked，让 calcTodayScore 能统计
+  state.todayChecked[fullTaskId] = 'pending';
   
   // 先加积分（审核驳回时再扣）
   state.totalScore += score;
@@ -676,9 +681,11 @@ function submitBackfillTask(packType, itemId, itemName, itemIcon, score, dateStr
   // 同步到 Firebase（taskId 带日期后缀，让爸妈能看到是补卡）
   const totalGain = score + bonusGain;
   if (window._firebaseReady) {
-    submitPending('pack', `${packType}_${itemId}_${dateStr}`, label, score, dateStr, isSelf);
+    submitPending('pack', fullTaskId, label, score, dateStr, isSelf);
     if (bonusGain > 0) {
-      submitPending('pack', `${packType}_full_${dateStr}`, (packType === 'morning' ? '早晨' : '睡前') + '英雄包全套奖励', bonusGain, dateStr, isSelf);
+      const fullBonusTaskId = `${packType}_full_${dateStr}`;
+      submitPending('pack', fullBonusTaskId, (packType === 'morning' ? '早晨' : '睡前') + '英雄包全套奖励', bonusGain, dateStr, isSelf);
+      state.todayChecked[fullBonusTaskId] = 'pending';
     }
     window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
       window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + totalGain);
@@ -727,7 +734,11 @@ function submitHomeworkBackfill(blocks, isComplete, dateStr, isSelf) {
   if (entries.length === 0) return;
 
   // 一次性加入待审池
-  entries.forEach(e => state.pendingAdditions.push(e));
+  entries.forEach(e => {
+    state.pendingAdditions.push(e);
+    // 添加到 todayChecked，让 calcTodayScore 能统计
+    state.todayChecked[e.taskId] = 'pending';
+  });
 
   // 计算本次总积分
   const totalGain = entries.reduce((sum, e) => sum + e.score, 0);
@@ -1251,6 +1262,7 @@ function showSelfReportUnified(taskId, taskName, score, icon, onConfirm) {
     if (!state.selfReport[today]) state.selfReport[today] = {};
     state.selfReport[today][taskId] = isSelf ? 'self' : 'reminded';
     saveState();
+    renderDisciplineBar();
     if (window._firebaseReady) {
       window._firebaseSet(
         window._firebaseRef(window._firebaseDB, `selfReport/${today}/${taskId}`),
@@ -1274,12 +1286,15 @@ function togglePackItem(packType, id, score) {
   if (state[packKey][id]) {
     // 取消：从待审加分池移除，同时扣减已加的积分
     const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
-    const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.name === label && p.actualDate === undefined);
+    const fullTaskId = `${packType}_${id}`;
+    const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.taskId === fullTaskId && p.actualDate === undefined);
     let deductGain = 0;
     if (idx !== -1) {
       deductGain = state.pendingAdditions[idx].score || 0;
       state.pendingAdditions.splice(idx, 1);
     }
+    // 从 todayChecked 中移除
+    delete state.todayChecked[fullTaskId];
     delete state[packKey][id];
     // 如果之前已发全套奖励，扣回差额
     if (state[bonusKey]) {
@@ -1338,15 +1353,18 @@ function doCheckIn(packType, id, score) {
 
   // 加入待审加分池
   const label = (packType === 'morning' ? '早晨' : '睡前') + '英雄包·' + id;
+  const fullTaskId = `${packType}_${id}`;
   state.pendingAdditions.push({
     type: 'pack',
-    taskId: id,
+    taskId: fullTaskId,
     name: label,
     score: gain,
     date: today,
     actualDate: today,
     isSelf: null
   });
+  // 添加到 todayChecked，让 calcTodayScore 能统计
+  state.todayChecked[fullTaskId] = 'pending';
 
   // 立即加积分
   state.totalScore += gain;
@@ -1366,8 +1384,8 @@ function doCheckIn(packType, id, score) {
 
   // 弹自律确认
   showSelfReportUnified(`${packType}_${id}_${today}`, packItemName, gain, packIcon, (isSelf) => {
-    if (window._firebaseReady) submitPending('pack', id, label, gain, '', isSelf);
-    const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === id && p.date === today && p.actualDate === today);
+    if (window._firebaseReady) submitPending('pack', fullTaskId, label, gain, '', isSelf);
+    const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === fullTaskId && p.date === today && p.actualDate === today);
     if (entry) { entry.isSelf = isSelf; saveState(); }
     const toastMsg = `已完成${todayDone}/${pack.length}件，${isFull ? '全套达成！🎉' : '再完成' + (pack.length - todayDone) + '件有惊喜！'}`;
     showCelebration(isFull ? '🎉' : '✅', isFull ? '全套完成！' : '完成一件！', toastMsg);
@@ -1381,6 +1399,8 @@ function undoHomework() {
   // 从待审加分池移除，同时扣减已加的积分
   const idx = state.pendingAdditions.findIndex(p => p.type === 'homework' && p.taskId === 'hw_complete');
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+  // 从 todayChecked 中移除
+  delete state.todayChecked['hw_complete'];
   // 扣减积分（因为在完成时已加）
   state.totalScore = Math.max(0, state.totalScore - HOMEWORK_TASK.scoreComplete);
   // 撤销streak：清空今天的记录
@@ -1408,15 +1428,18 @@ function completeHomework() {
     return;
   }
   state.hwCompleted = true;
+  const today = todayStr();
   // 加入待审加分池，同时立即加积分（等父母审核后确认，驳回则扣回）
   state.pendingAdditions.push({
     type: 'homework',
     taskId: 'hw_complete',
     name: '作业完成',
     score: HOMEWORK_TASK.scoreComplete,
-    date: todayStr(),
+    date: today,
     isSelf: null  // 等自律弹窗确定
   });
+  // 添加到 todayChecked，让 calcTodayScore 能统计
+  state.todayChecked['hw_complete'] = 'pending';
   // 立即加积分
   state.totalScore += HOMEWORK_TASK.scoreComplete;
   // 作业完成计入 habit 分类积分（作业是习惯养成的核心）
@@ -1438,7 +1461,6 @@ function completeHomework() {
       submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete, '', isSelf);
     }
     // 更新 pendingAdditions 中的 isSelf
-    const today = todayStr();
     const entry = state.pendingAdditions.find(p => p.type === 'homework' && p.taskId === 'hw_complete' && p.date === today);
     if (entry) entry.isSelf = isSelf;
     saveState();
@@ -1449,11 +1471,19 @@ function completeHomework() {
 
 function toggleFocusBlock(idx) {
   const currentBlocks = state.hwBlocks || 0;
+  const today = todayStr();
   
   if (currentBlocks >= idx) {
     // 撤销：从 idx 块开始全部撤销
     const blocksToRemove = currentBlocks - idx + 1;
     const deductPts = blocksToRemove * HOMEWORK_TASK.scorePerBlock;
+    // 从 pendingAdditions 和 todayChecked 中移除要撤销的块
+    for (let i = currentBlocks; i >= idx; i--) {
+      const blockTaskId = 'hw_block_' + i;
+      const addIdx = state.pendingAdditions.findIndex(p => p.type === 'homework' && p.taskId === blockTaskId);
+      if (addIdx !== -1) state.pendingAdditions.splice(addIdx, 1);
+      delete state.todayChecked[blockTaskId];
+    }
     state.totalScore = Math.max(0, state.totalScore - deductPts);
     state.hwBlocks = idx - 1;
     saveState();
@@ -1471,17 +1501,29 @@ function toggleFocusBlock(idx) {
       showCelebration('🏆', '专注块已满！', `已完成${HOMEWORK_TASK.maxBlocks}个专注块，太棒了！`);
       return;
     }
-    state.hwBlocks = currentBlocks + 1;
+    const newBlock = currentBlocks + 1;
+    const blockTaskId = 'hw_block_' + newBlock;
+    state.hwBlocks = newBlock;
+    // 加入待审加分池和 todayChecked
+    state.pendingAdditions.push({
+      type: 'homework',
+      taskId: blockTaskId,
+      name: `专注块第${newBlock}块`,
+      score: HOMEWORK_TASK.scorePerBlock,
+      date: today,
+      isSelf: null
+    });
+    state.todayChecked[blockTaskId] = 'pending';
     state.totalScore += HOMEWORK_TASK.scorePerBlock;
     saveState();
     if (window._firebaseReady) {
       window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
         window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + HOMEWORK_TASK.scorePerBlock);
       });
-      submitPending('homework', 'hw_block_'+state.hwBlocks, `专注块第${state.hwBlocks}块`, HOMEWORK_TASK.scorePerBlock);
+      submitPending('homework', blockTaskId, `专注块第${newBlock}块`, HOMEWORK_TASK.scorePerBlock);
     }
     renderAll();
-    showCelebration('🍅', `专注块 ${state.hwBlocks}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
+    showCelebration('🍅', `专注块 ${newBlock}/${HOMEWORK_TASK.maxBlocks}！`, `专注${HOMEWORK_TASK.blockMinutes}分钟完成！+${HOMEWORK_TASK.scorePerBlock}分！`);
   }
 }
 
@@ -1798,34 +1840,6 @@ const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAIL
 // 逻辑：一天中有任何待审或已审记录 → 计入 totalDays
 //       自主完成（isSelf=true）且审核通过 → 计入 selfDays
 //       父母提醒（isSelf=false）即使通过 → 不计入 selfDays
-function calcMonthlyDisciplineRate(year, month) {
-  const prefix = `${year}-${String(month).padStart(2,'0')}`;
-  const ymKey = prefix; // e.g. "2026-04"
-  let selfDays = 0, totalDays = 0;
-
-  // 1. 已审通过的自助完成记录（来自 reviewedSelfLog）
-  const approvedSelfDates = state.reviewedSelfLog[ymKey] || {};
-  const approvedSelfDateSet = new Set(Object.keys(approvedSelfDates));
-
-  // 2. 当月有活动的日期集合（pendingAdditions 待审记录）
-  //    只有当前月且已提交的才计入；历史未审的忽略
-  const activeDates = new Set();
-  state.pendingAdditions.forEach(p => {
-    if (p.date && p.date.startsWith(prefix)) {
-      activeDates.add(p.date);
-    }
-  });
-
-  // 合并所有有活动的日期
-  const allActiveDates = new Set([...activeDates, ...approvedSelfDateSet]);
-  totalDays = allActiveDates.size;
-
-  // selfDays = 自主完成且审核通过的日期数
-  selfDays = approvedSelfDateSet.size;
-
-  const rate = totalDays > 0 ? Math.round(selfDays / totalDays * 100) : 0;
-  return { rate, selfDays, totalDays };
-}
 
 // ── B类奖励解锁判断 ───────────────────────────────────────────
 function isBRewardUnlocked() {
@@ -1835,36 +1849,6 @@ function isBRewardUnlocked() {
 }
 
 // ── 自律能量条渲染 ────────────────────────────────────────────
-function renderDisciplineBar() {
-  const el = document.getElementById('disciplineBar');
-  if (!el) return;
-  const now = new Date();
-  const { rate, selfDays, totalDays } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const remainDays = daysInMonth - now.getDate();
-  const unlocked = rate >= 85;
-  const filled = Math.round(rate / 10);
-  const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
-  el.innerHTML = `
-    <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条</span>
-        <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
-      </div>
-      <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};letter-spacing:2px;">${bar}</div>
-      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.82rem;color:#888;">
-        <span>自律天数：${selfDays}/${totalDays}天</span>
-        <span>剩余：${remainDays}天</span>
-      </div>
-      ${unlocked
-        ? '<div style="margin-top:8px;font-size:0.88rem;color:#06D6A0;font-weight:700;">✨ 本月自律达标！大奖已解锁！</div>'
-        : rate > 0
-          ? `<div style="margin-top:8px;font-size:0.85rem;color:#F9A825;">还差${85-rate}%解锁本月大奖，加油！💪</div>`
-          : '<div style="margin-top:8px;font-size:0.85rem;color:#aaa;">开始打卡，积累自律能量！</div>'
-      }
-    </div>
-  `;
-}
 
 function calcTodayScore() {
   const today = todayStr();
@@ -2347,6 +2331,19 @@ function moveKnight(targetNodeId, callback) {
       state.mazeKnightNode = targetNodeId;
       group.classList.remove('moving');
       group.style.transition = '';
+      
+      // 到达目标节点时触发宝箱开箱动画
+      const targetNode = findMazeNode(targetNodeId);
+      if (targetNode && targetNode.cardId) {
+        const nodeEl = document.querySelector(`[data-node-id="${targetNodeId}"]`);
+        if (nodeEl) {
+          setTimeout(() => animateTreasureOpen(nodeEl), 300);
+          // 在节点位置创建星星爆炸
+          const rect = nodeEl.getBoundingClientRect();
+          setTimeout(() => createStarBurst(rect.left + rect.width/2, rect.top + rect.height/2, 10), 500);
+        }
+      }
+      
       if (callback) callback();
       return;
     }
@@ -3442,6 +3439,8 @@ function claimCard(id, isSelf) {
     date: today,
     isSelf: isSelf
   });
+  // 添加到 todayChecked，让 calcTodayScore 能统计（审核通过后改为 'approved'，驳回时删除）
+  state.todayChecked[id] = 'pending';
   // 先加积分（审核驳回时再扣）
   state.totalScore += card.score;
   // 分类积分（用于阶段勋章进度条）
@@ -3476,9 +3475,9 @@ function claimCard(id, isSelf) {
   if (newAch && newAch.id !== state.weeklyAchievement) {
     state.weeklyAchievement = newAch.id;
     saveState();
-    setTimeout(() => showCelebration(newAch.icon, `${newAch.level}成就！`, `本周完成${state.weeklyCardCount}张任务卡！周末结算+${newAch.bonusScore}分！`), 800);
+    setTimeout(() => showCelebration(newAch.icon, `${newAch.level}成就！`, `本周完成${state.weeklyCardCount}张任务卡！周末结算+${newAch.bonusScore}分！`, newAch.bonusScore), 800);
   } else {
-    showCelebration('⏳', `「${card.name}」已申请！`, `等爸爸妈妈审核后 +${card.score}分入账！`);
+    showCelebration('⏳', `「${card.name}」已申请！`, `等爸爸妈妈审核后 +${card.score}分入账！`, card.score);
   }
 }
 
@@ -3720,6 +3719,7 @@ function renderDadPage() {
           </button>
         </div>
       </div>
+  renderDisciplineBar();
     </div>`;
 }
 
@@ -3807,13 +3807,227 @@ function showToast(msg, duration) {
 }
 
 // ── 庆祝弹窗 ───────────────────────────────────────────────────
-function showCelebration(emoji, title, desc) {
-  document.getElementById('celebEmoji').textContent = emoji;
-  document.getElementById('celebTitle').textContent = title;
-  document.getElementById('celebDesc').textContent = desc;
-  document.getElementById('celebModal').style.display = 'flex';
+function showCelebration(emoji, title, desc, score = 0) {
+  const modal = document.getElementById('celebModal');
+  const emojiEl = document.getElementById('celebEmoji');
+  const titleEl = document.getElementById('celebTitle');
+  const descEl = document.getElementById('celebDesc');
+  
+  // 重置动画类
+  const content = modal.querySelector('.modal-box');
+  content.classList.remove('celeb-modal-content');
+  emojiEl.classList.remove('celeb-emoji-anim');
+  titleEl.classList.remove('celeb-title-anim');
+  descEl.classList.remove('celeb-desc-anim');
+  
+  // 设置内容
+  emojiEl.textContent = emoji;
+  titleEl.textContent = title;
+  descEl.textContent = desc;
+  
+  // 触发重绘以重置动画
+  void modal.offsetWidth;
+  
+  // 添加动画类
+  content.classList.add('celeb-modal-content');
+  emojiEl.classList.add('celeb-emoji-anim');
+  titleEl.classList.add('celeb-title-anim');
+  descEl.classList.add('celeb-desc-anim');
+  
+  // 显示弹窗
+  modal.style.display = 'flex';
+  
+  // 启动彩纸粒子效果
+  createConfetti(30);
+  
+  // 分数飞入动画
+  if (score > 0) {
+    setTimeout(() => flyScore(score), 400);
+  }
+  
   // 3秒自动关闭
-  setTimeout(() => closeModal('celebModal'), 3000);
+  setTimeout(() => closeModal('celebModal'), 3500);
+}
+
+// ── 彩纸粒子效果 ──────────────────────────────────────────────
+function createConfetti(count = 30) {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  container.id = 'confettiContainer';
+  document.body.appendChild(container);
+  
+  const colors = ['#FF6B6B', '#FFE66D', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFD700', '#FF69B4', '#9B59B6'];
+  const shapes = ['confetti-circle', 'confetti-square', 'confetti-star'];
+  
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+      const confetti = document.createElement('div');
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const shape = shapes[Math.floor(Math.random() * shapes.length)];
+      
+      confetti.className = `confetti ${shape}`;
+      confetti.style.left = Math.random() * 100 + 'vw';
+      confetti.style.backgroundColor = color;
+      confetti.style.width = (8 + Math.random() * 12) + 'px';
+      confetti.style.height = confetti.style.width;
+      confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
+      confetti.style.animationDelay = Math.random() * 0.5 + 's';
+      
+      container.appendChild(confetti);
+    }, i * 30);
+  }
+  
+  // 清理粒子
+  setTimeout(() => container.remove(), 4000);
+}
+
+// ── 星星爆炸效果 ───────────────────────────────────────────────
+function createStarBurst(x, y, count = 8) {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  container.style.zIndex = '10002';
+  document.body.appendChild(container);
+  
+  for (let i = 0; i < count; i++) {
+    const star = document.createElement('div');
+    star.className = 'star-burst';
+    star.innerHTML = '⭐';
+    star.style.left = x + 'px';
+    star.style.top = y + 'px';
+    star.style.fontSize = (16 + Math.random() * 12) + 'px';
+    star.style.transform = `rotate(${i * (360 / count)}deg) translateX(${40 + Math.random() * 30}px)`;
+    
+    container.appendChild(star);
+  }
+  
+  setTimeout(() => container.remove(), 1000);
+}
+
+// ── 分数飞入动画 ───────────────────────────────────────────────
+function flyScore(score) {
+  const scoreEl = document.createElement('div');
+  scoreEl.className = 'score-fly';
+  scoreEl.textContent = `+${score}分`;
+  scoreEl.style.left = '50%';
+  scoreEl.style.top = '40%';
+  scoreEl.style.transform = 'translateX(-50%)';
+  
+  document.body.appendChild(scoreEl);
+  
+  // 添加分数到弹窗
+  setTimeout(() => {
+    const descEl = document.getElementById('celebDesc');
+    if (descEl && !descEl.textContent.includes('+')) {
+      descEl.innerHTML += `<span class="score-counter" style="color:#FFD700;font-weight:900;margin-left:8px">+${score}</span>`;
+    }
+  }, 600);
+  
+  setTimeout(() => scoreEl.remove(), 1500);
+}
+
+// ── 宝箱开箱动画 ───────────────────────────────────────────────
+function animateTreasureOpen(nodeElement) {
+  if (!nodeElement) return;
+  
+  // 添加开箱动画类
+  nodeElement.classList.add('treasure-chest-opening');
+  
+  // 添加发光效果
+  const glow = document.createElement('div');
+  glow.className = 'chest-glow';
+  glow.style.cssText = `
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,215,0,0.6) 0%, transparent 70%);
+    pointer-events: none;
+  `;
+  nodeElement.style.position = 'relative';
+  nodeElement.appendChild(glow);
+  
+  // 3秒后移除
+  setTimeout(() => {
+    nodeElement.classList.remove('treasure-chest-opening');
+    glow.remove();
+  }, 2000);
+}
+
+// ── 阶段升级大型庆祝 ───────────────────────────────────────────
+function showPhaseUpgrade(phaseName, phaseEmoji) {
+  // 创建全屏覆盖
+  const overlay = document.createElement('div');
+  overlay.className = 'phase-upgrade-overlay';
+  overlay.id = 'phaseUpgradeOverlay';
+  
+  overlay.innerHTML = `
+    <div class="phase-upgrade-content">
+      <div class="phase-title rainbow-text">🎊 阶段升级！🎊</div>
+      <div class="phase-subtitle">${phaseEmoji} ${phaseName}</div>
+      <div style="font-size:48px;margin:20px 0">🏆</div>
+      <button class="btn-primary celeb-btn-bounce" onclick="closePhaseUpgrade()" style="background:linear-gradient(135deg,#FFD700,#FFA500);font-size:18px;padding:15px 40px">
+        继续探险！
+      </button>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  // 启动大量彩纸
+  createConfetti(60);
+  createConfetti(40);
+  
+  // 5秒后自动关闭
+  setTimeout(() => closePhaseUpgrade(), 5000);
+}
+
+function closePhaseUpgrade() {
+  const overlay = document.getElementById('phaseUpgradeOverlay');
+  if (overlay) {
+    overlay.style.animation = 'phase-fade-in 0.3s ease-out reverse';
+    setTimeout(() => overlay.remove(), 300);
+  }
+}
+
+// ── 脉冲光环效果 ───────────────────────────────────────────────
+function createPulseRing(x, y, color = '#FFD700') {
+  const ring = document.createElement('div');
+  ring.className = 'pulse-ring';
+  ring.style.left = x + 'px';
+  ring.style.top = y + 'px';
+  ring.style.borderColor = color;
+  
+  document.body.appendChild(ring);
+  
+  setTimeout(() => ring.remove(), 1000);
+}
+
+// ── 积分变化动画 ───────────────────────────────────────────────
+function animateScoreChange(oldScore, newScore) {
+  const scoreEl = document.getElementById('totalScoreDisplay');
+  if (!scoreEl) return;
+  
+  const diff = newScore - oldScore;
+  if (diff <= 0) return;
+  
+  // 添加弹跳效果
+  scoreEl.classList.add('score-counter');
+  
+  // 数字动画
+  let current = oldScore;
+  const step = Math.ceil(diff / 10);
+  const interval = setInterval(() => {
+    current = Math.min(current + step, newScore);
+    scoreEl.textContent = current;
+    
+    if (current >= newScore) {
+      clearInterval(interval);
+      setTimeout(() => scoreEl.classList.remove('score-counter'), 300);
+    }
+  }, 50);
 }
 
 // ── 补给站激励弹窗 ─────────────────────────────────────────────
@@ -3948,7 +4162,38 @@ function bindEvents() {
   // 重置今日
   document.getElementById('btnResetDay').addEventListener('click', () => {
     if (confirm('确定开始新的一天？今日打卡记录将重置。')) {
+      const today = todayStr();
+
+      // 计算今日已入账积分（需从 totalScore 中扣减）
+      const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
+        const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+        const t = all.find(x => x.id === id);
+        return sum + (t ? t.score : 0);
+      }, 0);
+      const pendingScore = (state.pendingAdditions || [])
+        .filter(p => p.date === today)
+        .reduce((sum, p) => sum + (p.score || 0), 0);
+      const deductToday = taskScore + pendingScore;
+
+      // 扣减累计积分
+      state.totalScore = Math.max(0, state.totalScore - deductToday);
+      // 同步 Firebase syncScore
+      if (window._firebaseReady) {
+        window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
+          window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductToday));
+        });
+      }
+
+      // 重置所有状态
       state.todayChecked = {};
+      state.morningPack = {};
+      state.nightPack = {};
+      state.morningPackBonus = false;
+      state.nightPackBonus = false;
+      state.hwCompleted = false;
+      state.hwBlocks = 0;
+      state.pendingAdditions = [];
+      state.selfReport = {};
       saveState();
       renderAll();
     }
@@ -4926,57 +5171,7 @@ function mathShowSection(id) {
     mathRenderHome();
   });
 })();
-'+t.id+'
 
-function toggleDaily(id, score) {
-  if (state.todayChecked[id]) {
-    // 取消打卡（只能取消待审状态，不能取消已通过的）
-    if (state.todayChecked[id] === 'pending') {
-      delete state.todayChecked[id];
-      saveState();
-      renderAll();
-      showCelebration('↩️', '已取消申请', '打卡已撤销');
-    } else {
-      showCelebration('🔒', '已提交审核', '请等待爸爸妈妈确认哦！');
-    }
-    return;
-  }
-
-  // 固定任务：完成后弹出自律自报弹窗
-  const fixedTask = DAILY_FIXED.find(t => t.id === id);
-  if (fixedTask) {
-    // 先标记待审，再弹自报
-    state.todayChecked[id] = 'pending';
-    saveState();
-const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
-    const task = allTasks.find(t => t.id === id);
-    if (task && window._firebaseReady) {
-      submitPending('daily', id, task.name, score);
-    }
-    renderAll();
-    // 弹出自律自报弹窗（通用版）
-    setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🦸', (isSelf) => {
-      const msg = isSelf ? '自律英雄！💪 自己主动完成，太棒了！' : '诚实是最好的品质 👋 加油继续！';
-      showCelebration(isSelf ? '💪' : '👋', isSelf ? '自律打卡！' : '诚实打卡！', msg);
-      setTimeout(() => tryShowShopBoost(score, true), 1600);
-    }), 400);
-    return;
-  }
-
-  // 可选/作业任务：先提交，再弹自律弹窗
-  state.todayChecked[id] = 'pending';
-  saveState();
-const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
-  const task = allTasks.find(t => t.id === id);
-  if (task && window._firebaseReady) {
-    submitPending('daily', id, task.name, score);
-  }
-  renderAll();
-  setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🎮', (isSelf) => {
-    showCelebration('⏳', '已提交！等待确认', `「${task ? task.name : id}」等爸爸妈妈审核后积分入账 💪`);
-    setTimeout(() => tryShowShopBoost(score, true), 1600);
-  }), 400);
-}
 
 // [showSelfReportModal/submitSelfReport 已合并入 showSelfReportUnified]
 
@@ -4984,35 +5179,54 @@ const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY
 function calcMonthlyDisciplineRate(year, month) {
   if (!state.selfReport) return { rate: 0, selfDays: 0, totalDays: 0 };
   const prefix = `${year}-${String(month).padStart(2,'0')}`;
-  let selfDays = 0, totalDays = 0;
 
-  Object.entries(state.selfReport).forEach(([date, tasks]) => {
-    if (!date.startsWith(prefix)) return;
-    // 判断当天固定任务完成率是否达到80%
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const today = new Date();
+  const isCurrentMonth = (today.getFullYear() === year && today.getMonth() + 1 === month);
+  const lastDay = isCurrentMonth ? today.getDate() : daysInMonth;
+
+  // 每天：固定任务≥65%且全部self
+  const dayBy65 = {};
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${prefix}-${String(d).padStart(2,'0')}`;
+    const tasks = state.selfReport[dateStr];
+    if (!tasks) { dayBy65[d] = false; continue; }
     const fixedIds = DAILY_FIXED.map(t => t.id);
-    const totalFixed = fixedIds.length;
-    // 当天有自报记录的固定任务数（说明完成了）
-    const reportedFixed = fixedIds.filter(id => tasks[id]).length;
-    if (totalFixed === 0 || reportedFixed / totalFixed < 0.8) return; // 固定任务不达标，不计入
+    const completedFixed = fixedIds.filter(id => tasks[id]);
+    const allSelf = completedFixed.length > 0 && completedFixed.every(id => tasks[id] === 'self');
+    dayBy65[d] = (completedFixed.length / fixedIds.length >= 0.65) && allSelf;
+  }
 
-    // 自律判断：当天所有自报的固定任务都是'self'
-    const reportedEntries = Object.values(tasks).filter(v => v === 'self' || v === 'reminded');
-    if (reportedEntries.length === 0) return;
-    totalDays++;
-    const allSelf = reportedEntries.every(v => v === 'self');
-    if (allSelf) selfDays++;
-  });
+  // 每天：有至少1个self任务（用于streak判断）
+  const dayHasSelf = {};
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${prefix}-${String(d).padStart(2,'0')}`;
+    const tasks = state.selfReport[dateStr];
+    dayHasSelf[d] = !!(tasks && Object.values(tasks).some(v => v === 'self'));
+  }
 
+  // 统计自律天数：65%条件 OR 连续7天每天有self
+  const counted = {};
+  let selfDays = 0;
+  for (let d = 1; d <= lastDay; d++) {
+    if (counted[d]) continue;
+    if (dayBy65[d]) { selfDays++; counted[d] = true; continue; }
+    let streakOk = d >= 7;
+    for (let k = d - 6; k <= d; k++) {
+      if (!dayHasSelf[k]) { streakOk = false; break; }
+    }
+    if (streakOk) {
+      for (let k = d - 6; k <= d; k++) counted[k] = true;
+      selfDays += 7;
+    }
+  }
+
+  const totalDays = lastDay;
   const rate = totalDays > 0 ? Math.round(selfDays / totalDays * 100) : 0;
   return { rate, selfDays, totalDays };
 }
 
 // ── B类奖励解锁判断 ───────────────────────────────────────────
-function isBRewardUnlocked() {
-  const now = new Date();
-  const { rate } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
-  return rate >= 85;
-}
 
 // ── 自律能量条渲染 ────────────────────────────────────────────
 function renderDisciplineBar() {
@@ -5036,6 +5250,9 @@ function renderDisciplineBar() {
         <span>自律天数：${selfDays}/${totalDays}天</span>
         <span>剩余：${remainDays}天</span>
       </div>
+      <div style="margin-top:6px;font-size:0.78rem;color:#aaa;">
+        达成条件：固定任务≥65%全自主 或 连续7天每天自主完成任务
+      </div>
       ${unlocked
         ? '<div style="margin-top:8px;font-size:0.88rem;color:#06D6A0;font-weight:700;">✨ 本月自律达标！大奖已解锁！</div>'
         : rate > 0
@@ -5046,41 +5263,6 @@ function renderDisciplineBar() {
   `;
 }
 
-function calcTodayScore() {
-  const today = todayStr();
-  const todayStart = new Date(today).setHours(0, 0, 0, 0);
-  const todayEnd = new Date(today).setHours(23, 59, 59, 999);
-
-  // 1. 固定任务 + 可选任务 + 作业（从 todayChecked）
-  const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
-const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
-    const t = all.find(x => x.id === id);
-    return sum + (t ? t.score : 0);
-  }, 0);
-
-  // 2. 待审加分池（挑战卡、早晨包、睡前包等）当天提交的
-  const pendingScore = (state.pendingAdditions || [])
-    .filter(p => p.date === today)
-    .reduce((sum, p) => sum + (p.score || 0), 0);
-
-  // 3. 勋章奖励（当天领取的）
-  const medalScore = Object.entries(state.medalClaims || {})
-    .filter(([id, ts]) => ts >= todayStart && ts <= todayEnd)
-    .reduce((sum, [medalId, ts]) => {
-      const medal = MEDALS.find(m => m.id === medalId);
-      return sum + (medal ? medal.bonus : 0);
-    }, 0);
-
-  return taskScore + pendingScore + medalScore;
-}
-
-function updateTodayScore() {
-  const today = calcTodayScore();
-  document.getElementById('todayScore').textContent = today;
-  // 同步顶部今日得分
-  const el = document.getElementById('headerTodayScore');
-  if (el) el.textContent = today > 0 ? `+${today}` : '+0';
-}
 
 /* ══════════════════════════════════════════════════════════════
    🏆 勋章体系 v1.0（测试版）

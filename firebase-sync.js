@@ -527,6 +527,57 @@ function addManualBonus() {
   showParentToast(`🎁 已发放 +${score}分！`);
 }
 
+// ── 分数调整（加减分）────────────────────────────────────────
+function adjustScore() {
+  const input = document.getElementById('adjustInput').value.trim();
+  const reason = document.getElementById('adjustReason').value.trim();
+  if (input === '' || isNaN(parseInt(input))) {
+    showParentToast('❌ 请输入有效分数（正数加分，负数扣分）');
+    return;
+  }
+  if (!reason) {
+    showParentToast('❌ 请填写调整原因');
+    return;
+  }
+  const score = parseInt(input);
+  if (score === 0) {
+    showParentToast('❌ 调整分数不能为0');
+    return;
+  }
+  // 扣分时二次确认
+  if (score < 0) {
+    if (!confirm(`确定要扣除 ${Math.abs(score)} 分吗？`)) return;
+  }
+  // 写入 Firebase reviewed 记录（type=adjustment 区分于普通奖励）
+  window._firebasePush(fbRef('reviewed'), {
+    name: reason, score, result: 'adjustment',
+    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
+    reviewedAt: Date.now(),
+    date: new Date().toISOString().slice(0, 10)
+  });
+  // 更新 Firebase syncScore
+  window._firebaseGet(fbRef('syncScore')).then(s => {
+    const current = s.val() || 0;
+    const newScore = current + score;
+    if (newScore < 0) {
+      showParentToast('❌ 分数不能为负数！');
+      return;
+    }
+    window._firebaseSet(fbRef('syncScore'), newScore);
+    // 同时更新本地 state
+    state.totalScore = newScore;
+    saveState();
+    renderHeader();
+    renderShop();
+    const emoji = score > 0 ? '📈' : '📉';
+    const label = score > 0 ? `+${score}` : `${score}`;
+    showParentToast(`${emoji} 已调整 ${label}分：` + reason);
+  });
+  // 清空表单
+  document.getElementById('adjustInput').value = '';
+  document.getElementById('adjustReason').value = '';
+}
+
 // ── Toast提示 ─────────────────────────────────────────────────
 function showParentToast(msg) {
   let toast = document.getElementById('parentToast');

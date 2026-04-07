@@ -290,7 +290,9 @@
 
 <!-- ═══ TAB: 爸爸妈妈要牢记 ═══ -->
 <div class="tab-content" id="tab-dad">
-  <div id="dadPage"></div>
+  <div id="dadPage">
+    <div id="disciplineBar"></div>
+  </div>
 </div>
 
 <!-- ═══ TAB: 闪电侠速算 ═══ -->
@@ -473,6 +475,31 @@
       </div>
     </div>
 
+    <!-- 分数调整（加减分） -->
+    <div class="parent-section">
+      <div class="section-header" style="background:linear-gradient(135deg,#FFF3E0,#FFE0B2);color:#E65100;border-left:4px solid #FF9800">
+        ⚖️ 分数调整（支持扣分）
+      </div>
+      <div style="font-size:12px;color:#888;padding:6px 0 10px;line-height:1.6">
+        发现孩子有需要调整积分的情况时使用，比如奖励扣回、纠正错误记录等<br>
+        <span style="color:#e74c3c">负数表示扣分，正数表示加分</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="adjustInput" placeholder="输入调整分数（如 -5）" class="bonus-input" style="flex:1">
+          <select id="adjustType" style="padding:8px 12px;border-radius:10px;border:1.5px solid #e0e0e0;font-size:13px;background:#fff">
+            <option value="adjust">调整</option>
+          </select>
+        </div>
+        <input type="text" id="adjustReason" placeholder="调整原因（必填）" class="bonus-reason-input">
+        <div style="display:flex;gap:8px">
+          <button class="btn-primary" style="background:#27ae60;flex:1" onclick="adjustScore()">确认调整</button>
+          <button style="flex:1;padding:10px;border-radius:10px;border:none;background:#f5f5f5;color:#666;font-size:14px;cursor:pointer" onclick="document.getElementById('adjustInput').value='';document.getElementById('adjustReason').value=''">清空</button>
+        </div>
+      </div>
+      <div id="adjustPreview" style="margin-top:10px;padding:10px;background:#fff8e1;border-radius:10px;font-size:13px;color:#555;display:none"></div>
+    </div>
+
     <!-- ✨ 英雄品格记录 -->
     <div class="parent-section">
       <div class="section-header" style="background:linear-gradient(135deg,#FFF0E6,#FFE4CC);color:#E65100;border-left:4px solid #FF6B35">
@@ -537,11 +564,11 @@
 
 <!-- 弹窗：积分庆祝 -->
 <div class="modal-overlay" id="celebModal" style="display:none">
-  <div class="modal-box">
-    <div class="celeb-emoji" id="celebEmoji">🎉</div>
-    <div class="celeb-title" id="celebTitle">太棒了！</div>
-    <div class="celeb-desc" id="celebDesc"></div>
-    <button class="btn-primary" onclick="closeModal('celebModal')">好的！</button>
+  <div class="modal-box" style="text-align:center;padding:32px 24px;max-width:320px;">
+    <div class="celeb-emoji" id="celebEmoji" style="font-size:72px;margin-bottom:16px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.2))">🎉</div>
+    <div class="celeb-title" id="celebTitle" style="font-size:24px;font-weight:900;color:#06D6A0;margin-bottom:12px;text-shadow:0 2px 4px rgba(0,0,0,0.1)">太棒了！</div>
+    <div class="celeb-desc" id="celebDesc" style="font-size:16px;color:#555;line-height:1.6;margin-bottom:24px"></div>
+    <button class="btn-primary" onclick="closeModal('celebModal')" style="background:linear-gradient(135deg,#06D6A0,#10B981);padding:14px 32px;font-size:16px;font-weight:700;box-shadow:0 4px 12px rgba(6,214,160,0.4)">好的！💪</button>
   </div>
 </div>
 
@@ -576,6 +603,6 @@
 
 <script src="data.js"></script>
 <script src="app.js?v=2"></script>
-<script src="firebase-sync.js"></script>
+<script src="firebase-sync.js?v=72"></script>
 </body>
 </html>

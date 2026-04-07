@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "pending": {
+      ".read": true,
+      ".write": "!data.exists() && newData.hasChildren(['type', 'taskId', 'name', 'score', 'date', 'submittedAt'])",
+      "$key": {
+        ".write": "data.exists() && newData.hasChildren(['isSelf', 'status']) && data.child('status').val() !== 'approved'"
+      }
+    },
+    "approved": {
+      ".read": true,
+      ".write": false
+    },
+    "totalScore": {
+      ".read": true,
+      ".write": false
+    },
+    "weeklyScore": {
+      ".read": true,
+      ".write": false
+    },
+    "characterRecords": {
+      ".read": true,
+      ".write": false
+    },
+    "ropeRecords": {
+      ".read": true,
+      ".write": false
+    },
+    "homeworkRecords": {
+      ".read": true,
+      ".write": false
+    },
+    "focusRecords": {
+      ".read": true,
+      ".write": false
+    }
+  }
+}
