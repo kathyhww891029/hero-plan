@@ -4,7 +4,7 @@
       ".read": true,
       ".write": "!data.exists() && newData.hasChildren(['type', 'taskId', 'name', 'score', 'date', 'submittedAt'])",
       "$key": {
-        ".write": "data.exists() && newData.hasChildren(['isSelf', 'status']) && data.child('status').val() !== 'approved'"
+        ".write": "!data.exists() || (newData.hasChildren(['isSelf', 'status']) && data.child('status').val() !== 'approved')"
       }
     },
     "approved": {
