@@ -5,18 +5,28 @@
 // ── 语音朗读引擎 ───────────────────────────────────────────────
 let _currentUtterance = null;
 let _speakingBtn = null;
-let _zhCNVoice = null;  // 缓存选好的普通话声音
+let _zhCNVoice = null;      // 缓存选好的普通话声音（女声/默认）
+let _zhCNMaleVoice = null;  // 缓存骑士男声
 
-// 预选普通话声音（明确排除 zh-HK 粤语）
+// 预选普通话声音（女声/默认 + 男声）
 function pickZhCNVoice() {
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return;
+  // 女声（任务卡朗读等）
   _zhCNVoice =
     voices.find(v => v.lang === 'zh-CN' && (v.name.includes('Female') || v.name.includes('female') ||
       v.name.includes('Tingting') || v.name.includes('Meijia') || v.name.includes('女'))) ||
     voices.find(v => v.lang === 'zh-CN') ||
     voices.find(v => v.lang.startsWith('zh-CN')) ||
     voices.find(v => v.name.includes('Tingting') || v.name.includes('Meijia') || v.name.includes('普通话')) ||
+    null;
+  // 男声（骑士引导语音）：优先选 Male/male/Yunyang/男 关键字
+  _zhCNMaleVoice =
+    voices.find(v => v.lang === 'zh-CN' && (v.name.includes('Male') || v.name.includes('male') ||
+      v.name.includes('Yunyang') || v.name.includes('男') || v.name.includes('Yunjian') ||
+      v.name.includes('Kangkang') || v.name.includes('Daniel'))) ||
+    voices.find(v => v.lang === 'zh-CN' && v !== _zhCNVoice) ||
+    _zhCNVoice ||  // 兜底用普通话女声
     null;
 }
 if (window.speechSynthesis) {
@@ -77,6 +87,47 @@ function speakBtn(text) {
   return `<button class="speak-btn" title="点我听任务说明" onclick="event.stopPropagation();speakText('${safe}',this)">🔈</button>`;
 }
 
+// ── 骑士专用男声语音播报（不绑定按钮，直接播放） ──────────────
+function speakKnightVoice(text) {
+  if (!window.speechSynthesis) return;
+  if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+  if (!_zhCNMaleVoice) pickZhCNVoice();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'zh-CN';
+  utter.rate = 0.88;
+  utter.pitch = 0.85;   // 偏低音调，更像男性声音
+  utter.volume = 1.0;
+  if (_zhCNMaleVoice) utter.voice = _zhCNMaleVoice;
+  window.speechSynthesis.speak(utter);
+}
+
+// ── 骑士气泡说话：更新气泡内容 + 播报男声 ─────────────────────
+function knightSpeak(msg) {
+  const el = document.getElementById('mazeGuidance');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  el.classList.add('knight-speaking');
+  setTimeout(() => el.classList.remove('knight-speaking'), 600);
+  speakKnightVoice(msg);
+  positionGuidanceBubble();
+}
+
+// ── 点击骑士：随机说一句鼓励话并播放男声 ─────────────────────
+const KNIGHT_SPEECHES = [
+  '勇敢的英雄，点击发光的宝箱开始挑战吧！',
+  '每完成一个任务，你就变得更强大！',
+  '英雄不是天生的，是每天练出来的！',
+  '加油！你今天的努力，就是明天的超能力！',
+  '嘿，勇士！今天完成挑战了吗？快去试试吧！',
+  '宝箱里藏着积分，等你来解锁！',
+  '继续前进，英雄的路就在你脚下！',
+];
+function showKnightHelp() {
+  const idx = Math.floor(Math.random() * KNIGHT_SPEECHES.length);
+  knightSpeak(KNIGHT_SPEECHES[idx]);
+}
+
 // ── 温情化：欢迎语 + 每日励志语 ──────────────────────────────
 const WELCOME_MESSAGES = [
   '你好啊，小英雄！今天也是充满可能的一天！',
@@ -126,8 +177,8 @@ let state = loadState();
 
 function defaultState() {
   return {
-    totalScore: 0,
-    mazeKnightNode: 'n_start',  // 骑士当前位置节点
+    totalScore: 25,   // 子渊在正式上线前已积累 25 分（2026-04-06 起始分）
+    mazeKnightNode: 'n_knight_spawn',  // 骑士当前位置节点（独立于迷宫节点）
     pendingAdditions: [],    // [{type, taskId, name, score, date, isSelf}] 待审加分，审核通过后才正式入账
     reviewedSelfLog: {},    // { "2026-04": { "2026-04-05": true, ... } } 记录每月自律（自主完成且审核通过）的日期
     todayChecked: {},         // { taskId: true }
@@ -138,7 +189,7 @@ function defaultState() {
     ropeMax: 0,
     ropeMilestonesAchieved: [],
     weekStart: getWeekStart(),
-    weeklyScore: 0,
+    weeklyScore: 25,  // 本周起始分（含 2026-04-06 积累的 25 分）
     consecutiveDays: {},      // 连续打卡追踪（旧字段保留）
     consecutive930: 0,        // 连续9点半上床天数（旧字段保留）
     // 连续天数（新版，跨天累积不被重置）
@@ -550,9 +601,8 @@ function showHistoricalCheckinModal(dateStr) {
             }
           );
         }
-        return;
-        return;
-      }
+                  return;
+        }
 
       // ── 早包/晚包补卡 ────────────────────────────────
       // 防止重复提交（disabled 的按钮理论上不会触发，但多加一层保险）
@@ -906,8 +956,21 @@ function getTodayRecommendCard() {
     .filter(([date]) => new Date(date) >= cutoff)
     .flatMap(([, ids]) => ids);
 
-  // 获取所有Phase1且已解锁的卡
-  const pool = TASK_CARDS.filter(c => c.phase === 1 && isCardUnlocked(c));
+  // ── 按当前阶段动态筛选推荐池 ──────────────────────────────
+  // Phase1：只推 phase=1 的主线卡 + 兴趣扩展卡（无phase字段）
+  // Phase2：phase<=2 的主线卡 + 兴趣扩展卡
+  // Phase3：所有主线卡 + 兴趣扩展卡
+  const currentPhase = state.currentPhase || 1;
+  const pool = TASK_CARDS.filter(c => {
+    if (!isCardUnlocked(c)) return false;
+    if (c.phase) {
+      // 主线卡：只推当前阶段及以下
+      return c.phase <= currentPhase;
+    }
+    // 兴趣扩展卡（无phase字段）：全阶段可见
+    return true;
+  });
+
   if (pool.length === 0) return null;
 
   // 计算加权分数：基础权重 - 最近推荐折扣（同id已推过则降权）
@@ -1041,9 +1104,14 @@ function renderSelfPick() {
     </div>`;
 }
 
-// ── 换卡选择器（展示所有Phase1已解锁卡）────────────────────────
+// ── 换卡选择器（展示当前阶段已解锁卡）────────────────────────
 function showCardPicker() {
-  const pool = TASK_CARDS.filter(c => c.phase === 1 && isCardUnlocked(c));
+  const currentPhase = state.currentPhase || 1;
+  const pool = TASK_CARDS.filter(c => {
+    if (!isCardUnlocked(c)) return false;
+    if (c.phase) return c.phase <= currentPhase;
+    return true; // 兴趣扩展卡全阶段可见
+  });
   if (pool.length === 0) return;
 
   const groups = {};
@@ -1097,21 +1165,6 @@ function selectSelfPick(id) {
 // ── 取消选卡（已提交后不可撤销；提交前退回推荐态）──────────────
 function cancelSelfPick() {
   state.selfPickCard    = null;
-  state.selfPickClaimed = false;
-  saveState();
-  renderSelfPick();
-}
-
-function selectSelfPick(id) {
-  state.selfPickCard = id;
-  state.selfPickClaimed = false;
-  saveState();
-  renderSelfPick();
-}
-
-// 换卡（提交前可换，提交后不可撤销）
-function cancelSelfPick() {
-  state.selfPickCard = null;
   state.selfPickClaimed = false;
   saveState();
   renderSelfPick();
@@ -1243,14 +1296,19 @@ function doCheckIn(packType, id, score) {
   // 计算已完成的件数
   const todayDone = Object.keys(state[packKey]).length;
   const isFull = todayDone >= pack.length;
-  const isFirstOfDay = todayDone === 1;
+  const isJustFull = todayDone === pack.length; // 刚好达成全套（这一件是最后一件）
 
   // 计算本次新增分
+  // 全套达成时：补发全套奖励与已发单件积分之差；否则本件+1分
   let gain = 1;
-  if (isFull && isFirstOfDay) {
-    const prevPts = Math.max(0, todayDone - 1);
+  if (isJustFull) {
+    // 已发过 (pack.length - 1) 件，每件+1分；全套奖励 fullScore；差额 = fullScore - (pack.length - 1)
+    const prevPts = pack.length - 1;
     gain = fullScore - prevPts;
     updateStreakWithDate(packType === 'morning' ? 'morning' : 'night', today);
+    // 全套完成计入 habit 分类积分（英雄包是习惯养成）
+    if (!state.categoryPoints) state.categoryPoints = {};
+    state.categoryPoints.habit = (state.categoryPoints.habit || 0) + fullScore;
   }
 
   // 加入待审加分池
@@ -1286,8 +1344,8 @@ function doCheckIn(packType, id, score) {
     if (window._firebaseReady) submitPending('pack', id, label, gain, '', isSelf);
     const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === id && p.date === today && p.actualDate === today);
     if (entry) { entry.isSelf = isSelf; saveState(); }
-    const toastMsg = `已完成${todayDone}/${pack.length}件，${isFull ? '全套达成！' : '再完成' + (pack.length - todayDone) + '件有惊喜！'}`;
-    showCelebration('✅', '完成一件！', toastMsg);
+    const toastMsg = `已完成${todayDone}/${pack.length}件，${isFull ? '全套达成！🎉' : '再完成' + (pack.length - todayDone) + '件有惊喜！'}`;
+    showCelebration(isFull ? '🎉' : '✅', isFull ? '全套完成！' : '完成一件！', toastMsg);
   });
 }
 
@@ -1336,6 +1394,9 @@ function completeHomework() {
   });
   // 立即加积分
   state.totalScore += HOMEWORK_TASK.scoreComplete;
+  // 作业完成计入 habit 分类积分（作业是习惯养成的核心）
+  if (!state.categoryPoints) state.categoryPoints = {};
+  state.categoryPoints.habit = (state.categoryPoints.habit || 0) + HOMEWORK_TASK.scoreComplete;
   updateStreak('homework');
   saveState();
   // 立即同步到 Firebase
@@ -1574,6 +1635,9 @@ function completeFocusTime(isOvertime) {
   });
   // 立即加积分
   state.totalScore += pts;
+  // 专注力时光计入 focus 分类积分（用于阶段勋章进度）
+  if (!state.categoryPoints) state.categoryPoints = {};
+  state.categoryPoints.focus = (state.categoryPoints.focus || 0) + pts;
   updateStreak('focus');
   saveState();
   // 立即同步到 Firebase
@@ -1880,21 +1944,23 @@ const MAZE_MAP = {
       pathWidth: 14,
       nodes: [
         // 起点城堡大门
-        { id: 'n_start', x: 400, y: 680, label: '城堡大门', isGate: true },
+        { id: 'n_start', x: 400, y: 680, label: '城堡大门', isGate: true, connections: ['n_knight_spawn', 'n_center', 'n_p1_habit1', 'n_p1_focus1'] },
+        // 骑士出生点（独立于大门）
+        { id: 'n_knight_spawn', x: 400, y: 740, label: '', isSpawn: true, connections: ['n_start'] },
         // 左翼·习惯道
-        { id: 'n_p1_habit1', x: 200, y: 590, cardId: 'p1_habit1',  label: '早晨英雄' },
-        { id: 'n_p1_habit2', x: 120, y: 490, cardId: 'p1_habit2',  label: '睡前小英雄' },
+        { id: 'n_p1_habit1', x: 200, y: 590, cardId: 'p1_habit1',  label: '早晨英雄', connections: ['n_start', 'n_center', 'n_p1_habit2'] },
+        { id: 'n_p1_habit2', x: 120, y: 490, cardId: 'p1_habit2',  label: '睡前小英雄', deadEnd: true, connections: ['n_p1_habit1'] },
         // 中央·创意道
-        { id: 'n_center', x: 400, y: 540, label: '花园广场' },
-        { id: 'n_p1_interest1', x: 300, y: 430, cardId: 'p1_interest1', label: '英雄图鉴' },
-        { id: 'n_p1_interest2', x: 180, y: 340, cardId: 'p1_interest2', label: '我的恐龙世界', deadEnd: true },
-        { id: 'n_p1_interest3', x: 500, y: 430, cardId: 'p1_interest3', label: '音乐小侦探' },
+        { id: 'n_center', x: 400, y: 540, label: '花园广场', connections: ['n_start', 'n_p1_habit1', 'n_p1_interest1', 'n_p1_interest3', 'n_p1_focus3'] },
+        { id: 'n_p1_interest1', x: 300, y: 430, cardId: 'p1_interest1', label: '英雄图鉴', connections: ['n_center', 'n_p1_interest2'] },
+        { id: 'n_p1_interest2', x: 180, y: 340, cardId: 'p1_interest2', label: '我的恐龙世界', deadEnd: true, connections: ['n_p1_interest1'] },
+        { id: 'n_p1_interest3', x: 500, y: 430, cardId: 'p1_interest3', label: '音乐小侦探', connections: ['n_center', 'n_p1_habit3'] },
         // 右翼·专注道
-        { id: 'n_p1_focus1', x: 600, y: 590, cardId: 'p1_focus1',  label: '专注小勇士' },
-        { id: 'n_p1_focus2', x: 700, y: 490, cardId: 'p1_focus2',  label: '专注升级版', deadEnd: true },
-        { id: 'n_p1_habit3', x: 600, y: 340, cardId: 'p1_habit3',  label: '全天英雄包' },
+        { id: 'n_p1_focus1', x: 600, y: 590, cardId: 'p1_focus1',  label: '专注小勇士', connections: ['n_start', 'n_p1_focus2'] },
+        { id: 'n_p1_focus2', x: 700, y: 490, cardId: 'p1_focus2',  label: '专注升级版', deadEnd: true, connections: ['n_p1_focus1'] },
+        { id: 'n_p1_habit3', x: 600, y: 340, cardId: 'p1_habit3',  label: '全天英雄包', connections: ['n_p1_interest3'] },
         // 终点·专注大师
-        { id: 'n_p1_focus3', x: 400, y: 250, cardId: 'p1_focus3',  label: '专注大师' },
+        { id: 'n_p1_focus3', x: 400, y: 250, cardId: 'p1_focus3',  label: '专注大师', connections: ['n_center'] },
       ],
       // SVG路径定义（与节点id对应）
       paths: [
@@ -1921,19 +1987,26 @@ const MAZE_MAP = {
       pathWidth: 12,
       nodes: [
         // Phase1完成后进入的城堡大门
-        { id: 'n_p2_gate', x: 400, y: 190, label: '城堡大门', isGate: true },
+        { id: 'n_p2_gate', x: 400, y: 190, label: '城堡大门', isGate: true, connections: ['n_p2_junction'] },
+        // 路径路点（不可点击，视觉小点）
+        { id: 'n_p2_junction', x: 400, y: 140, isWaypoint: true, connections: ['n_p2_gate', 'n_p2_left_j', 'n_p2_right_j', 'n_p2_center'] },
+        { id: 'n_p2_left_j', x: 200, y: 140, isWaypoint: true, connections: ['n_p2_junction', 'n_p2_creative1'] },
+        { id: 'n_p2_right_j', x: 600, y: 140, isWaypoint: true, connections: ['n_p2_junction', 'n_p2_challenge1'] },
         // 左翼·创意道
-        { id: 'n_p2_creative1', x: 200, y: 90, cardId: 'p2_creative1', label: '故事连环画' },
-        { id: 'n_p2_creative2', x: 120, y: 30, cardId: 'p2_creative2', label: '我的发明', deadEnd: true },
+        { id: 'n_p2_creative1', x: 200, y: 90, cardId: 'p2_creative1', label: '故事连环画', connections: ['n_p2_left_j', 'n_p2_creative2'] },
+        { id: 'n_p2_creative2', x: 120, y: 30, cardId: 'p2_creative2', label: '我的发明', deadEnd: true, connections: ['n_p2_creative1'] },
         // 中央·计划道
-        { id: 'n_p2_center', x: 400, y: 90, label: '城堡广场' },
-        { id: 'n_p2_plan1', x: 400, y: 10, cardId: 'p2_plan1',  label: '我来定时间' },
+        { id: 'n_p2_center', x: 400, y: 90, label: '城堡广场', connections: ['n_p2_junction', 'n_p2_plan1', 'n_p2_plan2', 'n_p2_top'] },
+        { id: 'n_p2_plan1', x: 400, y: 10, cardId: 'p2_plan1',  label: '我来定时间', connections: ['n_p2_center'] },
+        // 右翼·计划道
+        { id: 'n_p2_plan2', x: 300, y: 30, cardId: 'p2_plan2',  label: '今日计划官', connections: ['n_p2_center'] },
+        { id: 'n_p2_plan3', x: 200, y: 10, cardId: 'p2_plan3',  label: '一周计划师', deadEnd: true, connections: ['n_p2_center'] },
         // 右翼·挑战道
-        { id: 'n_p2_plan2', x: 300, y: 30, cardId: 'p2_plan2',  label: '今日计划官' },
-        { id: 'n_p2_challenge1', x: 600, y: 90, cardId: 'p2_challenge1', label: '专注12分钟' },
-        { id: 'n_p2_challenge2', x: 680, y: 30, cardId: 'p2_challenge2', label: '不被提醒的一天', deadEnd: true },
+        { id: 'n_p2_challenge1', x: 600, y: 90, cardId: 'p2_challenge1', label: '专注12分钟', connections: ['n_p2_right_j', 'n_p2_challenge2', 'n_p2_challenge3'] },
+        { id: 'n_p2_challenge2', x: 680, y: 30, cardId: 'p2_challenge2', label: '不被提醒的一天', connections: ['n_p2_challenge1'] },
+        { id: 'n_p2_challenge3', x: 520, y: 50, cardId: 'p2_challenge3', label: '一周早晨英雄', deadEnd: true, connections: ['n_p2_challenge1'] },
         // 汇聚点
-        { id: 'n_p2_top', x: 400, y: -50, label: '城堡塔楼' },
+        { id: 'n_p2_top', x: 400, y: -50, label: '城堡塔楼', connections: ['n_p2_center', 'n_p3_gate'] },
       ],
       paths: [
         { id: 'p2_1', d: 'M 400 190 L 400 140' },                        // 入口→下层
@@ -1942,8 +2015,10 @@ const MAZE_MAP = {
         { id: 'p2_4', d: 'M 400 140 L 400 90' },                        // →计划道
         { id: 'p2_5', d: 'M 400 90 L 400 10' },                         // →我来定时间
         { id: 'p2_6', d: 'M 400 90 L 300 90 L 300 30' },               // →今日计划官
+        { id: 'p2_6b', d: 'M 400 90 L 200 90 L 200 10' },              // →一周计划师(死路)
         { id: 'p2_7', d: 'M 400 140 L 600 140 L 600 90' },             // →挑战分叉
-        { id: 'p2_8', d: 'M 600 90 L 680 90 L 680 30' },               // →不被提醒(死路)
+        { id: 'p2_8', d: 'M 600 90 L 680 90 L 680 30' },               // →不被提醒
+        { id: 'p2_8b', d: 'M 600 90 L 520 90 L 520 50' },             // →一周早晨英雄(死路)
         { id: 'p2_9', d: 'M 200 90 L 400 90 M 600 90 L 400 90' },     // 左右汇聚
         { id: 'p2_10', d: 'M 400 90 L 400 -10 L 400 -50' },            // →城堡塔楼
       ]
@@ -1959,23 +2034,26 @@ const MAZE_MAP = {
       pathWidth: 10,
       nodes: [
         // Phase2完成后进入的殿堂大门
-        { id: 'n_p3_gate', x: 400, y: -150, label: '宝藏殿堂', isGate: true },
+        { id: 'n_p3_gate', x: 400, y: -150, label: '宝藏殿堂', isGate: true, connections: ['n_p3_center'] },
         // 左翼·复盘道
-        { id: 'n_p3_reflect1', x: 200, y: -210, cardId: 'p3_reflect1', label: '今日最自豪' },
-        { id: 'n_p3_reflect2', x: 120, y: -270, cardId: 'p3_reflect2', label: '我想做得更好', deadEnd: true },
+        { id: 'n_p3_reflect1', x: 200, y: -210, cardId: 'p3_reflect1', label: '今日最自豪', connections: ['n_p3_center', 'n_p3_reflect2', 'n_p3_milestone1'] },
+        { id: 'n_p3_reflect2', x: 120, y: -270, cardId: 'p3_reflect2', label: '我想做得更好', deadEnd: true, connections: ['n_p3_reflect1'] },
+        // 右翼·里程碑
+        { id: 'n_p3_milestone1', x: 80, y: -150, cardId: 'p3_milestone1', label: '三个月英雄档案', connections: ['n_p3_reflect1'] },
         // 中央·自定义道
-        { id: 'n_p3_center', x: 400, y: -210, label: '宝藏广场' },
-        { id: 'n_p3_reflect3', x: 300, y: -300, cardId: 'p3_reflect3', label: '进步对比' },
+        { id: 'n_p3_center', x: 400, y: -210, label: '宝藏广场', connections: ['n_p3_gate', 'n_p3_reflect1', 'n_p3_reflect3', 'n_p3_custom1', 'n_p3_treasure'] },
+        { id: 'n_p3_reflect3', x: 300, y: -300, cardId: 'p3_reflect3', label: '进步对比', connections: ['n_p3_center'] },
         // 右翼·挑战道
-        { id: 'n_p3_custom1', x: 500, y: -270, cardId: 'p3_custom1', label: '我的本周挑战' },
-        { id: 'n_p3_custom2', x: 600, y: -330, cardId: 'p3_custom2', label: '我设计任务卡', deadEnd: true },
+        { id: 'n_p3_custom1', x: 500, y: -270, cardId: 'p3_custom1', label: '我的本周挑战', connections: ['n_p3_center', 'n_p3_custom2'] },
+        { id: 'n_p3_custom2', x: 600, y: -330, cardId: 'p3_custom2', label: '我设计任务卡', deadEnd: true, connections: ['n_p3_custom1'] },
         // 汇聚点·终极宝藏
-        { id: 'n_p3_treasure', x: 400, y: -390, label: '终极宝藏', isTreasure: true },
+        { id: 'n_p3_treasure', x: 400, y: -390, label: '终极宝藏', isTreasure: true, connections: ['n_p3_center'] },
       ],
       paths: [
         { id: 'p3_1', d: 'M 400 -150 L 400 -180' },                    // 入口→下层
         { id: 'p3_2', d: 'M 400 -180 L 200 -180 L 200 -210' },        // →复盘分叉
         { id: 'p3_3', d: 'M 200 -210 L 200 -250 L 120 -250 L 120 -270' }, // →我想做得更好(死路)
+        { id: 'p3_3b', d: 'M 200 -210 L 80 -210 L 80 -150' },        // →三个月英雄档案(死路)
         { id: 'p3_4', d: 'M 400 -180 L 400 -210' },                   // →中央广场
         { id: 'p3_5', d: 'M 400 -210 L 300 -210 L 300 -300' },        // →进步对比
         { id: 'p3_6', d: 'M 400 -210 L 500 -210 L 500 -270' },        // →自定义分叉
@@ -1998,10 +2076,12 @@ function getMazeNodeState(node) {
   const weekStart = getWeekStart();
   if (state.weekStart !== weekStart) return 'available';
   const claimed = state.weeklyCardClaims[node.cardId];
-  if (Array.isArray(claimed)) {
-    return claimed.length > 0 ? 'done' : 'available';
+  const claimedArr = Array.isArray(claimed) ? claimed : (claimed > 0 ? ['legacy'] : []);
+  // Phase1 英雄卡每天可领取：今天已领取才显示 done；其他卡本周领取过即 done
+  if (card.phase === 1) {
+    return claimedArr.includes(todayStr()) ? 'done' : 'available';
   }
-  return claimed > 0 ? 'done' : 'available';
+  return claimedArr.length > 0 ? 'done' : 'available';
 }
 
 // ── 获取下一个关卡目标 ──────────────────────────────────────
@@ -2052,23 +2132,220 @@ function checkPhaseFogReveal() {
       el.classList.remove('revealed');
     }
   });
+  // 检查是否需要弹出阶段升级提醒
+  checkPhaseUpgrade();
 }
 
-// ── 移动骑士 ────────────────────────────────────────────────
+// ── 阶段升级检测：积分达到阈值时弹窗提醒切换 currentPhase ──────
+function checkPhaseUpgrade() {
+  const score = state.totalScore;
+  const cur = state.currentPhase || 1;
+
+  // 确定目标阶段
+  let targetPhase = cur;
+  if (score >= 90 && cur < 3) targetPhase = 3;
+  else if (score >= 30 && cur < 2) targetPhase = 2;
+
+  if (targetPhase <= cur) return; // 无需升级
+
+  // 防止重复弹（记录已提醒的阶段）
+  const notifiedKey = `heroplan_phaseNotified_${targetPhase}`;
+  if (localStorage.getItem(notifiedKey)) return;
+  localStorage.setItem(notifiedKey, '1');
+
+  // 阶段信息
+  const phaseNames = { 2: '神秘城堡 🏰', 3: '宝藏殿堂 👑' };
+  const phaseDescs = {
+    2: '子渊已经积累了30分！可以开始Phase 2：孩子先选方向，从2~3张卡中选一张挑战！',
+    3: '子渊已经积累了90分！可以开始Phase 3：孩子自设目标，爸爸妈妈审核！'
+  };
+
+  // 弹出提醒弹窗
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  `;
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:24px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.2);">
+      <div style="font-size:2.2rem;margin-bottom:12px">🎉</div>
+      <div style="font-size:1.2rem;font-weight:800;color:#7C3AED;margin-bottom:8px">阶段升级解锁！</div>
+      <div style="font-size:1rem;font-weight:700;color:#1a1a2e;margin-bottom:12px">${phaseNames[targetPhase]}</div>
+      <div style="font-size:0.88rem;color:#555;margin-bottom:20px;line-height:1.6">${phaseDescs[targetPhase]}</div>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button onclick="this.closest('div[style*=fixed]').remove()" 
+          style="flex:1;padding:10px;border-radius:12px;border:none;background:#f0f0f0;color:#888;font-size:0.9rem;cursor:pointer">
+          稍后再说
+        </button>
+        <button onclick="upgradeToPhase(${targetPhase});this.closest('div[style*=fixed]').remove()"
+          style="flex:1;padding:10px;border-radius:12px;border:none;background:linear-gradient(135deg,#7C3AED,#A855F7);color:#fff;font-size:0.9rem;font-weight:700;cursor:pointer">
+          🚀 立即升级！
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+}
+
+// ── 执行阶段升级 ─────────────────────────────────────────────
+function upgradeToPhase(phase) {
+  state.currentPhase = phase;
+  saveState();
+  renderAll();
+  showCelebration('🚀', `已升级至 Phase ${phase}！`, '推荐任务已更新，继续冒险！');
+}
+
+// ── 迷宫语音引导气泡 ────────────────────────────────────────
+let _lastGuidanceMsg = null;  // 防止重复播报相同内容
+function updateMazeGuidance() {
+  const el = document.getElementById('mazeGuidance');
+  if (!el) return;
+  const score = state.totalScore;
+  // 统计 Phase1 中已解锁但未完成的任务卡数量
+  const phase1Nodes = (MAZE_MAP.phases[1]?.nodes || []).filter(n => n.cardId);
+  const availableCards = phase1Nodes.filter(n => {
+    const card = TASK_CARDS.find(c => c.id === n.cardId);
+    if (!card || !isCardUnlocked(card)) return false;
+    const _d = Array.isArray(state.weeklyCardClaims[n.cardId]) ? state.weeklyCardClaims[n.cardId] : [];
+    // Phase1 英雄卡：今天未领取算可领取；其他卡：本周未领取算可领取
+    return card.phase === 1
+      ? !_d.includes(todayStr())
+      : _d.length === 0;
+  });
+
+  let msg = null;
+  if (score === 0) {
+    msg = '点击发光的宝箱开始冒险之旅！';
+  } else if (availableCards.length > 0) {
+    msg = `还有 ${availableCards.length} 张任务卡等你领取，快去看看吧！`;
+  } else if (score > 0 && score < 30) {
+    msg = '继续加油！再收集 ' + (30 - score) + ' 分就能解锁神秘城堡！';
+  } else if (score >= 30 && score < 90) {
+    msg = '城堡大门已开！继续探险，解锁终极宝藏殿堂！';
+  } else if (score >= 90) {
+    msg = '宝藏殿堂已开启！你已完成全部探险区域！';
+  }
+
+  if (msg) {
+    el.textContent = msg;
+    el.classList.add('show');
+    // 不自动播报，等用户点击气泡才触发语音
+  } else {
+    el.classList.remove('show');
+  }
+}
+
+// ── 气泡跟随骑士头顶 ───────────────────────────────────────
+function positionGuidanceBubble() {
+  const bubble = document.getElementById('mazeGuidance');
+  const wrapper = document.getElementById('mazeWrapper');
+  const container = document.getElementById('mazeContainer');
+  const knightGroup = document.getElementById('mazeKnightGroup');
+  const mazeSvg = container ? container.querySelector('svg') : null;
+  if (!bubble || !wrapper || !container || !knightGroup || !mazeSvg) return;
+
+  // 从 transform="translate(kx, ky)" 获取骑士在SVG坐标系中的位置
+  const match = knightGroup.getAttribute('transform').match(/translate\(([-\d.]+),\s*([-\d.]+)\)/);
+  if (!match) return;
+  const kx = parseFloat(match[1]);
+  const ky = parseFloat(match[2]);
+
+  // 利用 SVGPoint 将SVG内坐标转为屏幕坐标
+  const svgPoint = mazeSvg.createSVGPoint();
+  svgPoint.x = kx;
+  svgPoint.y = ky;
+  const screenPt = svgPoint.matrixTransform(mazeSvg.getScreenCTM());
+
+  // wrapper 在屏幕上的位置（气泡 absolute 相对 wrapper 定位）
+  const wrapperRect = wrapper.getBoundingClientRect();
+
+  // 骑士在 wrapper 内的相对坐标
+  const knightInWrapperX = screenPt.x - wrapperRect.left;
+  const knightInWrapperY = screenPt.y - wrapperRect.top;
+
+  // 气泡宽度（渲染后读取，首次用估算值）
+  const bubbleW = bubble.offsetWidth || 220;
+  const bubbleH = bubble.offsetHeight || 60;
+
+  // 气泡水平居中对准骑士，垂直位于头顶上方（骑士约50px高）
+  let bubbleLeft = knightInWrapperX - bubbleW / 2;
+  let bubbleTop  = knightInWrapperY - bubbleH - 55;
+
+  // 防止气泡超出 wrapper 左右边界
+  const maxLeft = wrapperRect.width - bubbleW - 8;
+  bubbleLeft = Math.max(8, Math.min(bubbleLeft, maxLeft));
+  // 防止超出顶部
+  if (bubbleTop < 8) bubbleTop = 8;
+
+  bubble.style.left = bubbleLeft + 'px';
+  bubble.style.top  = bubbleTop  + 'px';
+  bubble.style.right = 'auto';
+}
+
+// ── BFS寻路找迷宫路径 ───────────────────────────────────────
+function findMazePath(fromNodeId, toNodeId) {
+  if (fromNodeId === toNodeId) return [fromNodeId];
+  const visited = new Set();
+  const queue = [[fromNodeId]];
+  visited.add(fromNodeId);
+  while (queue.length > 0) {
+    const path = queue.shift();
+    const current = path[path.length - 1];
+    const node = findMazeNode(current);
+    if (!node || !node.connections) continue;
+    for (const neighbor of node.connections) {
+      if (neighbor === toNodeId) return [...path, neighbor];
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push([...path, neighbor]);
+      }
+    }
+  }
+  return null; // 无路径
+}
+
+// ── 移动骑士（沿路径逐节点动画）────────────────────────────
 function moveKnight(targetNodeId, callback) {
-  const node = findMazeNode(targetNodeId);
-  if (!node) { if (callback) callback(); return; }
+  const fromId = state.mazeKnightNode || 'n_knight_spawn';
+  const path = findMazePath(fromId, targetNodeId);
+  if (!path || path.length === 0) { if (callback) callback(); return; }
+
   const group = document.getElementById('mazeKnightGroup');
   if (!group) { if (callback) callback(); return; }
-  // CSS transition on SVG transform attribute
-  group.style.transition = 'transform 1.2s cubic-bezier(0.4, 0, 0.2, 1)';
-  group.classList.add('moving');
-  group.setAttribute('transform', `translate(${node.x}, ${node.y})`);
-  setTimeout(() => {
-    group.classList.remove('moving');
-    group.style.transition = '';
-    if (callback) callback();
-  }, 1400);
+
+  // 每段动画持续时间（节点间距离决定）
+  const SEGMENT_MS = 500; // 每段最多500ms
+
+  let step = 0;
+  function animateStep() {
+    if (step >= path.length) {
+      state.mazeKnightNode = targetNodeId;
+      group.classList.remove('moving');
+      group.style.transition = '';
+      if (callback) callback();
+      return;
+    }
+    const nodeId = path[step];
+    const node = findMazeNode(nodeId);
+    if (!node) { step++; animateStep(); return; }
+
+    // 计算距离决定动画时长
+    const prevNode = step > 0 ? findMazeNode(path[step - 1]) : null;
+    let duration = SEGMENT_MS;
+    if (prevNode) {
+      const dist = Math.hypot(node.x - prevNode.x, node.y - prevNode.y);
+      duration = Math.min(Math.max(dist * 1.5, 200), 800); // 速度约1.5px/ms
+    }
+
+    group.classList.add('moving');
+    group.style.transition = `transform ${duration}ms cubic-bezier(0.4,0,0.2,1)`;
+    group.setAttribute('transform', `translate(${node.x - 22}, ${node.y})`);
+
+    setTimeout(animateStep, duration + 80); // 80ms间隙
+    step++;
+  }
+
+  animateStep();
 }
 
 // ── 查找迷宫节点 ─────────────────────────────────────────────
@@ -2253,13 +2530,28 @@ function renderMaze() {
   }
   svg += `</g>`;
 
-  // 树木（左右两侧装饰）
+  // 树木（卡通风格多层树）
   const drawTree = (tx, ty, sz) => {
     svg += `<g transform="translate(${tx},${ty})">`;
-    svg += `<rect x="-5" y="0" width="10" height="${30*sz}" fill="#6D4C41" rx="3"/>`;
-    svg += `<ellipse cx="0" cy="-${10*sz}" rx="${25*sz}" ry="${20*sz}" fill="#388E3C"/>`;
-    svg += `<ellipse cx="-${10*sz}" cy="${5*sz}" rx="${18*sz}" ry="${15*sz}" fill="#43A047"/>`;
-    svg += `<ellipse cx="${12*sz}" cy="${-5*sz}" rx="${20*sz}" ry="${16*sz}" fill="#2E7D32"/>`;
+    // 树根（地面小草堆）
+    svg += `<ellipse cx="0" cy="${30*sz}" rx="${12*sz}" ry="${5*sz}" fill="#33691E" opacity="0.6"/>`;
+    // 树干（带纹理）
+    svg += `<rect x="-${5*sz}" y="0" width="${10*sz}" height="${30*sz}" fill="#6D4C41" rx="${3*sz}"/>`;
+    svg += `<rect x="-${4*sz}" y="${5*sz}" width="${2*sz}" height="${20*sz}" fill="#5D4037" rx="1" opacity="0.5"/>`;
+    svg += `<rect x="${2*sz}" y="${10*sz}" width="${2*sz}" height="${15*sz}" fill="#5D4037" rx="1" opacity="0.4"/>`;
+    // 树冠第一层（最大，深绿）
+    svg += `<ellipse cx="0" cy="-${8*sz}" rx="${26*sz}" ry="${22*sz}" fill="#2E7D32"/>`;
+    // 树冠第二层（中绿）
+    svg += `<ellipse cx="-${8*sz}" cy="-${5*sz}" rx="${18*sz}" ry="${15*sz}" fill="#388E3C"/>`;
+    svg += `<ellipse cx="${10*sz}" cy="-${10*sz}" rx="${16*sz}" ry="${14*sz}" fill="#43A047"/>`;
+    // 树冠第三层（亮绿高光）
+    svg += `<ellipse cx="${3*sz}" cy="-${15*sz}" rx="${10*sz}" ry="${8*sz}" fill="#66BB6A" opacity="0.8"/>`;
+    svg += `<ellipse cx="-${5*sz}" cy="-${18*sz}" rx="${6*sz}" ry="${5*sz}" fill="#81C784" opacity="0.7"/>`;
+    // 树上小果子或花朵
+    svg += `<circle cx="${15*sz}" cy="-${20*sz}" r="${3*sz}" fill="#FF7043"/>`;
+    svg += `<circle cx="${15*sz}" cy="-${20*sz}" r="${1.5*sz}" fill="#FFAB91"/>`;
+    svg += `<circle cx="-${12*sz}" cy="-${15*sz}" r="${2.5*sz}" fill="#FFA726"/>`;
+    svg += `<circle cx="-${12*sz}" cy="-${15*sz}" r="${1*sz}" fill="#FFCC80"/>`;
     svg += `</g>`;
   };
   drawTree(50, 700, 1.2); drawTree(750, 720, 1.0); drawTree(30, 850, 0.9); drawTree(770, 860, 1.1);
@@ -2275,13 +2567,31 @@ function renderMaze() {
   [[100,780,'#E91E63'],[110,790,'#FF5722'],[700,760,'#9C27B0'],[710,775,'#E91E63'],
    [60,880,'#FF9800'],[200,870,'#E91E63'],[650,880,'#9C27B0'],[740,870,'#FF5722']].forEach(([a,b,c])=>drawFlowers(a,b,c));
 
-  // 蘑菇
+  // 蘑菇（卡通风格）
   const drawMushroom = (mx, my, col) => {
     svg += `<g transform="translate(${mx},${my})">`;
-    svg += `<rect x="-4" y="0" width="8" height="10" fill="#FFF9C4" rx="2"/>`;
-    svg += `<ellipse cx="0" cy="0" rx="10" ry="7" fill="${col}"/>`;
-    svg += `<circle cx="-4" cy="-2" r="2" fill="#FFF" opacity="0.7"/>`;
-    svg += `<circle cx="3" cy="-1" r="1.5" fill="#FFF" opacity="0.7"/>`;
+    // 蘑菇地面小草
+    svg += `<ellipse cx="0" cy="12" rx="8" ry="3" fill="#388E3C" opacity="0.5"/>`;
+    // 蘑菇茎（奶油色，带竖纹）
+    svg += `<rect x="-5" y="0" width="10" height="12" fill="#FFF9C4" rx="3"/>`;
+    svg += `<rect x="-2" y="1" width="2" height="10" fill="#FFF" opacity="0.4" rx="1"/>`;
+    svg += `<ellipse cx="0" cy="12" rx="6" ry="3" fill="#F5F5DC" opacity="0.6"/>`;
+    // 蘑菇帽（彩色圆顶）
+    svg += `<ellipse cx="0" cy="0" rx="12" ry="9" fill="${col}"/>`;
+    // 帽子边缘
+    svg += `<ellipse cx="0" cy="1" rx="12" ry="8" fill="${col}" opacity="0.8"/>`;
+    // 白色卡通斑点（大）
+    svg += `<circle cx="-5" cy="-3" r="3" fill="#FFF" opacity="0.85"/>`;
+    svg += `<circle cx="4" cy="-2" r="2.5" fill="#FFF" opacity="0.85"/>`;
+    svg += `<circle cx="-1" cy="-6" r="2" fill="#FFF" opacity="0.85"/>`;
+    svg += `<circle cx="7" cy="-5" r="1.5" fill="#FFF" opacity="0.85"/>`;
+    svg += `<circle cx="-7" cy="0" r="1.5" fill="#FFF" opacity="0.7"/>`;
+    // 帽子内部高光
+    svg += `<ellipse cx="-3" cy="-5" rx="3" ry="2" fill="#FFF" opacity="0.4"/>`;
+    // 可爱小表情
+    svg += `<circle cx="-2" cy="1" r="1" fill="#5D4037" opacity="0.7"/>`;
+    svg += `<circle cx="3" cy="1" r="1" fill="#5D4037" opacity="0.7"/>`;
+    svg += `<path d="M -2 4 Q 0 6 2 4" stroke="#5D4037" stroke-width="1" fill="none" opacity="0.6"/>`;
     svg += `</g>`;
   };
   [[150,830,'#F44336'],[680,820,'#FF9800'],[300,860,'#F44336']].forEach(([a,b,c])=>drawMushroom(a,b,c));
@@ -2348,7 +2658,11 @@ function renderMaze() {
 
       // 节点颜色配置
       let platformFill, platformStroke, iconCol, labelBg;
-      if (node.isGate) {
+      // 出生点/路点：使用阶段主色作为小圆点颜色
+      if (node.isSpawn || node.isWaypoint) {
+        platformFill = phase.nodeColor; platformStroke = phase.pathColor; iconCol = phase.nodeColor;
+        labelBg = 'rgba(0,0,0,0)';
+      } else if (node.isGate) {
         platformFill = '#6D4C41'; platformStroke = '#4E342E'; iconCol = '#FFF';
         labelBg = 'rgba(109,76,65,0.85)';
       } else if (node.isTreasure) {
@@ -2369,41 +2683,103 @@ function renderMaze() {
       }
 
       const onclick = isClickable ? `openMazeNode('${node.id}')` : '';
-      const r = node.isGate ? 22 : node.isTreasure ? 26 : 18;
-      const glowG = nodeState === 'done' && !node.isGate && !node.isTreasure;
+      const r = node.isWaypoint ? 8 : node.isSpawn ? 8 : node.isGate ? 22 : node.isTreasure ? 26 : 18;
 
-      svg += `<g class="maze-node ${glowG ? 'maze-node-glow' : ''}" ${onclick ? 'style="cursor:pointer"' : ''} onclick="${onclick}">`;
+      svg += `<g class="maze-node" ${onclick ? 'style="cursor:pointer"' : ''}>
+        ${isClickable ? `<rect x="${node.x - r - 4}" y="${node.y - r - 4}" width="${(r+4)*2}" height="${(r+4)*2}" fill="transparent" pointer-events="all" data-node-id="${node.id}" class="maze-node-hit"/>` : ''}
+      `;
 
-      // 木质平台底座（所有节点都有）
-      if (!node.isGate) {
-        svg += `<rect x="${node.x - r - 8}" y="${node.y + r - 4}" width="${(r+8)*2}" height="16" fill="${platformStroke}" rx="6"/>`;
-        svg += `<rect x="${node.x - r - 8}" y="${node.y + r - 8}" width="${(r+8)*2}" height="12" fill="${platformFill}" rx="6"/>`;
-      }
-
-      // 发光圆（已完成节点有脉冲）
-      if (glowG) {
-        svg += `<circle cx="${node.x}" cy="${node.y}" r="${r + 8}" fill="${phase.nodeColor}" opacity="0.3">
-          <animate attributeName="r" values="${r+4};${r+12};${r+4}" dur="2s" repeatCount="indefinite"/>
-          <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite"/>
-        </circle>`;
-      }
-
-      // 节点主体圆
-      svg += `<circle cx="${node.x}" cy="${node.y}" r="${r + 3}" fill="${platformStroke}" opacity="0.3"/>`;
-      svg += `<circle cx="${node.x}" cy="${node.y}" r="${r}" fill="${platformFill}" stroke="${platformStroke}" stroke-width="3"/>`;
-
-      // 节点图标
-      if (node.isGate) {
-        svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="16">🚪</text>`;
-      } else if (node.isTreasure) {
-        svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="18">👑</text>`;
-      } else if (node.cardId) {
+      // 任务节点 → 卡通宝箱造型
+      if (node.cardId) {
+        const bx = node.x, by = node.y;
+        const bw = 44, bh = 34; // 宝箱宽高
+        let chestFill, chestStroke, lidFill, claspFill, claspStroke;
         if (nodeState === 'done') {
-          svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">✅</text>`;
+          chestFill = '#43A047'; chestStroke = '#2E7D32'; lidFill = '#66BB6A';
+          claspFill = '#FFD700'; claspStroke = '#F9A825';
         } else if (!revealed) {
-          svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="14">🔒</text>`;
-        } else if (card) {
-          svg += `<text x="${node.x}" y="${node.y + 4}" text-anchor="middle" font-size="10" fill="${iconCol}" font-weight="700">${card.stars || '⭐'}</text>`;
+          chestFill = '#757575'; chestStroke = '#424242'; lidFill = '#9E9E9E';
+          claspFill = '#BDBDBD'; claspStroke = '#757575';
+        } else {
+          chestFill = '#FFA000'; chestStroke = '#E65100'; lidFill = '#FFB300';
+          claspFill = '#FFD700'; claspStroke = '#F9A825';
+        }
+        // 宝箱全部元素都不拦截点击，点击穿透到下方透明 rect
+        svg += `<g pointer-events="none">`;
+        // 宝箱身（主体矩形）
+        svg += `<rect x="${bx - bw/2}" y="${by - bh/2 + 6}" width="${bw}" height="${bh - 6}" fill="${chestFill}" stroke="${chestStroke}" stroke-width="2" rx="4"/>`;
+        // 竖纹装饰
+        svg += `<rect x="${bx - bw/2 + 4}" y="${by - bh/2 + 10}" width="3" height="${bh - 14}" fill="${chestStroke}" opacity="0.3" rx="1"/>`;
+        svg += `<rect x="${bx + bw/2 - 7}" y="${by - bh/2 + 10}" width="3" height="${bh - 14}" fill="${chestStroke}" opacity="0.3" rx="1"/>`;
+        // 宝箱盖（顶部圆角矩形，略宽于箱身）
+        svg += `<rect x="${bx - bw/2 - 2}" y="${by - bh/2 - 4}" width="${bw + 4}" height="${bh/2 + 6}" fill="${lidFill}" stroke="${chestStroke}" stroke-width="2" rx="6"/>`;
+        // 缝隙分割线
+        svg += `<line x1="${bx - bw/2 - 2}" y1="${by - bh/2 + 6}" x2="${bx + bw/2 + 2}" y2="${by - bh/2 + 6}" stroke="${chestStroke}" stroke-width="2"/>`;
+        // 横向金属锁扣条
+        svg += `<rect x="${bx - bw/2 + 2}" y="${by - 2}" width="${bw - 4}" height="6" fill="${claspFill}" stroke="${claspStroke}" stroke-width="1.5" rx="2"/>`;
+        // 锁扣图标
+        if (nodeState === 'done') {
+          svg += `<circle cx="${bx}" cy="${by + 1}" r="6" fill="#FFD700" stroke="#F9A825" stroke-width="1.5"/>`;
+          svg += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="8" fill="#2E7D32" font-weight="bold">✓</text>`;
+        } else if (!revealed) {
+          svg += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="10">🔒</text>`;
+        } else {
+          svg += `<circle cx="${bx}" cy="${by + 1}" r="6" fill="#FFD700" stroke="#F9A825" stroke-width="1.5"/>`;
+          svg += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="9" fill="#5D4037">⭐</text>`;
+        }
+        svg += `</g>`;
+      } else {
+        // 节点主体圆（非任务节点：门/宝藏/路点等）
+        svg += `<circle cx="${node.x}" cy="${node.y}" r="${r + 3}" fill="${platformStroke}" opacity="0.3"/>`;
+        svg += `<circle cx="${node.x}" cy="${node.y}" r="${r}" fill="${platformFill}" stroke="${platformStroke}" stroke-width="3"/>`;
+
+        // 节点图标
+        if (node.isGate) {
+          // ── 卡通城堡大门 ────────────────────────────────
+          const gx = node.x, gy = node.y, gr = r;
+          // 石拱门底座（深色石头拱圈）
+          svg += `<ellipse cx="${gx}" cy="${gy}" rx="${gr+2}" ry="${gr+2}" fill="#5D4037" opacity="0.6"/>`;
+          // 石拱门主体（浅灰色大拱门）
+          svg += `<ellipse cx="${gx}" cy="${gy}" rx="${gr}" ry="${gr}" fill="#90A4AE"/>`;
+          svg += `<ellipse cx="${gx}" cy="${gy}" rx="${gr-4}" ry="${gr-4}" fill="#78909C"/>`;
+          // 拱门内部深色（门洞）
+          svg += `<ellipse cx="${gx}" cy="${gy+2}" rx="${gr-8}" ry="${gr-8}" fill="#37474F"/>`;
+          // 两扇木门
+          svg += `<rect x="${gx-16}" y="${gy-8}" width="14" height="20" fill="#6D4C41" rx="2"/>`;
+          svg += `<rect x="${gx+2}" y="${gy-8}" width="14" height="20" fill="#795548" rx="2"/>`;
+          // 木门竖纹
+          svg += `<line x1="${gx-9}" y1="${gy-8}" x2="${gx-9}" y2="${gy+12}" stroke="#5D4037" stroke-width="1" opacity="0.5"/>`;
+          svg += `<line x1="${gx+9}" y1="${gy-8}" x2="${gx+9}" y2="${gy+12}" stroke="#6D41" stroke-width="1" opacity="0.5"/>`;
+          // 门环（左右各一个）
+          svg += `<circle cx="${gx-5}" cy="${gy+2}" r="3" fill="#FFD54F" stroke="#F9A825" stroke-width="1"/>`;
+          svg += `<circle cx="${gx+5}" cy="${gy+2}" r="3" fill="#FFD54F" stroke="#F9A825" stroke-width="1"/>`;
+          // 铁门闩（横条）
+          svg += `<rect x="${gx-15}" y="${gy-1}" width="30" height="3" fill="#455A64" rx="1"/>`;
+          // 拱顶石（keystone）
+          svg += `<ellipse cx="${gx}" cy="${gy-gr+4}" rx="6" ry="4" fill="#CFD8DC"/>`;
+          svg += `<ellipse cx="${gx}" cy="${gy-gr+4}" rx="4" ry="2.5" fill="#B0BEC5"/>`;
+          // 左火炬（带SMIL动画火焰）
+          svg += `<rect x="${gx-20}" y="${gy-20}" width="3" height="10" fill="#795548" rx="1"/>`;
+          svg += `<ellipse cx="${gx-18.5}" cy="${gy-23}" rx="4" ry="5" fill="#FF6D00">
+            <animate attributeName="ry" values="5;6;4;5" dur="0.8s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.9;1;0.8;0.9" dur="0.8s" repeatCount="indefinite"/>
+          </ellipse>`;
+          svg += `<ellipse cx="${gx-18.5}" cy="${gy-25}" rx="2" ry="3" fill="#FFEB3B">
+            <animate attributeName="ry" values="3;4;2;3" dur="0.8s" repeatCount="indefinite"/>
+          </ellipse>`;
+          // 右火炬
+          svg += `<rect x="${gx+17}" y="${gy-20}" width="3" height="10" fill="#795548" rx="1"/>`;
+          svg += `<ellipse cx="${gx+18.5}" cy="${gy-23}" rx="4" ry="5" fill="#FF6D00">
+            <animate attributeName="ry" values="5;4;6;5" dur="0.9s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.9;0.8;1;0.9" dur="0.9s" repeatCount="indefinite"/>
+          </ellipse>`;
+          svg += `<ellipse cx="${gx+18.5}" cy="${gy-25}" rx="2" ry="3" fill="#FFEB3B">
+            <animate attributeName="ry" values="3;2;4;3" dur="0.9s" repeatCount="indefinite"/>
+          </ellipse>`;
+        } else if (node.isTreasure) {
+          svg += `<text x="${node.x}" y="${node.y + 5}" text-anchor="middle" font-size="18">👑</text>`;
+        } else if (node.isSpawn || node.isWaypoint) {
+          svg += `<circle cx="${node.x}" cy="${node.y}" r="5" fill="${platformFill}" stroke="${platformStroke}" stroke-width="2"/>`;
         }
       }
 
@@ -2416,54 +2792,91 @@ function renderMaze() {
         svg += `<text x="${node.x}" y="${lY + 11.5}" text-anchor="middle" font-size="10" fill="white" font-weight="700">${node.label}</text>`;
       }
 
-      // 死路藤蔓
-      if (node.deadEnd && revealed) {
-        svg += `<line x1="${node.x}" y1="${node.y - r}" x2="${node.x}" y2="${node.y - r - 14}" stroke="#4CAF50" stroke-width="2"/>`;
-        svg += `<text x="${node.x}" y="${node.y - r - 18}" text-anchor="middle" font-size="9" fill="#E91E63" font-weight="700">✗</text>`;
-      }
+      // 死路支线标记（仅显示一个小绿点，表示路到这里是终点，不显示红叉）
+      // deadEnd节点是支线尽头，属于正常可探索节点，不需要警示符号
 
       svg += `</g>`;
     });
   });
 
   // ── 骑士角色（卡通小骑士）────────────────────────────
-  const knightNodeId = state.mazeKnightNode || 'n_start';
-  const knightNode = findMazeNode(knightNodeId) || findMazeNode('n_start');
-  svg += `<g id="mazeKnightGroup" class="maze-knight" transform="translate(${knightNode.x}, ${knightNode.y})">`;
+  const knightNodeId = state.mazeKnightNode || 'n_knight_spawn';
+  const knightNode = findMazeNode(knightNodeId) || findMazeNode('n_knight_spawn');
+  // 骑士站在卡片节点的左边（x 偏移 -22），避免遮挡宝箱
+  // 添加 onclick 使骑士可点击，点击后显示帮助对话框
+  svg += `<g id="mazeKnightGroup" class="maze-knight" transform="translate(${knightNode.x - 22}, ${knightNode.y})" style="cursor:pointer" onclick="showKnightHelp()">`;
 
-  // 骑士阴影
-  svg += `<ellipse cx="0" cy="18" rx="10" ry="4" fill="rgba(0,0,0,0.2)"/>`;
+  // 阴影（随步伐微微弹跳）
+  svg += `<ellipse cx="0" cy="22" rx="12" ry="5" fill="rgba(0,0,0,0.18)">
+    <animate attributeName="ry" values="5;3;5" dur="0.5s" begin="0s" repeatCount="indefinite"/>
+  </ellipse>`;
 
-  // 盾牌（左）
-  svg += `<g transform="translate(-14, -2)">`;
-  svg += `<ellipse cx="0" cy="0" rx="9" ry="12" fill="#1565C0" stroke="#0D47A1" stroke-width="2"/>`;
-  svg += `<ellipse cx="0" cy="0" rx="5" ry="7" fill="#1E88E5"/>`;
-  svg += `<text x="0" y="4" text-anchor="middle" font-size="9" fill="white">★</text>`;
-  svg += `</g>`;
+  // 左腿（含SMIL走路动画）
+  svg += `<g id="knightLeftLeg">
+    <rect x="-7" y="14" width="7" height="12" fill="#546E7A" rx="3"/>
+    <rect x="-8" y="24" width="9" height="5" fill="#455A64" rx="2"/>
+    <animateTransform attributeName="transform" type="rotate"
+      values="0 0 14;-18 0 14;0 0 14;18 0 14;0 0 14"
+      dur="0.6s" repeatCount="indefinite"/>
+  </g>`;
 
-  // 身体（盔甲）
-  svg += `<rect x="-8" y="-4" width="16" height="18" fill="#78909C" rx="4"/>`;
-  svg += `<rect x="-6" y="-2" width="12" height="14" fill="#90A4AE" rx="3"/>`;
+  // 右腿（与左腿相位差）
+  svg += `<g id="knightRightLeg">
+    <rect x="0" y="14" width="7" height="12" fill="#546E7A" rx="3"/>
+    <rect x="-1" y="24" width="9" height="5" fill="#455A64" rx="2"/>
+    <animateTransform attributeName="transform" type="rotate"
+      values="18 0 14;-18 0 14;0 0 14;-18 0 14;18 0 14"
+      dur="0.6s" repeatCount="indefinite"/>
+  </g>`;
 
-  // 头部（头盔）
-  svg += `<circle cx="0" cy="-10" r="10" fill="#78909C" stroke="#546E7A" stroke-width="2"/>`;
-  svg += `<rect x="-8" y="-16" width="16" height="6" fill="#78909C" rx="3"/>`;
-  // 头盔面罩缝
-  svg += `<line x1="0" y1="-15" x2="0" y2="-5" stroke="#546E7A" stroke-width="1.5"/>`;
-  svg += `<line x1="-7" y1="-10" x2="7" y2="-10" stroke="#546E7A" stroke-width="1.5"/>`;
-  // 头盔眼睛
-  svg += `<circle cx="-3" cy="-10" r="2" fill="#29B6F6"/>`;
-  svg += `<circle cx="3" cy="-10" r="2" fill="#29B6F6"/>`;
-
-  // 剑（右）
-  svg += `<g transform="translate(14, -2)">`;
-  svg += `<rect x="-2" y="-14" width="4" height="18" fill="#BDBDBD" rx="1"/>`;
-  svg += `<rect x="-5" y="2" width="10" height="5" fill="#8D6E63" rx="1"/>`;
-  svg += `<rect x="-1.5" y="-16" width="3" height="4" fill="#E0E0E0" rx="0.5"/>`;
-  svg += `</g>`;
-
-  // 小披风
-  svg += `<path d="M -6,-2 Q -10,8 -4,14 L 0,12 L 4,14 Q 10,8 6,-2 Z" fill="#E53935" opacity="0.9"/>`;
+  // 身体（上下弹跳）
+  svg += `<g class="knight-body">
+    <animateTransform attributeName="transform" type="translate"
+      values="0,0;0,-2;0,0" dur="0.3s" repeatCount="indefinite"/>
+    <!-- 盔甲身体 -->
+    <rect x="-9" y="-4" width="18" height="20" fill="#78909C" rx="5"/>
+    <rect x="-7" y="-2" width="14" height="16" fill="#90A4AE" rx="4"/>
+    <!-- 盔甲光泽 -->
+    <rect x="-5" y="0" width="4" height="8" fill="rgba(255,255,255,0.25)" rx="2"/>
+    <!-- 披风 -->
+    <path d="M -7,-2 Q -14,10 -6,16 L 0,13 L 6,16 Q 14,10 7,-2 Z" fill="#E53935"/>
+    <path d="M -5,0 Q -10,8 -5,13 L 0,11 L 5,13 Q 10,8 5,0 Z" fill="#EF5350" opacity="0.5"/>
+    <!-- 盾牌 -->
+    <g transform="translate(-15, 2)">
+      <ellipse cx="0" cy="0" rx="10" ry="13" fill="#1565C0" stroke="#0D47A1" stroke-width="2"/>
+      <ellipse cx="0" cy="0" rx="6" ry="8" fill="#1E88E5"/>
+      <text x="0" y="4" text-anchor="middle" font-size="10" fill="white">★</text>
+    </g>
+    <!-- 剑 -->
+    <g transform="translate(15, 2)">
+      <rect x="-2.5" y="-16" width="5" height="20" fill="#BDBDBD" rx="1.5"/>
+      <rect x="-6" y="2" width="12" height="6" fill="#8D6E63" rx="2"/>
+      <rect x="-2" y="-18" width="5" height="4" fill="#E0E0E0" rx="1"/>
+      <!-- 剑身光泽 -->
+      <rect x="-1" y="-15" width="2" height="16" fill="rgba(255,255,255,0.4)" rx="1"/>
+    </g>
+    <!-- 头盔 -->
+    <circle cx="0" cy="-10" r="11" fill="#78909C" stroke="#546E7A" stroke-width="2"/>
+    <!-- 头盔顶部 -->
+    <rect x="-5" y="-22" width="10" height="6" fill="#78909C" rx="3"/>
+    <!-- 红色呆毛/羽翎 -->
+    <rect x="-2" y="-30" width="4" height="10" fill="#E53935" rx="2">
+      <animate attributeName="height" values="10;12;10" dur="1s" repeatCount="indefinite"/>
+    </rect>
+    <!-- 面罩缝隙 -->
+    <line x1="0" y1="-17" x2="0" y2="-3" stroke="#546E7A" stroke-width="1.5"/>
+    <line x1="-9" y1="-10" x2="9" y2="-10" stroke="#546E7A" stroke-width="1.5"/>
+    <!-- 眼睛（发光蓝） -->
+    <circle cx="-4" cy="-10" r="2.5" fill="#29B6F6">
+      <animate attributeName="r" values="2.5;2;2.5" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="4" cy="-10" r="2.5" fill="#29B6F6">
+      <animate attributeName="r" values="2.5;2;2.5" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <!-- 眼睛高光 -->
+    <circle cx="-5" cy="-11" r="1" fill="white" opacity="0.8"/>
+    <circle cx="3" cy="-11" r="1" fill="white" opacity="0.8"/>
+  </g>`;
 
   svg += `</g>`;
 
@@ -2471,6 +2884,14 @@ function renderMaze() {
 
   // 渲染到容器
   container.innerHTML = svg;
+
+  // 事件委托：迷宫节点点击（替代inline onclick，解决iOS Safari兼容问题）
+  container.querySelectorAll('.maze-node-hit').forEach(rect => {
+    rect.addEventListener('click', () => {
+      const nodeId = rect.getAttribute('data-node-id');
+      if (nodeId) openMazeNode(nodeId);
+    });
+  });
 
   // 更新迷雾状态
   checkPhaseFogReveal();
@@ -2481,11 +2902,26 @@ function renderMaze() {
   // 显示全部卡牌入口
   const toggleEl = document.getElementById('mazeAllCardsToggle');
   if (toggleEl) toggleEl.style.display = 'flex';
+
+  // 更新语音引导气泡（跟随骑士头顶）
+  updateMazeGuidance();
+  positionGuidanceBubble();
+
+  // 监听骑士移动气泡跟随（全局唯一Observer，避免多次renderMaze叠加泄漏）
+  if (_knightObserver) {
+    _knightObserver.disconnect();
+    _knightObserver = null;
+  }
+  const knightGroup = document.getElementById('mazeKnightGroup');
+  if (knightGroup) {
+    _knightObserver = new MutationObserver(() => positionGuidanceBubble());
+    _knightObserver.observe(knightGroup, { attributes: true, attributeFilter: ['transform'] });
+  }
 }
 
 // ── 骑士立即定位（不动画）──────────────────────────────────
 function positionKnightImmediate(nodeId) {
-  const node = findMazeNode(nodeId || state.mazeKnightNode || 'n_start');
+  const node = findMazeNode(nodeId || state.mazeKnightNode || 'n_knight_spawn');
   if (!node) return;
   const group = document.getElementById('mazeKnightGroup');
   if (!group) return;
@@ -2493,37 +2929,87 @@ function positionKnightImmediate(nodeId) {
   group.setAttribute('transform', `translate(${node.x}, ${node.y})`);
   group.getBoundingClientRect(); // force reflow
   group.style.transition = '';
+  state.mazeKnightNode = node.id;
 }
 
 // ── 全部卡牌视图切换 ───────────────────────────────────────
 let mazeShowAllCards = false;
+let _knightObserver = null;  // 全局唯一骑士MutationObserver，防止多次renderMaze泄漏
 function toggleAllCardsView() {
   mazeShowAllCards = !mazeShowAllCards;
   const grid = document.getElementById('cardsGrid');
-  const mazeEl = document.getElementById('mazeContainer');
+  const wrapperEl = document.getElementById('mazeWrapper');
   const keyBadge = document.getElementById('mazeKeyBadge');
   const toggleEl = document.getElementById('mazeAllCardsToggle');
   const toggleBtn = toggleEl ? toggleEl.querySelector('button') : null;
+
   if (mazeShowAllCards) {
-    if (mazeEl) mazeEl.style.display = 'none';
+    // 隐藏迷宫区域
+    if (wrapperEl) wrapperEl.style.display = 'none';
     if (keyBadge) keyBadge.style.display = 'none';
-    grid.style.display = 'grid';
     if (toggleEl) toggleEl.style.display = 'none';
-    if (toggleBtn) toggleBtn.textContent = '🗺️ 回到迷宫';
+    // 重置视图模式为"成长主线"（默认进入主线，避免全部视图太杂乱）
+    currentCardView = 'main';
+    // 显示卡牌区域
+    grid.style.display = 'block';
+    // 构建顶部导航（若不存在则创建）
+    let backBtn = document.getElementById('allCardsBackBtn');
+    if (!backBtn) {
+      backBtn = document.createElement('div');
+      backBtn.id = 'allCardsBackBtn';
+      backBtn.style.cssText = 'padding:12px 12px 8px;';
+      backBtn.innerHTML = `
+        <div style="text-align:center;margin-bottom:12px;">
+          <button onclick="toggleAllCardsView()" style="background:linear-gradient(135deg,#42a5f5,#1976d2);color:white;border:none;border-radius:25px;padding:10px 28px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(25,118,210,0.3);">🗺️ 回到迷宫地图</button>
+        </div>
+        <div id="allCardsTabBar" style="display:flex;gap:10px;justify-content:center;padding:0 4px 12px;">
+          <button class="ac-tab-btn ac-tab-active" data-view="main">🗺️ 成长主线</button>
+          <button class="ac-tab-btn" data-view="interest">🌈 兴趣支线</button>
+        </div>
+      `;
+      grid.insertBefore(backBtn, grid.firstChild);
+      // 绑定顶部 tab 事件
+      backBtn.querySelectorAll('.ac-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          backBtn.querySelectorAll('.ac-tab-btn').forEach(b => b.classList.remove('ac-tab-active'));
+          btn.classList.add('ac-tab-active');
+          currentCardView = btn.dataset.view;
+          renderCards();
+        });
+      });
+    }
+    backBtn.style.display = 'block';
+    // 重置 tab 高亮为"成长主线"
+    const tabBar = document.getElementById('allCardsTabBar');
+    if (tabBar) {
+      tabBar.querySelectorAll('.ac-tab-btn').forEach(b => b.classList.remove('ac-tab-active'));
+      const mainTab = tabBar.querySelector('[data-view="main"]');
+      if (mainTab) mainTab.classList.add('ac-tab-active');
+    }
+    renderCards();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   } else {
-    if (mazeEl) mazeEl.style.display = 'block';
+    // 恢复迷宫
+    if (wrapperEl) wrapperEl.style.display = '';
     if (keyBadge) keyBadge.style.display = 'flex';
     grid.style.display = 'none';
+    const backBtn = document.getElementById('allCardsBackBtn');
+    if (backBtn) backBtn.style.display = 'none';
+    const cardsContent = document.getElementById('allCardsContent');
+    if (cardsContent) cardsContent.innerHTML = '';
     if (toggleEl) toggleEl.style.display = 'flex';
     if (toggleBtn) toggleBtn.textContent = '📜 查看全部挑战卡';
+    renderMaze();
+    positionGuidanceBubble();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
 
 // ── 渲染任务卡（迷宫优先） ──────────────────────────────────
-let currentFilter = 'all';
+var currentCardView = 'main';  // 'main' | 'interest'（已移除'all'视图入口）
 function renderCards() {
   const grid = document.getElementById('cardsGrid');
-  const mazeEl = document.getElementById('mazeContainer');
+  const wrapperEl = document.getElementById('mazeWrapper');
   const keyBadge = document.getElementById('mazeKeyBadge');
   const toggleEl = document.getElementById('mazeAllCardsToggle');
 
@@ -2534,17 +3020,12 @@ function renderCards() {
   }
 
   // ── 全部卡牌模式 ────────────────────────────────────────
-  if (mazeEl) mazeEl.style.display = 'none';
+  if (wrapperEl) wrapperEl.style.display = 'none';
   if (keyBadge) keyBadge.style.display = 'none';
   if (toggleEl) toggleEl.style.display = 'none';
-  grid.style.display = 'grid';
+  grid.style.display = 'block';
 
-  let cards = TASK_CARDS.filter(c => {
-    if (currentFilter !== 'all' && c.series !== currentFilter) return false;
-    return true;
-  });
-
-  // 检查周是否过期，过期则重置
+  // 检查周是否过期
   const weekStart = getWeekStart();
   if (state.weekStart !== weekStart) {
     state.weekStart = weekStart;
@@ -2554,49 +3035,240 @@ function renderCards() {
     saveState();
   }
 
-  // 按系列分组
-  const groups = {};
-  cards.forEach(c => {
-    if (!groups[c.series]) groups[c.series] = [];
-    groups[c.series].push(c);
-  });
+  const view = (typeof currentCardView !== 'undefined' && currentCardView) ? currentCardView : 'main';
 
-  let html = '<div class="cards-grid">';
-  Object.entries(groups).forEach(([series, cards]) => {
-    html += `<div class="series-divider">${series}</div>`;
-    cards.forEach(c => {
-      const isUnlocked = isCardUnlocked(c);
-      const claimedThisWeek = (state.weeklyCardClaims[c.id] || 0) >= 1;
-      const lockIcon = isUnlocked ? '' : '<div class="card-lock-badge">🔒</div>';
-      const weekBadge = c.weekUnlock && !state.weekUnlocked ?
-        `<div class="week-unlock-badge">第一周后解锁</div>` : '';
-      const claimedBadge = claimedThisWeek && isUnlocked ?
-        `<div class="claimed-badge">✅ 本周已完成</div>` : '';
+  // ── 辅助：渲染单张卡片 HTML ──────────────────────────────
+  function cardHTML(c) {
+    const isUnlocked = isCardUnlocked(c);
+    const _claimedDates = Array.isArray(state.weeklyCardClaims[c.id]) ? state.weeklyCardClaims[c.id] : [];
+    const claimedThisWeek = c.phase === 1
+      ? _claimedDates.includes(todayStr())
+      : _claimedDates.length >= 1;
+    const lockIcon = isUnlocked ? '' : '<div class="card-lock-badge">🔒</div>';
+    const weekBadge = c.weekUnlock && !state.weekUnlocked
+      ? `<div class="week-unlock-badge">第一周后解锁</div>` : '';
+    const claimedBadge = claimedThisWeek && isUnlocked
+      ? `<div class="claimed-badge">✅ 本周已完成</div>` : '';
+    const unlockHint = !isUnlocked && !c.weekUnlock ? `<div class="card-unlock">${
+      c.unlockRope !== undefined ? '🪢 跳绳达到'+c.unlockRope+'个解锁' :
+      c.unlockMathCount !== undefined ? '⚡ 口算练习'+c.unlockMathCount+'次解锁' :
+      c.unlockMathBest !== undefined ? '⚡ 口算单次答对'+c.unlockMathBest+'题解锁' :
+      c.unlockMathLevel !== undefined ? '⚡ 口算升到第'+(c.unlockMathLevel+1)+'关解锁' :
+      c.unlockReadCount !== undefined ? '📚 完成'+c.unlockReadCount+'次阅读挑战解锁' :
+      '累计'+c.unlockAt+'分解锁'
+    }</div>` : '';
+    return `
+      <div class="task-card ${isUnlocked?'':'locked'} ${claimedThisWeek?'claimed':''}"
+           style="background:${c.lightColor}"
+           onclick="openCardModal('${c.id}')">
+        ${lockIcon}
+        <div class="card-stars">${c.stars}</div>
+        <div class="card-name">${c.name}</div>
+        <div class="card-sub">${c.sub}</div>
+        <div class="card-score">+${c.score}分</div>
+        ${claimedBadge}${unlockHint}${weekBadge}
+        ${isUnlocked ? speakBtn(c.speech) : ''}
+      </div>`;
+  }
+
+  // ── 辅助：渲染一组卡片网格 ──────────────────────────────
+  function cardsGridHTML(cards) {
+    return `<div class="cards-grid">${cards.map(cardHTML).join('')}</div>`;
+  }
+
+  // ── 主线视图辅助：阶段配置 ──────────────────────────────
+  const phaseConfig = {
+    1: { label:'🌱 第一阶段', sublabel:'行为稳定 · 专注萌芽', color:'#2e7d32', lightColor:'#f1f8e9', unlockAt:0 },
+    2: { label:'🚀 第二阶段', sublabel:'时间感知 · 主动选择', color:'#1565c0', lightColor:'#e3f2fd', unlockAt:30 },
+    3: { label:'🏆 第三阶段', sublabel:'自我觉察 · 目标设定', color:'#6a1b9a', lightColor:'#f3e5f5', unlockAt:90 },
+  };
+
+  // ── 兴趣支线：不含phase的series分组配置 ──────────────────
+  const interestIslandConfig = {
+    '📚 阅读探索':  { color:'#00897b', lightBg:'#e0f2f1', emoji:'📚' },
+    '🎵 音乐探索':  { color:'#6a1b9a', lightBg:'#f3e5f5', emoji:'🎵' },
+    '🎨 创造挑战':  { color:'#e65100', lightBg:'#fff3e0', emoji:'🎨' },
+    '🎨 绘画成长':  { color:'#ad1457', lightBg:'#fce4ec', emoji:'🖼️' },
+    '🖌️ 绘画日记': { color:'#558b2f', lightBg:'#f9fbe7', emoji:'🖌️' },
+    '⚡ 数学专项':  { color:'#f57f17', lightBg:'#fffde7', emoji:'⚡' },
+    '🌍 英语专项':  { color:'#1565c0', lightBg:'#e3f2fd', emoji:'🌍' },
+    '🌙 习惯养成':  { color:'#283593', lightBg:'#e8eaf6', emoji:'🌙' },
+    '💃 舞蹈挑战':  { color:'#c62828', lightBg:'#ffebee', emoji:'💃' },
+    '🧠 独立思考':  { color:'#4527a0', lightBg:'#ede7f6', emoji:'🧠' },
+    '🪢 跳绳挑战':  { color:'#00695c', lightBg:'#e0f2f1', emoji:'🪢' },
+    '🎤 演出里程碑':{ color:'#d84315', lightBg:'#fbe9e7', emoji:'🎤' },
+    '🦕 特别自选':  { color:'#37474f', lightBg:'#eceff1', emoji:'🦕' },
+  };
+
+  let html = '';
+
+  // ════════════════════════════════════════════════════════
+  // 视图一：全部（主线岛 + 兴趣天地并列）
+  // ════════════════════════════════════════════════════════
+  // 视图：成长主线（Phase1/2/3）+ 末尾折叠兴趣支线
+  // ════════════════════════════════════════════════════════
+  if (view === 'all' || view === 'main') {
+    html += `<div class="ac-island-wrap">
+      <div class="ac-section-title">🗺️ 成长主线</div>`;
+    [1,2,3].forEach(ph => {
+      const cfg = phaseConfig[ph];
+      const phCards = TASK_CARDS.filter(c => c.phase === ph);
+      const doneCount = phCards.filter(c => {
+        const d = Array.isArray(state.weeklyCardClaims[c.id]) ? state.weeklyCardClaims[c.id] : [];
+        return d.length > 0;
+      }).length;
+      const isUnlocked = state.totalScore >= cfg.unlockAt;
+      const progressPct = Math.round((doneCount / phCards.length) * 100);
       html += `
-        <div class="task-card ${isUnlocked?'':'locked'} ${claimedThisWeek?'claimed':''}"
-             style="background:${c.lightColor}"
-             onclick="openCardModal('${c.id}')">
-          ${lockIcon}
-          <div class="card-stars">${c.stars}</div>
-          <div class="card-name">${c.name}</div>
-          <div class="card-sub">${c.sub}</div>
-          <div class="card-score">+${c.score}分</div>
-          ${claimedBadge}
-          ${!isUnlocked && !c.weekUnlock ? `<div class="card-unlock">${
-            c.unlockRope !== undefined ? '🪢 跳绳达到'+c.unlockRope+'个解锁' :
-            c.unlockMathCount !== undefined ? '⚡ 口算练习'+c.unlockMathCount+'次解锁' :
-            c.unlockMathBest !== undefined ? '⚡ 口算单次答对'+c.unlockMathBest+'题解锁' :
-            c.unlockMathLevel !== undefined ? '⚡ 口算升到第'+(c.unlockMathLevel+1)+'关解锁' :
-            c.unlockReadCount !== undefined ? '📚 完成'+c.unlockReadCount+'次阅读挑战解锁' :
-            '累计'+c.unlockAt+'分解锁'
-          }</div>` : ''}
-          ${weekBadge}
-          ${isUnlocked ? speakBtn(c.speech) : ''}
+        <div class="ac-phase-block" style="border-left:4px solid ${cfg.color};background:${cfg.lightColor};">
+          <div class="ac-phase-header">
+            <div>
+              <span class="ac-phase-label" style="color:${cfg.color}">${cfg.label}</span>
+              <span class="ac-phase-sub">${cfg.sublabel}</span>
+            </div>
+            ${!isUnlocked
+              ? `<div class="ac-lock-badge">🔒 ${cfg.unlockAt}分解锁</div>`
+              : `<div class="ac-progress-bar"><div class="ac-progress-fill" style="width:${progressPct}%;background:${cfg.color}"></div></div>
+                 <span class="ac-progress-label">${doneCount}/${phCards.length}</span>`
+            }
+          </div>
+          ${isUnlocked
+            ? cardsGridHTML(phCards)
+            : `<div class="ac-fog-wrap">${cardsGridHTML(phCards)}<div class="ac-fog-mask"></div></div>`
+          }
         </div>`;
     });
-  });
-  html += '</div>';
-  grid.innerHTML = html;
+    html += `</div>`;
+
+    // —— 末尾追加兴趣支线（折叠岛屿，默认折叠）——
+    const interestCardsM = TASK_CARDS.filter(c => !c.phase);
+    const interestGroupsM = {};
+    interestCardsM.forEach(c => {
+      if (!interestGroupsM[c.series]) interestGroupsM[c.series] = [];
+      interestGroupsM[c.series].push(c);
+    });
+    html += `<div class="ac-island-wrap">
+      <div class="ac-section-title" style="color:#666;font-size:13px;opacity:0.8;">🌈 兴趣支线天地</div>
+      <div class="ac-islands-grid">`;
+    Object.entries(interestGroupsM).forEach(([series, cards]) => {
+      const cfg = interestIslandConfig[series] || { color:'#607d8b', lightBg:'#eceff1', emoji:'🎯' };
+      const doneCount = cards.filter(c => {
+        const d = Array.isArray(state.weeklyCardClaims[c.id]) ? state.weeklyCardClaims[c.id] : [];
+        return d.length > 0;
+      }).length;
+      html += `
+        <div class="ac-island" style="border-top:4px solid ${cfg.color};background:${cfg.lightBg};"
+             onclick="toggleIsland(this)">
+          <div class="ac-island-header">
+            <span class="ac-island-emoji">${cfg.emoji}</span>
+            <div class="ac-island-info">
+              <span class="ac-island-name">${series}</span>
+              <span class="ac-island-count">${cards.length}张 · 已完成${doneCount}张</span>
+            </div>
+            <span class="ac-island-arrow">▼</span>
+          </div>
+          <div class="ac-island-body" style="display:none;">
+            ${cardsGridHTML(cards)}
+          </div>
+        </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // ════════════════════════════════════════════════════════
+  // 视图：兴趣支线（岛屿折叠）+ 末尾折叠成长主线
+  // ════════════════════════════════════════════════════════
+  else if (view === 'interest') {
+    const interestCards = TASK_CARDS.filter(c => !c.phase);
+    const interestGroups = {};
+    interestCards.forEach(c => {
+      if (!interestGroups[c.series]) interestGroups[c.series] = [];
+      interestGroups[c.series].push(c);
+    });
+    html += `<div class="ac-island-wrap">
+      <div class="ac-section-title">🌈 兴趣支线天地</div>
+      <div class="ac-islands-grid">`;
+    Object.entries(interestGroups).forEach(([series, cards]) => {
+      const cfg = interestIslandConfig[series] || { color:'#607d8b', lightBg:'#eceff1', emoji:'🎯' };
+      const doneCount = cards.filter(c => {
+        const d = Array.isArray(state.weeklyCardClaims[c.id]) ? state.weeklyCardClaims[c.id] : [];
+        return d.length > 0;
+      }).length;
+      html += `
+        <div class="ac-island" style="border-top:4px solid ${cfg.color};background:${cfg.lightBg};"
+             onclick="toggleIsland(this)">
+          <div class="ac-island-header">
+            <span class="ac-island-emoji">${cfg.emoji}</span>
+            <div class="ac-island-info">
+              <span class="ac-island-name">${series}</span>
+              <span class="ac-island-count">${cards.length}张 · 已完成${doneCount}张</span>
+            </div>
+            <span class="ac-island-arrow">▼</span>
+          </div>
+          <div class="ac-island-body" style="display:none;">
+            ${cardsGridHTML(cards)}
+          </div>
+        </div>`;
+    });
+    html += `</div></div>`;
+
+    // —— 末尾追加成长主线（默认折叠）——
+    html += `<div class="ac-island-wrap">
+      <div class="ac-section-title" style="color:#666;font-size:13px;opacity:0.8;">🗺️ 成长主线</div>`;
+    [1,2,3].forEach(ph => {
+      const cfg = phaseConfig[ph];
+      const phCards = TASK_CARDS.filter(c => c.phase === ph);
+      const doneCount = phCards.filter(c => {
+        const d = Array.isArray(state.weeklyCardClaims[c.id]) ? state.weeklyCardClaims[c.id] : [];
+        return d.length > 0;
+      }).length;
+      const isUnlocked = state.totalScore >= cfg.unlockAt;
+      const progressPct = Math.round((doneCount / phCards.length) * 100);
+      html += `
+        <div class="ac-phase-block" style="border-left:4px solid ${cfg.color};background:${cfg.lightColor};">
+          <div class="ac-phase-header">
+            <div>
+              <span class="ac-phase-label" style="color:${cfg.color}">${cfg.label}</span>
+              <span class="ac-phase-sub">${cfg.sublabel}</span>
+            </div>
+            ${!isUnlocked
+              ? `<div class="ac-lock-badge">🔒 ${cfg.unlockAt}分解锁</div>`
+              : `<div class="ac-progress-bar"><div class="ac-progress-fill" style="width:${progressPct}%;background:${cfg.color}"></div></div>
+                 <span class="ac-progress-label">${doneCount}/${phCards.length}</span>`
+            }
+          </div>
+          ${isUnlocked
+            ? cardsGridHTML(phCards)
+            : `<div class="ac-fog-wrap">${cardsGridHTML(phCards)}<div class="ac-fog-mask"></div></div>`
+          }
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // 写入内容区，保留 backBtn 不被清除
+  const backBtn = document.getElementById('allCardsBackBtn');
+  if (backBtn && grid.contains(backBtn)) {
+    let cardsContent = document.getElementById('allCardsContent');
+    if (!cardsContent) {
+      cardsContent = document.createElement('div');
+      cardsContent.id = 'allCardsContent';
+      grid.appendChild(cardsContent);
+    }
+    cardsContent.innerHTML = html;
+  } else {
+    grid.innerHTML = html;
+  }
+}
+
+// 兴趣岛屿折叠/展开
+function toggleIsland(el) {
+  const body = el.querySelector('.ac-island-body');
+  const arrow = el.querySelector('.ac-island-arrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
 function isCardUnlocked(card) {
@@ -2656,7 +3328,12 @@ function openCardModal(id) {
     state.weeklyAchievement = null;
     saveState();
   }
-  const claimedThisWeek = (state.weeklyCardClaims[id] || 0) >= 1;
+  // Phase1 英雄卡每天可领取一次，检查今天是否已领取；其他卡检查本周是否领取过
+  const isHeroCardModal = card && card.phase === 1;
+  const claimedDatesModal = Array.isArray(state.weeklyCardClaims[id]) ? state.weeklyCardClaims[id] : [];
+  const claimedThisWeek = isHeroCardModal
+    ? claimedDatesModal.includes(todayStr())   // Phase1：今天是否已领取
+    : claimedDatesModal.length >= 1;            // 其他卡：本周是否领取过
   const alreadyPending = state.pendingAdditions.some(p => p.type === 'card' && p.taskId === id);
   const canClaim = unlocked && !claimedThisWeek && !alreadyPending;
   
@@ -2664,7 +3341,7 @@ function openCardModal(id) {
   btn.onclick = () => claimCardWithReport(id);
   btn.disabled = !canClaim;
   btn.style.opacity = canClaim ? '1' : '0.4';
-  btn.textContent = claimedThisWeek ? '✅ 本周已完成' : alreadyPending ? '⏳ 等待审核中' : unlocked ? '✅ 我完成了！领取积分' : '🔒 还没解锁';
+  btn.textContent = claimedThisWeek ? (isHeroCardModal ? '✅ 今天已完成' : '✅ 本周已完成') : alreadyPending ? '⏳ 等待审核中' : unlocked ? '✅ 我完成了！领取积分' : '🔒 还没解锁';
 
   document.getElementById('cardModal').style.display = 'flex';
   window._currentCardId = id;
@@ -2751,12 +3428,12 @@ function claimCard(id, isSelf) {
   // 迷宫骑士移动到该节点
   const nodeForCard = findMazeNodeByCardId(id);
   if (nodeForCard) {
-    state.mazeKnightNode = nodeForCard;
-    saveState();
-    // 延迟等模态框关闭后再动
+    // 延迟等模态框关闭后再动；mazeKnightNode 由 moveKnight 动画结束时更新
     setTimeout(() => {
       moveKnight(nodeForCard, () => {
+        saveState();
         checkPhaseFogReveal();
+        updateMazeGuidance();
       });
     }, 400);
   }
@@ -2783,6 +3460,8 @@ function claimCard(id, isSelf) {
 // ── 渲染商店 ───────────────────────────────────────────────────
 function renderShop() {
   document.getElementById('shopScore').textContent = state.totalScore;
+  // 渲染像素勋章墙
+  renderPixelMedalWall();
   const el = document.getElementById('shopContent');
   const bUnlocked = isBRewardUnlocked();
 
@@ -3236,7 +3915,7 @@ function bindEvents() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      currentFilter = btn.dataset.filter;
+      currentCardView = btn.dataset.filter;
       renderCards();
     });
   });
@@ -4456,136 +5135,140 @@ const MEDALS = [
 ];
 
 // ── 勋章弹窗 ──────────────────────────────────────────────────
+// ── 像素勋章墙（嵌入宝藏屋 Tab）────────────────────────────────
 function showMedalsModal() {
+  // 兼容旧调用方式：直接渲染到宝藏屋内
+  renderPixelMedalWall();
+}
+
+function renderPixelMedalWall() {
   const medalClaims = state.medalClaims || {};
   const totalMedals = MEDALS.length;
   const earnedCount = Object.keys(medalClaims).filter(id => medalClaims[id]).length;
 
-  // 分类统计
-  const phaseMedals = MEDALS.filter(m => m.category === 'phase');
-  const catMedals = MEDALS.filter(m => m.category === 'cat');
+  const phaseMedals  = MEDALS.filter(m => m.category === 'phase');
+  const catMedals    = MEDALS.filter(m => m.category === 'cat');
   const streakMedals = MEDALS.filter(m => m.category === 'streak');
 
-  let html = `
-    <div id="medalsModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)closeMedalsModal()">
-      <div style="background:#fff;border-radius:20px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
-        <div style="background:linear-gradient(135deg,#FFD700,#FFA500);padding:20px;border-radius:20px 20px 0 0;text-align:center;">
-          <div style="font-size:2rem;font-weight:800;color:#333;">🏆 我的勋章墙</div>
-          <div style="color:#555;margin-top:6px;">已获得 <b>${earnedCount}</b> / ${totalMedals} 枚</div>
-        </div>
-        <div style="padding:16px;">
-          <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:16px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:1.5rem;">🏆</span>
-              <span style="font-weight:700;">阶段勋章</span>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              ${phaseMedals.map(m => renderMedalItem(m, medalClaims)).join('')}
-            </div>
-          </div>
+  // 更新计数徽章
+  const badge = document.getElementById('medalCountBadge');
+  if (badge) badge.textContent = `${earnedCount}/${totalMedals}`;
 
-          <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:16px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:1.5rem;">🎯</span>
-              <span style="font-weight:700;">分类勋章</span>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              ${catMedals.map(m => renderMedalItem(m, medalClaims)).join('')}
-            </div>
-          </div>
+  const wall = document.getElementById('pixelMedalWall');
+  if (!wall) return;
 
-          <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:16px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:1.5rem;">🔥</span>
-              <span style="font-weight:700;">坚持勋章</span>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              ${streakMedals.map(m => renderMedalItem(m, medalClaims)).join('')}
-            </div>
-          </div>
-
-          <button onclick="closeMedalsModal()" style="width:100%;padding:14px;border:none;border-radius:12px;background:#333;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;margin-top:8px;">
-            关闭
-          </button>
-        </div>
-      </div>
-    </div>`;
-
-  document.body.insertAdjacentHTML('beforeend', html);
+  wall.innerHTML = `
+    <div class="medal-group-header medal-group-phase">🏆 成长阶段勋章</div>
+    <div class="medal-grid">
+      ${phaseMedals.map(m => renderPixelMedalCard(m, medalClaims)).join('')}
+    </div>
+    <div class="medal-group-header medal-group-cat">🎯 技能分类勋章</div>
+    <div class="medal-grid">
+      ${catMedals.map(m => renderPixelMedalCard(m, medalClaims)).join('')}
+    </div>
+    <div class="medal-group-header medal-group-streak">🔥 坚持连击勋章</div>
+    <div class="medal-grid">
+      ${streakMedals.map(m => renderPixelMedalCard(m, medalClaims)).join('')}
+    </div>
+  `;
 }
 
-function renderMedalItem(medal, medalClaims) {
-  const earned = medalClaims[medal.id] || false;
-  const unlocked = medal.check(state);
-  const canClaim = unlocked && !earned;
-  const status = earned ? '✅' : (unlocked ? '✨' : '🔒');
-  const bgColor = earned ? 'linear-gradient(135deg,#FFD700,#FFA500)' : (unlocked ? 'linear-gradient(135deg,#E8F5E9,#C8E6C9)' : '#f0f0f0');
-  const textColor = earned || unlocked ? '#333' : '#999';
-  const opacity = earned || unlocked ? '1' : '0.7';
+function renderPixelMedalCard(medal, medalClaims) {
+  const earned    = !!(medalClaims && medalClaims[medal.id]);
+  const unlocked  = medal.check(state);
+  const canClaim  = unlocked && !earned;
+
+  let stateClass, badgeClass, badgeText, iconContent;
+  if (earned) {
+    stateClass  = 'mc-earned';
+    badgeClass  = 'mc-badge-earned';
+    badgeText   = '已获得';
+    iconContent = medal.icon;
+  } else if (canClaim) {
+    stateClass  = 'mc-claimable';
+    badgeClass  = 'mc-badge-claim';
+    badgeText   = '可领取';
+    iconContent = medal.icon;
+  } else {
+    stateClass  = 'mc-locked';
+    badgeClass  = 'mc-badge-locked';
+    badgeText   = '未解锁';
+    iconContent = '🔒';
+  }
 
   return `
-    <div style="text-align:center;cursor:pointer;" onclick="showMedalDetail('${medal.id}')">
-      <div style="width:60px;height:60px;border-radius:50%;background:${bgColor};display:flex;align-items:center;justify-content:center;font-size:1.8rem;opacity:${opacity};box-shadow:${earned?'0 4px 12px rgba(255,165,0,0.4)':'none'};transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
-        ${earned || unlocked ? medal.icon : '🔒'}
+    <div class="medal-card" onclick="showPixelMedalDetail('${medal.id}')">
+      <div class="mc-inner ${stateClass}">
+        <span class="mc-icon">${iconContent}</span>
+        <span class="mc-name">${medal.name}</span>
+        <span class="mc-badge ${badgeClass}">${badgeText}</span>
       </div>
-      <div style="font-size:0.75rem;color:${textColor};margin-top:4px;font-weight:${earned?'700':'400'};max-width:70px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${medal.name}
-      </div>
-      ${canClaim ? '<div style="font-size:0.65rem;color:#06D6A0;font-weight:700;">可领取！</div>' : ''}
     </div>`;
 }
 
-function showMedalDetail(medalId) {
+// 兼容旧函数名
+function renderMedalItem(medal, medalClaims) {
+  return renderPixelMedalCard(medal, medalClaims);
+}
+
+function showPixelMedalDetail(medalId) {
   const medal = MEDALS.find(m => m.id === medalId);
   if (!medal) return;
   const medalClaims = state.medalClaims || {};
-  const earned = medalClaims[medal.id] || false;
+  const earned   = !!(medalClaims[medal.id]);
   const unlocked = medal.check(state);
+  const canClaim = unlocked && !earned;
 
-  const modal = document.getElementById('medalsModal');
-  if (!modal) return;
+  // 移除已有详情
+  const old = document.getElementById('pixelDetailOverlay');
+  if (old) old.remove();
+
+  let statusText, statusClass;
+  if (earned) {
+    statusText  = '✅ 已获得';
+    statusClass = 'mds-earned';
+  } else if (canClaim) {
+    statusText  = '✨ 可领取';
+    statusClass = 'mds-claimable';
+  } else {
+    statusText  = '🔒 未解锁';
+    statusClass = 'mds-locked';
+  }
 
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;';
-  overlay.onclick = e => { if (e.target === overlay) document.body.removeChild(overlay); };
-
-  const cardBg = earned ? 'linear-gradient(135deg,#FFD700,#FFA500)' : (unlocked ? 'linear-gradient(135deg,#E8F5E9,#81C784)' : '#f5f5f5');
+  overlay.id = 'pixelDetailOverlay';
+  overlay.className = 'medal-detail-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
 
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:20px;padding:24px;text-align:center;max-width:320px;width:100%;">
-      <div style="width:80px;height:80px;border-radius:50%;background:${cardBg};display:flex;align-items:center;justify-content:center;font-size:3rem;margin:0 auto 16px;box-shadow:0 8px 24px rgba(0,0,0,0.2);">
-        ${unlocked ? medal.icon : '🔒'}
-      </div>
-      <div style="font-size:1.4rem;font-weight:800;color:#333;margin-bottom:8px;">${medal.name}</div>
-      <div style="font-size:0.9rem;color:#666;margin-bottom:16px;">${medal.desc}</div>
-      <div style="background:#f8f9fa;border-radius:10px;padding:12px;margin-bottom:16px;text-align:left;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <span style="color:#666;">状态</span>
-          <span style="color:${earned?'#06D6A0':(unlocked?'#FFB703':'#999')};font-weight:700;">
-            ${earned?'✅ 已获得':(unlocked?'✨ 可领取':'🔒 未解锁')}
-          </span>
-        </div>
-        <div style="display:flex;justify-content:space-between;">
-          <span style="color:#666;">奖励</span>
-          <span style="color:#FF6B6B;font-weight:700;">+${medal.bonus}分</span>
-        </div>
-      </div>
-      ${unlocked && !earned ? `
-        <button onclick="claimMedal('${medal.id}');closeMedalDetail();" style="width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#06D6A0,#00B894);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;margin-bottom:8px;">
-          领取勋章！+${medal.bonus}分
+    <div class="medal-detail-card">
+      <div class="medal-detail-handle"></div>
+      <div class="medal-detail-icon">${unlocked ? medal.icon : '🔒'}</div>
+      <div class="medal-detail-name">${medal.name}</div>
+      <div class="medal-detail-desc">${medal.desc}</div>
+      <div class="medal-detail-bonus">奖励 +${medal.bonus} 积分</div>
+      <div class="medal-detail-status ${statusClass}">${statusText}</div>
+      ${canClaim ? `
+        <button class="medal-btn-claim" onclick="claimMedal('${medal.id}');document.getElementById('pixelDetailOverlay').remove();">
+          🏆 领取勋章
         </button>
       ` : ''}
-      <button onclick="document.body.removeChild(this.closest('div'))" style="width:100%;padding:12px;border:2px solid #ddd;border-radius:12px;background:#fff;color:#666;font-size:0.95rem;font-weight:600;cursor:pointer;">
-        ${earned||unlocked?'返回':'我知道了'}
+      <button class="medal-btn-close" onclick="document.getElementById('pixelDetailOverlay').remove()">
+        ${earned ? '收好啦 ✓' : '知道了'}
       </button>
     </div>`;
 
   document.body.appendChild(overlay);
 }
 
+// 兼容旧函数名
+function showMedalDetail(medalId) {
+  showPixelMedalDetail(medalId);
+}
+
 function closeMedalDetail() {
-  const overlay = document.querySelector('div[style*="z-index:10001"]');
-  if (overlay) document.body.removeChild(overlay);
+  const el = document.getElementById('pixelDetailOverlay');
+  if (el) el.remove();
 }
 
 function claimMedal(medalId) {
@@ -4603,12 +5286,12 @@ function claimMedal(medalId) {
   // 显示领取成功
   showToast(`🏆 获得「${medal.name}」！+${medal.bonus}分`, 'success');
 
-  // 刷新弹窗
-  const modal = document.getElementById('medalsModal');
-  if (modal) showMedalsModal(); // 简单刷新整个弹窗
+  // 刷新像素勋章墙
+  renderPixelMedalWall();
 }
 
 function closeMedalsModal() {
+  // 勋章已嵌入宝藏屋，无需关闭弹窗；保留函数以向前兼容
   const modal = document.getElementById('medalsModal');
   if (modal) document.body.removeChild(modal);
 }

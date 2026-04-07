@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="英雄计划">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 <script>
   // 注册 Service Worker（PWA离线支持）
   if ('serviceWorker' in navigator) {
@@ -218,11 +218,16 @@
     <div class="key-progress-bar"><div class="key-progress-fill" id="mazeKeyFill"></div></div>
     <span class="key-next-gate" id="mazeNextGate"></span>
   </div>
-  <!-- 迷宫容器 -->
-  <div class="maze-container" id="mazeContainer"></div>
+  <!-- 迷宫包裹层（position:relative，气泡和迷宫都在这里面） -->
+  <div class="maze-wrapper" id="mazeWrapper">
+    <!-- 迷宫容器（innerHTML会被renderMaze覆盖，气泡不能放里面） -->
+    <div class="maze-container" id="mazeContainer"></div>
+    <!-- 语音引导气泡（兄弟节点，absolute定位跟随骑士头顶） -->
+    <div class="maze-guidance" id="mazeGuidance" onclick="(function(el){const t=el.textContent.replace(/^[^\u4e00-\u9fa5a-zA-Z0-9]*/,'').trim();if(t)speakKnightVoice(t);})(this)" title="点击听语音引导"></div>
+  </div>
   <!-- 底部：卡牌列表入口 -->
   <div class="maze-all-cards-toggle" id="mazeAllCardsToggle" style="display:none;">
-    <button class="filter-btn active" onclick="toggleAllCardsView()">📜 查看全部挑战卡</button>
+    <button class="view-all-cards-btn" onclick="toggleAllCardsView()">📜 查看全部挑战卡</button>
   </div>
   <!-- 原有卡牌网格（默认隐藏，迷宫优先） -->
   <div id="cardsGrid" style="display:none;"></div>
@@ -235,6 +240,18 @@
     <div class="balance-value" id="shopScore">0</div>
     <div class="balance-unit">分</div>
   </div>
+
+  <!-- 🏆 勋章墙 -->
+  <div class="medal-section">
+    <div class="shop-section-header" style="background:linear-gradient(135deg,#7C3AED,#A855F7);display:flex;align-items:center;justify-content:space-between;border-radius:10px 10px 0 0;">
+      <span>🏆 勋章收藏</span>
+      <span class="medal-count-badge" id="medalCountBadge">0/17</span>
+    </div>
+    <div class="medal-wall-body" id="pixelMedalWall">
+      <!-- 由 JS 渲染 -->
+    </div>
+  </div>
+
   <div id="shopContent"></div>
 </div>
 
@@ -552,7 +569,7 @@
 </div>
 
 <script src="data.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 <script src="firebase-sync.js"></script>
 </body>
 </html>

@@ -290,6 +290,12 @@ body {
 }
 
 /* 迷宫容器 */
+/* 迷宫包裹层：气泡和迷宫共同的定位基准 */
+.maze-wrapper {
+  position: relative;
+  width: 100%;
+}
+
 .maze-container {
   width: 100%;
   border-radius: 20px;
@@ -318,7 +324,7 @@ body {
   cursor: pointer;
   transition: transform 0.2s;
 }
-.maze-node:hover { transform: scale(1.1); }
+.maze-node:hover { opacity: 0.85; }
 .maze-node-glow {
   animation: nodeGlow 2s ease-in-out infinite alternate;
 }
@@ -386,12 +392,80 @@ body {
   stroke-dasharray: 6 4;
 }
 
+/* 迷宫语音引导气泡（跟随骑士头顶，position:absolute 相对 maze-wrapper） */
+.maze-guidance {
+  position: absolute;   /* 相对 maze-wrapper 定位，随骑士移动 */
+  z-index: 999;
+  text-align: center;
+  padding: 10px 16px 22px 16px;
+  background: linear-gradient(135deg, #fff9e6, #fff3cd);
+  border: 2px solid #ffd54f;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5d4037;
+  display: none;
+  pointer-events: auto;   /* 气泡可点击 */
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(255, 193, 7, 0.3);
+  animation: guidancePop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* 小尾巴朝下指向骑士 */
+  clip-path: polygon(0% 0%, 100% 0%, 100% 80%, 55% 80%, 50% 100%, 45% 80%, 0% 80%);
+  max-width: 260px;
+  width: max-content;
+  white-space: nowrap;
+  transform-origin: center bottom;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.maze-guidance:hover {
+  transform: scale(1.04);
+  box-shadow: 0 6px 20px rgba(255, 193, 7, 0.45);
+}
+.maze-guidance:active {
+  transform: scale(0.97);
+}
+.maze-guidance.show { display: block; }
+.maze-guidance.knight-speaking {
+  animation: knightPulse 0.5s ease;
+  border-color: #ff9800;
+  background: linear-gradient(135deg, #fff3e0, #ffe082);
+}
+.maze-guidance::before {
+  content: '🦸';
+  margin-right: 6px;
+  font-size: 15px;
+}
+@keyframes guidancePop {
+  from { opacity: 0; transform: translateY(-8px) scale(0.8); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes knightPulse {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.08); }
+  60%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
 /* 全部卡牌视图切换 */
 .maze-all-cards-toggle {
   margin-top: 12px;
   text-align: center;
 }
 #mazeAllCardsToggle { display: flex; justify-content: center; }
+.view-all-cards-btn {
+  background: linear-gradient(135deg, #FF6B35, #FF8C42);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  padding: 10px 28px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.35);
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+.view-all-cards-btn:active { transform: scale(0.97); }
 
 /* ── 奖励商店 ── */
 .shop-balance {
@@ -1893,3 +1967,457 @@ body {
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249, 168, 37, 0.4); }
   50% { transform: scale(1.05); box-shadow: 0 0 0 4px rgba(249, 168, 37, 0.2); }
 }
+
+/* ══════════════════════════════════════════════════════
+   全部卡牌视图 · 岛屿式布局（双轨并存）
+   ══════════════════════════════════════════════════════ */
+
+/* 顶部 Tab 按钮栏 */
+.ac-tab-btn {
+  background: #f0f0f0;
+  color: #555;
+  border: none;
+  border-radius: 22px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.ac-tab-btn:hover {
+  background: #e0e0e0;
+}
+.ac-tab-btn.ac-tab-active {
+  background: linear-gradient(135deg, #FF6B35, #FF8C42);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(255, 107, 53, 0.35);
+}
+
+/* 外层包裹 */
+.ac-island-wrap {
+  padding: 0 12px 16px;
+}
+
+/* 区块标题（成长主线 / 兴趣支线天地） */
+.ac-section-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #333;
+  margin: 16px 0 10px;
+  padding-left: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* ── 成长主线阶段块 ── */
+.ac-phase-block {
+  border-radius: 14px;
+  padding: 14px 12px 10px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
+.ac-phase-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ac-phase-label {
+  font-size: 15px;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.ac-phase-sub {
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+}
+
+.ac-lock-badge {
+  background: rgba(0,0,0,0.08);
+  color: #666;
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ac-progress-bar {
+  width: 80px;
+  height: 7px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.ac-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.ac-progress-label {
+  font-size: 11px;
+  color: #666;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* 锁定阶段的迷雾遮罩 */
+.ac-fog-wrap {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ac-fog-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    rgba(200,200,220,0.15) 0%,
+    rgba(180,180,210,0.65) 60%,
+    rgba(160,160,200,0.88) 100%);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+/* ── 兴趣支线岛屿网格 ── */
+.ac-islands-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+/* 单个岛屿 */
+.ac-island {
+  border-radius: 14px;
+  padding: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+.ac-island:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.13);
+  transform: translateY(-1px);
+}
+
+.ac-island-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  pointer-events: none;
+}
+
+.ac-island-emoji {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ac-island-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ac-island-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-island-count {
+  display: block;
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.ac-island-arrow {
+  font-size: 11px;
+  color: #aaa;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+/* 岛屿展开内容区 */
+.ac-island-body {
+  padding: 0 10px 10px;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+
+/* 响应式：小屏单列 */
+@media (max-width: 380px) {
+  .ac-islands-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════
+   🏆 勋章收藏系统（与宝藏屋统一风格）
+═══════════════════════════════════════════════════ */
+
+/* 勋章区整体容器 */
+.medal-section {
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+/* 右侧计数徽章 */
+.medal-count-badge {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(255,255,255,0.5);
+}
+
+/* 勋章墙主体（白底） */
+.medal-wall-body {
+  background: #fff;
+  padding: 12px;
+}
+
+/* 分组标题 */
+.medal-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 6px;
+  margin: 10px 0 8px 0;
+}
+.medal-group-phase  { background: linear-gradient(90deg, #7C3AED, #A855F7); }
+.medal-group-cat    { background: linear-gradient(90deg, #0EA5E9, #06D6A0); }
+.medal-group-streak { background: linear-gradient(90deg, #F97316, #EC4899); }
+
+/* 网格 */
+.medal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+@media (max-width: 360px) {
+  .medal-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* 单张勋章卡片 */
+.medal-card {
+  cursor: pointer;
+  border-radius: 10px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.medal-card:hover  { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.medal-card:active { transform: scale(0.94); }
+
+.mc-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 6px;
+  height: 100%;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  gap: 3px;
+}
+
+/* 状态：已获得 */
+.mc-earned {
+  background: linear-gradient(160deg, #FFF9E6, #FFF3CC);
+  border-color: #F9C92A;
+}
+/* 状态：可领取 */
+.mc-claimable {
+  background: linear-gradient(160deg, #E8FFF5, #D1FAE5);
+  border-color: #06D6A0;
+  animation: mc-pulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes mc-pulse {
+  from { box-shadow: 0 0 0 0 rgba(6, 214, 160, 0.3); }
+  to   { box-shadow: 0 0 0 5px rgba(6, 214, 160, 0); }
+}
+/* 状态：锁定 */
+.mc-locked {
+  background: #F5F5F5;
+  border-color: #E0E0E0;
+  opacity: 0.65;
+}
+
+/* 图标 */
+.mc-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+}
+.mc-locked .mc-icon { filter: grayscale(1) opacity(0.5); }
+
+/* 名称 */
+.mc-name {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #333;
+  text-align: center;
+  line-height: 1.2;
+  word-break: break-all;
+  padding: 0 2px;
+}
+.mc-locked .mc-name { color: #999; }
+
+/* 状态标签 */
+.mc-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+.mc-badge-earned   { background: #FFF0B0; color: #B07D00; border: 1px solid #F9C92A; }
+.mc-badge-claim    { background: #D1FAE5; color: #065F46; border: 1px solid #06D6A0; }
+.mc-badge-locked   { background: #EEEEEE; color: #999; border: 1px solid #DDD; }
+
+/* 详情弹窗覆盖层 */
+.medal-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0 20px 0;
+  animation: fadeInOverlay 0.2s ease;
+}
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 详情卡（从底部滑入） */
+.medal-detail-card {
+  background: #fff;
+  border-radius: 20px 20px 16px 16px;
+  padding: 24px 20px 20px;
+  width: calc(100% - 32px);
+  max-width: 400px;
+  box-shadow: 0 -4px 30px rgba(0,0,0,0.15);
+  animation: slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+@keyframes slideUp {
+  from { transform: translateY(60px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* 详情：顶部拉手 */
+.medal-detail-handle {
+  width: 40px;
+  height: 4px;
+  background: #E0E0E0;
+  border-radius: 2px;
+  margin-bottom: 8px;
+}
+
+/* 详情：图标大图 */
+.medal-detail-icon {
+  font-size: 3.5rem;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+/* 详情：名称 */
+.medal-detail-name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #1a1a2e;
+  text-align: center;
+}
+
+/* 详情：描述 */
+.medal-detail-desc {
+  font-size: 0.85rem;
+  color: #666;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* 详情：积分奖励 */
+.medal-detail-bonus {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--purple, #7C3AED);
+  background: #F5F0FF;
+  padding: 5px 16px;
+  border-radius: 20px;
+}
+
+/* 详情：状态行 */
+.medal-detail-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+.mds-earned   { background: #FFF0B0; color: #B07D00; }
+.mds-claimable{ background: #D1FAE5; color: #065F46; }
+.mds-locked   { background: #F5F5F5; color: #999; }
+
+/* 详情：按钮区 */
+.medal-btn-claim {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #06D6A0, #00B894);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 12px rgba(6, 214, 160, 0.35);
+}
+.medal-btn-claim:hover  { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(6,214,160,0.45); }
+.medal-btn-claim:active { transform: scale(0.97); }
+
+.medal-btn-close {
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  color: #999;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1.5px solid #E0E0E0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.medal-btn-close:hover { border-color: #7C3AED; color: #7C3AED; }
