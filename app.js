@@ -1709,7 +1709,7 @@ function toggleDaily(id, score) {
   // 固定任务：完成后弹出自律自报弹窗
   const fixedTask = DAILY_FIXED.find(t => t.id === id);
   if (fixedTask) {
-    const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
     const task = allTasks.find(t => t.id === id);
     // 先标记待审
     state.todayChecked[id] = 'pending';
@@ -1752,7 +1752,7 @@ function toggleDaily(id, score) {
 
   // 可选/作业任务：先提交（isSelf=null），再弹自律弹窗，弹窗确定后更新 Firebase 中的 isSelf
   state.todayChecked[id] = 'pending';
-  const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
   const task2 = allTasks2.find(t => t.id === id);
   // 加入待审加分池，同时立即加积分
   state.pendingAdditions.push({
@@ -3894,7 +3894,7 @@ function tryShowShopBoost(scoreAdded, usePending) {
 function calcApprovedTodayScore() {
   return Object.keys(state.todayChecked).reduce((sum, id) => {
     if (state.todayChecked[id] !== 'approved') return sum;
-    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
     const t = all.find(x => x.id === id);
     return sum + (t ? t.score : 0);
   }, 0);
@@ -4948,7 +4948,7 @@ function toggleDaily(id, score) {
     // 先标记待审，再弹自报
     state.todayChecked[id] = 'pending';
     saveState();
-    const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
     const task = allTasks.find(t => t.id === id);
     if (task && window._firebaseReady) {
       submitPending('daily', id, task.name, score);
@@ -4966,7 +4966,7 @@ function toggleDaily(id, score) {
   // 可选/作业任务：先提交，再弹自律弹窗
   state.todayChecked[id] = 'pending';
   saveState();
-  const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+const allTasks = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
   const task = allTasks.find(t => t.id === id);
   if (task && window._firebaseReady) {
     submitPending('daily', id, task.name, score);
@@ -5053,7 +5053,7 @@ function calcTodayScore() {
 
   // 1. 固定任务 + 可选任务 + 作业（从 todayChecked）
   const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
-    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
+const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
     const t = all.find(x => x.id === id);
     return sum + (t ? t.score : 0);
   }, 0);
