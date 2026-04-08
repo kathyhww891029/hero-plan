@@ -1352,7 +1352,9 @@ function doCheckIn(packType, id, score) {
   }
 
   // 加入待审加分池
-  const label = (packType === 'morning' ? '早晨' : '睡前') + '英雄包·' + id;
+  const task = pack.find(t => t.id === id);
+  const taskName = task ? task.name : id;
+  const label = (packType === 'morning' ? '早晨' : '睡前') + '英雄包·' + taskName;
   const fullTaskId = `${packType}_${id}`;
   state.pendingAdditions.push({
     type: 'pack',
