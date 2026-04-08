@@ -3727,6 +3727,131 @@ function renderDadPage() {
 
 // dadSwitchTab 已移除（子渊页和爸妈页现为独立Tab）
 
+
+// ── 安全清空数据弹窗（受 PIN 保护）────────────────────────────
+// showSecureClearModal：先验证父母 PIN，验证通过才调用 clearAllData
+function showSecureClearModal() {
+  // 移除已有的安全清空弹窗
+  const existing = document.getElementById('secureClearModal');
+  if (existing) existing.remove();
+
+  // ── 检查是否已登录父母身份 ──────────────────────────────
+  // getPins() 和 currentParent 来自 firebase-sync.js
+  let pins = { mom: null, dad: null };
+  try { pins = JSON.parse(localStorage.getItem('heroplan_pins') || '{}'); } catch(e) {}
+
+  const hasPin = pins.mom || pins.dad;
+
+  const modal = document.createElement('div');
+  modal.id = 'secureClearModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:28px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.25);">
+      <div style="font-size:2.2rem;margin-bottom:10px;">🗑️</div>
+      <div style="font-size:1.15rem;font-weight:700;color:#1a1a2e;margin-bottom:4px;">清空所有测试数据</div>
+      <div id="clearWarnText" style="font-size:0.88rem;color:#e74c3c;margin-bottom:16px;line-height:1.6;">
+        ⚠️ 此操作不可恢复！<br>所有积分、打卡记录、英雄成就将被清除。
+      </div>
+      ${!hasPin
+        ? `<div style="background:#fff3cd;border-radius:12px;padding:14px;margin-bottom:16px;text-align:left;">
+            <div style="font-size:0.9rem;font-weight:700;color:#856404;margin-bottom:8px;">⚠️ 尚未设置 PIN 码</div>
+            <div style="font-size:0.82rem;color:#856404;line-height:1.5;">请先在「爸爸妈妈审核中心」设置 PIN 码，再执行清空操作。</div>
+            <div style="font-size:0.78rem;color:#aaa;margin-top:6px;">路径：爸妈页 → 👩妈妈/👨爸爸 → 设置PIN</div>
+           </div>`
+        : `<div style="margin-bottom:16px;">
+            <div style="font-size:0.88rem;color:#555;margin-bottom:10px;">请输入父母 PIN 码确认身份</div>
+            <div style="display:flex;gap:10px;justify-content:center;margin-bottom:8px;">
+              <button id="clearWhoMom" onclick="switchClearWho('mom')"
+                style="flex:1;padding:8px;border-radius:10px;border:2px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:0.88rem;font-weight:700;cursor:pointer;">
+                👩 妈妈
+              </button>
+              <button id="clearWhoDad" onclick="switchClearWho('dad')"
+                style="flex:1;padding:8px;border-radius:10px;border:2px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:0.88rem;font-weight:700;cursor:pointer;">
+                👨 爸爸
+              </button>
+            </div>
+            <input id="clearPinInput" type="password" maxlength="4" placeholder="●●●●"
+              style="width:100%;padding:12px;border-radius:12px;border:2px solid #e0e0e0;font-size:1.4rem;letter-spacing:8px;text-align:center;outline:none;box-sizing:border-box;">
+            <div id="clearPinHint" style="font-size:0.8rem;color:#e74c3c;margin-top:6px;min-height:18px;"></div>
+           </div>`
+      }
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button id="clearCancelBtn"
+          style="flex:1;padding:12px;border-radius:12px;border:none;background:#f0f0f0;color:#555;font-size:1rem;font-weight:700;cursor:pointer;">
+          取消
+        </button>
+        ${hasPin
+          ? `<button id="clearConfirmBtn"
+              style="flex:1;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">
+              确认清空
+            </button>`
+          : ``
+        }
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  let clearSelectedWho = 'mom';
+  // 默认选中妈妈（如果妈妈有PIN）或爸爸
+  if (pins.dad && !pins.mom) clearSelectedWho = 'dad';
+
+  window._clearSelectedWho = clearSelectedWho;
+
+  window.switchClearWho = function(who) {
+    window._clearSelectedWho = who;
+    document.getElementById('clearWhoMom').style.cssText =
+      'flex:1;padding:8px;border-radius:10px;border:2px solid ' + (who==='mom'?'#FF6B35':'#e0e0e0') + ';background:' + (who==='mom'?'#FFF3EE':'#f5f5f5') + ';color:' + (who==='mom'?'#FF6B35':'#555') + ';font-size:0.88rem;font-weight:700;cursor:pointer;';
+    document.getElementById('clearWhoDad').style.cssText =
+      'flex:1;padding:8px;border-radius:10px;border:2px solid ' + (who==='dad'?'#FF6B35':'#e0e0e0') + ';background:' + (who==='dad'?'#FFF3EE':'#f5f5f5') + ';color:' + (who==='dad'?'#FF6B35':'#555') + ';font-size:0.88rem;font-weight:700;cursor:pointer;';
+    document.getElementById('clearPinInput').value = '';
+    document.getElementById('clearPinHint').textContent = '';
+    document.getElementById('clearPinInput').focus();
+  };
+
+  // 初始化选中状态
+  window.switchClearWho(window._clearSelectedWho);
+
+  modal.querySelector('#clearCancelBtn').onclick = () => modal.remove();
+
+  if (hasPin) {
+    const confirmBtn = modal.querySelector('#clearConfirmBtn');
+    const pinInput = document.getElementById('clearPinInput');
+    const pinHint = document.getElementById('clearPinHint');
+
+    confirmBtn.onclick = () => {
+      const pin = pinInput.value.trim();
+      if (!pin) { pinHint.textContent = '请输入 PIN 码'; return; }
+      if (pin !== pins[window._clearSelectedWho]) {
+        pinHint.textContent = '❌ PIN 码错误';
+        pinInput.value = '';
+        pinInput.focus();
+        return;
+      }
+      // PIN 验证通过 → 授权清空
+      window._secureClearAuthorized = true;
+      modal.remove();
+      clearAllData();
+    };
+
+    // 回车确认
+    pinInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') confirmBtn.click();
+    });
+  } else {
+    // 无 PIN：只显示关闭按钮
+    modal.querySelector('#clearCancelBtn').textContent = '我知道了';
+  }
+
+  // 点击遮罩关闭
+  modal.addEventListener('click', e => {
+    if (e.target === modal) modal.remove();
+  });
+}
+
 function clearAllData() {
   // ── 安全检查：如果不是通过 showSecureClearModal 调用，直接拒绝 ──
   if (!window._secureClearAuthorized) {
