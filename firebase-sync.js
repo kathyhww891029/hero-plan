@@ -146,6 +146,20 @@ function updatePendingSelf(type, taskId, date, isSelf) {
   });
 }
 
+// ── 按日期清除 pending 记录（重置今日打卡时调用） ──────────────
+function clearPendingByDate(date) {
+  if (!window._firebaseReady) return;
+  window._firebaseGet(fbRef('pending')).then(snap => {
+    const data = snap.val();
+    if (!data) return;
+    Object.entries(data).forEach(([key, record]) => {
+      if (record.date === date) {
+        window._firebaseRemove(fbRef('pending/' + key));
+      }
+    });
+  });
+}
+
 // ── 加载待审列表 ──────────────────────────────────────────────
 // 辅助函数：根据 taskId 和 type 获取任务图标
 function getTaskIcon(taskId, type) {

@@ -4196,6 +4196,10 @@ function bindEvents() {
       state.hwBlocks = 0;
       state.pendingAdditions = [];
       state.selfReport = {};
+      // 同步清除 Firebase 上当天的 pending 记录
+      if (window._firebaseReady && typeof clearPendingByDate === 'function') {
+        clearPendingByDate(today);
+      }
       saveState();
       renderAll();
     }
