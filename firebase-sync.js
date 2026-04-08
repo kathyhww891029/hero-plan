@@ -181,6 +181,58 @@ function getTaskIcon(taskId, type) {
   return '📋';
 }
 
+// 辅助函数：根据 taskId 和 type 获取任务详情（sub、desc、tip）
+function getTaskDetails(taskId, type) {
+  if (!taskId) return {};
+  
+  // 提取基础ID（去掉日期后缀）
+  const parts = taskId.split('_');
+  const baseId = parts.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts[parts.length - 1])
+    ? parts.slice(0, -1).join('_')
+    : taskId;
+  
+  // 英雄包任务 (morning_mp1, night_np1)
+  if (baseId.startsWith('morning_') || baseId.startsWith('night_')) {
+    const packType = baseId.startsWith('morning_') ? 'morning' : 'night';
+    const taskIdShort = baseId.split('_')[1]; // 'mp1' 或 'np1'
+    const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
+    const task = pack.find(t => t.id === taskIdShort);
+    if (task) return { sub: task.sub || '', desc: task.desc || '', tip: task.tip || '' };
+  }
+  
+  // 全套奖励 (morning_full, night_full)
+  if (baseId === 'morning_full') {
+    return { sub: '早晨三件事全部完成！🌟', desc: '穿衣服+洗脸刷牙+吃早饭全套自主完成', tip: '' };
+  }
+  if (baseId === 'night_full') {
+    return { sub: '睡前全套完成！🌙', desc: '洗澡+收拾书包+按时上床全套自主完成', tip: '' };
+  }
+  
+  // 每日固定任务 (mp1, mp2, mp3, np1, np2, np3)
+  const dailyTask = DAILY_FIXED.find(t => t.id === baseId || t.id === taskId);
+  if (dailyTask) return { sub: dailyTask.sub || '', desc: dailyTask.desc || '', tip: dailyTask.tip || '' };
+  
+  // 作业任务
+  if (type === 'homework' || taskId.includes('homework')) {
+    return { sub: HOMEWORK_TASK.sub || '', desc: HOMEWORK_TASK.speech || '', tip: '' };
+  }
+  
+  // 专注力任务
+  if (type === 'focus' || taskId.includes('focus')) {
+    return { sub: FOCUS_TIME.sub || '', desc: FOCUS_TIME.speech || '', tip: '' };
+  }
+  
+  // 任务卡 - 直接匹配ID
+  const card = TASK_CARDS.find(t => t.id === taskId || t.id === baseId);
+  if (card) return { sub: card.sub || '', desc: card.desc || '', tip: card.tip || '' };
+  
+  // 任务卡 - 尝试从baseId匹配
+  const cardByBase = TASK_CARDS.find(t => t.id === baseId);
+  if (cardByBase) return { sub: cardByBase.sub || '', desc: cardByBase.desc || '', tip: cardByBase.tip || '' };
+  
+  return {};
+}
+
 // 辅助函数：判断是否是补卡记录
 function isBackfillItem(item) {
   // 补卡记录的 extra 是日期格式（YYYY-MM-DD）
@@ -216,12 +268,15 @@ function loadPendingList() {
       const isBackfill = isBackfillItem(item);
       const backfillDate = isBackfill ? formatBackfillDate(item.extra) : '';
       const backfillTag = isBackfill ? `<span class="backfill-tag">📅补卡：${backfillDate}</span>` : '';
+      const taskDetails = getTaskDetails(item.taskId, item.type);
       
       return `
       <div class="pending-item" id="pi-${item.key}" data-step="1">
         <div class="pending-info">
           <div class="pending-name">${icon} ${item.name}</div>
           <div class="pending-meta">${item.date} ${item.time} · ${typeLabel(item.type)} ${backfillTag}</div>
+          ${taskDetails.sub ? `<div class="pending-desc">📌 ${taskDetails.sub}</div>` : ''}
+          ${taskDetails.tip ? `<div class="pending-tip">${taskDetails.tip.replace(/\n/g, '<br>')}</div>` : ''}
           ${item.extra && !isBackfill ? `<div class="pending-extra">${item.extra}</div>` : ''}
           ${item.isSelf === true ? `<div class="child-self-report child-self">💪 孩子自报：自己完成</div>` : ''}
           ${item.isSelf === false ? `<div class="child-self-report child-reminded">👋 孩子自报：爸妈提醒</div>` : ''}

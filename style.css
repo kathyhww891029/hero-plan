@@ -943,6 +943,8 @@ body {
 .pending-name { font-size: 15px; font-weight: 700; color: #2c3e50; }
 .pending-meta { font-size: 12px; color: #95a5a6; margin-top: 2px; }
 .pending-extra { font-size: 12px; color: #7f8c8d; }
+.pending-desc { font-size: 13px; color: #34495e; margin-top: 4px; padding: 4px 8px; background: #f0f7ff; border-radius: 6px; border-left: 3px solid #3498db; }
+.pending-tip { font-size: 11px; color: #7f8c8d; margin-top: 3px; padding: 3px 8px; background: #fef9e7; border-radius: 4px; }
 .child-self-report { font-size: 12px; margin-top: 3px; padding: 2px 8px; border-radius: 10px; display: inline-block; }
 .child-self { background: #e8f5e9; color: #2e7d32; }
 .child-reminded { background: #fff8e1; color: #f57f17; }
