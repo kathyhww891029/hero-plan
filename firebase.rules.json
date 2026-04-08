@@ -2,9 +2,9 @@
   "rules": {
     "pending": {
       ".read": true,
-      ".write": "!data.exists() && newData.hasChildren(['type', 'taskId', 'name', 'score', 'date', 'submittedAt'])",
+      ".write": "(!data.exists() && newData.hasChildren(['type', 'taskId', 'name', 'score', 'date', 'submittedAt'])) || newData.val() === null",
       "$key": {
-        ".write": "!data.exists() || (newData.hasChildren(['isSelf', 'status']) && data.child('status').val() !== 'approved')"
+        ".write": "!data.exists() || newData.val() === null || (newData.hasChildren(['isSelf', 'status']) && data.child('status').val() !== 'approved')"
       }
     },
     "approved": {
