@@ -56,8 +56,8 @@ function speakText(text, btnEl) {
 
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = 'zh-CN';
-  utter.rate = 0.85;   // 稍慢一点，孩子更容易跟上
-  utter.pitch = 1.1;   // 稍高音调，更活泼
+  utter.rate = 0.95;   // 稍快，更活泼
+  utter.pitch = 1.2;   // 更高音调，稚气可爱
   utter.volume = 1.0;
 
   // 使用预选的普通话声音（已排除 zh-HK 粤语），缺省时靠 lang='zh-CN' 兜底
@@ -94,12 +94,30 @@ function speakKnightVoice(text) {
   if (!_zhCNMaleVoice) pickZhCNVoice();
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = 'zh-CN';
-  utter.rate = 0.88;
-  utter.pitch = 0.85;   // 偏低音调，更像男性声音
+  utter.rate = 1.0;     // 轻快活泼
+  utter.pitch = 1.1;   // 音调升高，活泼不机械
   utter.volume = 1.0;
   if (_zhCNMaleVoice) utter.voice = _zhCNMaleVoice;
   window.speechSynthesis.speak(utter);
 }
+
+// ── 卡通音效播放 ─────────────────────────────────────────────
+const _soundCache = {};
+function playCartoonSound(soundName) {
+  const src = 'sounds/' + soundName + '.mp3';
+  if (_soundCache[soundName]) {
+    _soundCache[soundName].currentTime = 0;
+    _soundCache[soundName].play().catch(() => {});
+    return;
+  }
+  const audio = new Audio(src);
+  audio.volume = 0.7;
+  _soundCache[soundName] = audio;
+  audio.play().catch(() => {});
+}
+function playSuccess() { playCartoonSound('success'); }
+function playBonus()   { playCartoonSound('bonus'); }
+function playCeleb()   { playCartoonSound('celebration'); }
 
 // ── 骑士气泡说话：更新气泡内容 + 播报男声 ─────────────────────
 function knightSpeak(msg) {
@@ -1390,7 +1408,7 @@ function doCheckIn(packType, id, score) {
     const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === fullTaskId && p.date === today && p.actualDate === today);
     if (entry) { entry.isSelf = isSelf; saveState(); }
     const toastMsg = `已完成${todayDone}/${pack.length}件，${isFull ? '全套达成！🎉' : '再完成' + (pack.length - todayDone) + '件有惊喜！'}`;
-    showCelebration(isFull ? '🎉' : '✅', isFull ? '全套完成！' : '完成一件！', toastMsg);
+    showCelebration(isFull ? '🎉' : '✅', isFull ? '全套完成！' : '完成一件！', toastMsg, 0, isFull ? 'celeb' : 'success');
   });
 }
 
@@ -1500,7 +1518,7 @@ function toggleFocusBlock(idx) {
   } else {
     // 新增专注块
     if (currentBlocks >= HOMEWORK_TASK.maxBlocks) {
-      showCelebration('🏆', '专注块已满！', `已完成${HOMEWORK_TASK.maxBlocks}个专注块，太棒了！`);
+      showCelebration('🏆', '专注块已满！', `已完成${HOMEWORK_TASK.maxBlocks}个专注块，太棒了！`, 0, 'celeb');
       return;
     }
     const newBlock = currentBlocks + 1;
@@ -1728,7 +1746,7 @@ function completeFocusTime(isOvertime) {
     if (entry) entry.isSelf = isSelf;
     saveState();
     if (isOvertime) {
-      showCelebration('⚡', '超级专注徽章！', `停不下来是最棒的状态！+${pts}分！超级专注徽章已解锁！`);
+      showCelebration('⚡', '超级专注徽章！', `停不下来是最棒的状态！+${pts}分！超级专注徽章已解锁！`, pts, 'bonus');
     } else {
       showCelebration('🧠', '专注力时光完成！', `专注了${FOCUS_TIME.minutes}分钟！+${pts}分！你越来越厉害了！`);
     }
@@ -2203,7 +2221,7 @@ function upgradeToPhase(phase) {
   state.currentPhase = phase;
   saveState();
   renderAll();
-  showCelebration('🚀', `已升级至 Phase ${phase}！`, '推荐任务已更新，继续冒险！');
+  showCelebration('🚀', `已升级至 Phase ${phase}！`, '推荐任务已更新，继续冒险！', 0, 'bonus');
 }
 
 // ── 迷宫语音引导气泡 ────────────────────────────────────────
@@ -3400,9 +3418,9 @@ function claimCard(id, isSelf) {
   const claimedDates = state.weeklyCardClaims[id] || [];
   if (claimedDates.length >= maxClaims) {
     if (isHeroCard) {
-      showCelebration('🏆', '本周7次全完成！', `「${card.name}」这周每天都完成啦！下周继续加油！🎯`);
+      showCelebration('🏆', '本周7次全完成！', `「${card.name}」这周每天都完成啦！下周继续加油！🎯`, 0, 'celeb');
     } else {
-      showCelebration('🚫', '本周已领取！', `「${card.name}」本周完成过了，下周再来挑战其他卡吧！🎯`);
+      showCelebration('🚫', '本周已领取！', `「${card.name}」本周完成过了，下周再来挑战其他卡吧！🎯`, 0, 'success');
     }
     return;
   }
@@ -3477,9 +3495,9 @@ function claimCard(id, isSelf) {
   if (newAch && newAch.id !== state.weeklyAchievement) {
     state.weeklyAchievement = newAch.id;
     saveState();
-    setTimeout(() => showCelebration(newAch.icon, `${newAch.level}成就！`, `本周完成${state.weeklyCardCount}张任务卡！周末结算+${newAch.bonusScore}分！`, newAch.bonusScore), 800);
+    setTimeout(() => showCelebration(newAch.icon, `${newAch.level}成就！`, `本周完成${state.weeklyCardCount}张任务卡！周末结算+${newAch.bonusScore}分！`, newAch.bonusScore, 'celeb'), 800);
   } else {
-    showCelebration('⏳', `「${card.name}」已申请！`, `等爸爸妈妈审核后 +${card.score}分入账！`, card.score);
+    showCelebration('⏳', `「${card.name}」已申请！`, `等爸爸妈妈审核后 +${card.score}分入账！`, card.score, 'success');
   }
 }
 
@@ -3579,7 +3597,7 @@ function redeemItem(id, name, cost, isEgg) {
   state.shopHistory.push({ id, name, cost, date: todayStr() });
   saveState();
   renderAll();
-  showCelebration('🎁', `兑换成功！`, `「${name}」已兑换！\n剩余积分：${state.totalScore}分`);
+  showCelebration('🎁', `兑换成功！`, `「${name}」已兑换！\n剩余积分：${state.totalScore}分`, 0, 'bonus');
 }
 
 // ── 渲染跳绳 ───────────────────────────────────────────────────
@@ -3628,7 +3646,7 @@ document.getElementById('btnRopeSubmit').addEventListener('click', () => {
     });
     if (newlyUnlocked.length > 0) {
       setTimeout(() => {
-        showCelebration('🪢', `新里程碑解锁！`, `去英雄挑战卡领取对应奖励！`);
+        showCelebration('🪢', `新里程碑解锁！`, `去英雄挑战卡领取对应奖励！`, 0, 'bonus');
       }, 500);
     }
   }
@@ -3636,7 +3654,7 @@ document.getElementById('btnRopeSubmit').addEventListener('click', () => {
   document.getElementById('ropeInput').value = '';
   renderAll();
   if (val > prev) {
-    showCelebration('🪢', `新记录！${val}个！`, `比之前多了${val-prev}个！超厉害！⚡`);
+    showCelebration('🪢', `新记录！${val}个！`, `比之前多了${val-prev}个！超厉害！⚡`, 0, 'bonus');
   }
 });
 
@@ -3778,12 +3796,12 @@ document.getElementById('btnDadWin').addEventListener('click', () => {
   saveState();
   closeModal('eggModal');
   renderAll();
-  showCelebration('🏆', '爸爸撑住了！', '孩子+5分奖励！爸爸真的很厉害！😄');
+  showCelebration('🏆', '爸爸撑住了！', '孩子+5分奖励！爸爸真的很厉害！😄', 5, 'bonus');
   setTimeout(() => tryShowShopBoost(5), 1600);
 });
 document.getElementById('btnDadSleep').addEventListener('click', () => {
   closeModal('eggModal');
-  showCelebration('😴', '爸爸睡着了...', '哈哈！拍下来存证！下次再来挑战！📸');
+  showCelebration('😴', '爸爸睡着了...', '哈哈！拍下来存证！下次再来挑战！📸', 0, 'success');
 });
 document.getElementById('btnEggClose').addEventListener('click', () => closeModal('eggModal'));
 
@@ -3809,7 +3827,7 @@ function showToast(msg, duration) {
 }
 
 // ── 庆祝弹窗 ───────────────────────────────────────────────────
-function showCelebration(emoji, title, desc, score = 0) {
+function showCelebration(emoji, title, desc, score = 0, soundType = 'success') {
   const modal = document.getElementById('celebModal');
   const emojiEl = document.getElementById('celebEmoji');
   const titleEl = document.getElementById('celebTitle');
@@ -3838,6 +3856,11 @@ function showCelebration(emoji, title, desc, score = 0) {
   
   // 显示弹窗
   modal.style.display = 'flex';
+  
+  // 播放卡通音效
+  if (soundType === 'celeb') playCeleb();
+  else if (soundType === 'bonus') playBonus();
+  else playSuccess();
   
   // 启动彩纸粒子效果
   createConfetti(30);
