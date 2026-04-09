@@ -113,7 +113,7 @@ function parentLogout() {
 
 // ── 提交待审申请（孩子打卡时调用） ────────────────────────────
 function submitPending(type, id, name, score, extra, isSelf) {
-  if (!window._firebaseReady) return null;
+  if (!isFirebaseReady()) return null;
   const record = {
     type,       // 'daily' | 'card' | 'rope' | 'homework' | 'focus' | 'pack'
     taskId: id,
@@ -132,7 +132,7 @@ function submitPending(type, id, name, score, extra, isSelf) {
 
 // 更新待审记录的 isSelf（用于自律弹窗确定后更新 Firebase 中的记录）
 function updatePendingSelf(type, taskId, date, isSelf) {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   // 在 pending 中找到对应记录并更新 isSelf
   window._firebaseGet(fbRef('pending')).then(snap => {
     const data = snap.val();
@@ -148,12 +148,12 @@ function updatePendingSelf(type, taskId, date, isSelf) {
 
 // ── 按日期清除 pending 记录（重置今日打卡时调用） ──────────────
 function clearPendingByDate(date) {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   window._firebaseGet(fbRef('pending')).then(snap => {
     const data = snap.val();
     if (!data) return;
     Object.entries(data).forEach(([key, record]) => {
-      if (record.date === date) {
+      if (record.date === date && !record.isBackfill) {
         window._firebaseRemove(fbRef('pending/' + key));
       }
     });
@@ -261,7 +261,7 @@ function formatBackfillDate(dateStr) {
 }
 
 function loadPendingList() {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   window._firebaseOnValue(fbRef('pending'), (snapshot) => {
     const el = document.getElementById('pendingList');
     const batchBtns = document.getElementById('batchBtns');
@@ -413,7 +413,7 @@ function calcOptionalEffectiveScore(item, score) {
 
 // 内部实现：审核通过（isSelf 由父母在第二步明确选择）
 function doApproveOne(key, score, name, taskId, taskType, isSelf) {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   // 固定任务地板机制：可选任务检查
   const fakeItem = { type: taskType || 'daily', taskId: taskId || '' };
   const effectiveScore = calcOptionalEffectiveScore(fakeItem, score);
@@ -445,7 +445,7 @@ function doApproveOne(key, score, name, taskId, taskType, isSelf) {
 
 // 内部实现：驳回单条
 function doRejectOne(key, name, taskId, taskType, score) {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   window._firebasePush(fbRef('reviewed'), {
     name, score: 0, originalScore: score, result: 'rejected',
     reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
@@ -453,10 +453,7 @@ function doRejectOne(key, name, taskId, taskType, score) {
     date: new Date().toISOString().slice(0, 10)
   });
   // 孩子完成时已加积分，驳回时需扣回
-  window._firebaseGet(fbRef('syncScore')).then(snap => {
-    const cur = snap.val() || 0;
-    window._firebaseSet(fbRef('syncScore'), Math.max(0, cur - (score || 0)));
-  });
+  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(-(score || 0)));
   // 更新本地：审核驳回
   if (typeof onParentReject === 'function') {
     onParentReject(taskType || 'daily', taskId || '', null, score || 0);
@@ -468,7 +465,7 @@ function doRejectOne(key, name, taskId, taskType, score) {
 // ── 全部通过 ──────────────────────────────────────────────────
 // 第一步：弹出自律选择 modal
 function approveAll() {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   showBatchApproveModal();
 }
 
@@ -523,7 +520,7 @@ function doApproveAllWithSelf(isSelf) {
 
 // ── 全部驳回 ──────────────────────────────────────────────────
 function rejectAll() {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   if (!confirm('确定要驳回所有待审记录吗？')) return;
   window._firebaseGet(fbRef('pending')).then(snap => {
     const data = snap.val();
@@ -545,9 +542,7 @@ function rejectAll() {
     });
     // 扣减 Firebase 总分
     if (totalDeduct > 0) {
-      window._firebaseGet(fbRef('syncScore')).then(s2 => {
-        window._firebaseSet(fbRef('syncScore'), Math.max(0, (s2.val() || 0) - totalDeduct));
-      });
+      window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(-totalDeduct));
     }
     showParentToast('❌ 全部已驳回');
   });
@@ -555,7 +550,7 @@ function rejectAll() {
 
 // ── 加载已审历史 ──────────────────────────────────────────────
 function loadReviewedList() {
-  if (!window._firebaseReady) return;
+  if (!isFirebaseReady()) return;
   window._firebaseOnValue(fbRef('reviewed'), (snapshot) => {
     const el = document.getElementById('reviewedList');
     if (!el) return;
@@ -588,9 +583,7 @@ function addManualBonus() {
     reviewedAt: Date.now(),
     date: new Date().toISOString().slice(0, 10)
   });
-  window._firebaseGet(fbRef('syncScore')).then(s => {
-    window._firebaseSet(fbRef('syncScore'), (s.val() || 0) + score);
-  });
+  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
   document.getElementById('bonusInput').value = '';
   document.getElementById('bonusReason').value = '';
   showParentToast(`🎁 已发放 +${score}分！`);
@@ -624,15 +617,15 @@ function adjustScore() {
     reviewedAt: Date.now(),
     date: new Date().toISOString().slice(0, 10)
   });
-  // 更新 Firebase syncScore
-  window._firebaseGet(fbRef('syncScore')).then(s => {
+  // 更新 Firebase syncScore（先读检查避免负数，再用 increment 原子操作）
+  window._firebaseGet(fbRef('syncScore/score')).then(s => {
     const current = s.val() || 0;
     const newScore = current + score;
     if (newScore < 0) {
       showParentToast('❌ 分数不能为负数！');
       return;
     }
-    window._firebaseSet(fbRef('syncScore'), newScore);
+    window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
     // 同时更新本地 state
     state.totalScore = newScore;
     saveState();
@@ -663,8 +656,8 @@ function showParentToast(msg) {
 
 // ── 监听 Firebase syncScore → 同步到本地 state ───────────────
 function listenSyncScore() {
-  if (!window._firebaseReady) return;
-  window._firebaseOnValue(fbRef('syncScore'), (snapshot) => {
+  if (!isFirebaseReady()) return;
+  window._firebaseOnValue(fbRef('syncScore/score'), (snapshot) => {
     const serverScore = snapshot.val();
     if (serverScore !== null && serverScore !== undefined) {
       if (state.totalScore !== serverScore) {
@@ -748,9 +741,7 @@ function recordHeroAction(checkId, name, score, praise) {
   });
 
   // 2. 同步积分
-  window._firebaseGet(fbRef('syncScore')).then(s => {
-    window._firebaseSet(fbRef('syncScore'), (s.val() || 0) + score);
-  });
+  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
 
   // 3. 存入英雄行为历史（供子渊Tab查看）
   window._firebasePush(fbRef('heroActions'), {
@@ -788,9 +779,7 @@ function submitWeeklyPraise() {
   });
 
   // 同步积分
-  window._firebaseGet(fbRef('syncScore')).then(s => {
-    window._firebaseSet(fbRef('syncScore'), (s.val() || 0) + score);
-  });
+  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
 
   // 存入每周评价历史（供子渊Tab查看）
   window._firebaseSet(fbRef(`weeklyPraise/${weekStr}`), {
@@ -818,7 +807,7 @@ function getWeekStartStr() {
 // ── 子渊端：渲染英雄行为历史（每日记录 + 每周评价）──────────────
 function renderKidHeroHistory() {
   const el = document.getElementById('kidHeroHistory');
-  if (!el || !window._firebaseReady) return;
+  if (!el || !isFirebaseReady()) return;
 
   el.innerHTML = '<div style="text-align:center;color:#ccc;font-size:13px;padding:12px">加载中…</div>';
 
@@ -1004,4 +993,4 @@ window.addEventListener('firebaseReady', () => {
   listenSyncScore();
 });
 // 如果已经就绪（脚本加载顺序问题）
-if (window._firebaseReady) listenSyncScore();
+if (isFirebaseReady()) listenSyncScore();

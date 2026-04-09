@@ -1,0 +1,24 @@
+#!/usr/bin/expect -f
+
+set env(TENCENTCLOUD_SECRETID) "AKIDaBmGdt8IKDVp9MSK0VotmSt9BzZx97tR"
+set env(TENCENTCLOUD_SECRETKEY) "QdgaHrFdozzsa8VgeQ0NZZK0X0P3BKSe"
+
+set timeout 300
+log_user 1
+
+spawn node ./node_modules/@cloudbase/cli/dist/standalone/cli.js hosting deploy ./app.js /app.js
+
+expect {
+    "请选择环境" {
+        send "\r"
+        exp_continue
+    }
+    "确认" {
+        send "y\r"
+        exp_continue
+    }
+    eof
+}
+
+catch wait result
+exit [lindex $result 3]

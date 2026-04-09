@@ -1,0 +1,40 @@
+#!/usr/bin/expect -f
+
+set env(TENCENTCLOUD_SECRETID) "AKIDaBmGdt8IKDVp9MSK0VotmSt9BzZx97tR"
+set env(TENCENTCLOUD_SECRETKEY) "QdgaHrFdozzsa8VgeQ0NZZK0X0P3BKSe"
+set env(TENCENTCLOUD_ENV_ID) "kathyhww1029-7gop3h5x37223dd9"
+
+set timeout 120
+
+if {[llength $argv] < 2} {
+    puts "Usage: $argv0 <localFile> <cloudPath>"
+    exit 1
+}
+
+set localFile [lindex $argv 0]
+set cloudPath [lindex $argv 1]
+
+spawn node ./node_modules/@cloudbase/cli/dist/standalone/cli.js hosting deploy $localFile $cloudPath
+
+expect {
+    "请选择环境" {
+        send "\r"
+        exp_continue
+    }
+    -re "(上传成功|部署成功|done|success|成功)" {
+        puts "\n=== SUCCESS ==="
+        exp_continue
+    }
+    -re "(失败|error|Error)" {
+        puts "\n=== ERROR ==="
+        exp_continue
+    }
+    timeout {
+        puts "\n=== TIMEOUT ==="
+        exit 1
+    }
+    eof
+}
+
+catch wait result
+exit [lindex $result 3]

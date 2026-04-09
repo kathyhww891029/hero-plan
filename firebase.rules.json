@@ -2,9 +2,9 @@
   "rules": {
     "pending": {
       ".read": true,
-      ".write": "(!data.exists() && newData.hasChildren(['type', 'taskId', 'name', 'score', 'date', 'submittedAt'])) || newData.val() === null",
+      ".write": "auth != null && ((!data.exists() && newData.hasChildren(['type', 'taskId', 'name', 'score', 'date', 'submittedAt'])) || newData.val() === null)",
       "$key": {
-        ".write": "!data.exists() || newData.val() === null || (newData.hasChildren(['isSelf', 'status']) && data.child('status').val() !== 'approved')"
+        ".write": "auth != null && (!data.exists() || newData.val() === null || (newData.hasChildren(['isSelf', 'status']) && data.child('status').val() !== 'approved'))"
       }
     },
     "approved": {
@@ -37,11 +37,11 @@
     },
     "syncScore": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null"
     },
     "reviewed": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null"
     }
   }
 }

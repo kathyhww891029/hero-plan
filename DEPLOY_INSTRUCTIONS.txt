@@ -1,0 +1,48 @@
+Hero-Plan 修复部署说明
+
+由于网络限制，无法直接从服务器上传文件到腾讯云。
+
+请按以下步骤操作：
+
+1. 打开 Chrome 浏览器，访问：
+   https://kathyhww1029-7gop3h5x37223dd9-1420290341.tcloudbaseapp.com
+
+2. 按 F12 打开开发者工具，点击 "Console（控制台）" 标签
+
+3. 把下面这段代码完整复制粘贴到控制台，按回车执行：
+
+---
+
+(async function deployHeroPlan() {
+  const BUCKET = '7f9f-static-kathyhww1029-7gop3h5x37223dd9-1420290341';
+  const REGION = 'ap-mumbai';
+
+  // 简单的 SHA1 HMAC (CryptoJS 无法加载，用这个替代)
+  async function sha1(secret, msg) {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', enc.encode(secret), {name:'HMAC',hash:'SHA-1'}, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(msg));
+    return Array.from(new Uint8Array(sig)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function upload(content, path, type) {
+    const t = Math.floor(Date.now()/1000);
+    const qSignTime = (t-60)+';'+(t+3600);
+    const s = 'PUT\n/'+path+'\n\n\n'+qSignTime+'\n';
+    const sig = await sha1('QdgaHrFdozzsa8VgeQ0NZZK0X0P3BKSe', s);
+    const auth = 'q-sign-algorithm=sha1&q-ak=AKIDaBmGdt8IKDVp9MSK0VotmSt9BzZx97tR&q-sign-time='+qSignTime+'&q-key-time='+qSignTime+'&q-header-list=content-type;host&q-url-param-list=&q-signature='+sig;
+    const host = BUCKET+'.cos.'+REGION+'.myqcloud.com';
+    const r = await fetch('https://'+host+'/'+path, {
+      method:'PUT',
+      headers:{'Authorization':auth,'Content-Type':type,'Content-Length':content.length,'Host':host,'x-cos-acl':'public-read'},
+      body: content
+    });
+    return r.ok;
+  }
+
+  // 文件内容（修复后的，需要获取最新版本）
+  console.log('请把修复后的文件内容通过以下方式提供...');
+  console.log('方案：把 index.html 和 app.js 的内容保存到剪贴板');
+})();
+
+---

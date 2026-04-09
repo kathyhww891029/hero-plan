@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="英雄计划">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <script>
   // 注册 Service Worker（PWA离线支持）
   if ('serviceWorker' in navigator) {
@@ -22,37 +22,184 @@
     });
   }
 </script>
-<!-- Firebase SDK -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, set, onValue, push, update, remove, get }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+<!-- 腾讯云开发 TCB SDK -->
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
+<script>
+  // 环境配置
+  const TCB_ENV_ID = 'kathyhww1029-7gop3h5x37223dd9';
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyAKUte7PgqqMRfrO8fvSOk2sw4k1Fn-yOw",
-    authDomain: "hero-plan.firebaseapp.com",
-    databaseURL: "https://hero-plan-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "hero-plan",
-    storageBucket: "hero-plan.firebasestorage.app",
-    messagingSenderId: "734472280874",
-    appId: "1:734472280874:web:589c0e7ec85e0b2e5b1c53"
+  // 初始化 TCB
+  const app = cloudbase.init({
+    env: TCB_ENV_ID
+  });
+
+  // 匿名登录
+  app.auth().signInAnonymously().then(() => {
+    console.log('🔐 腾讯云开发匿名登录成功');
+    // 兼容 app.js 的 isFirebaseReady() 检查
+    window._firebaseCurrentUser = { uid: 'anonymous' };
+    // 重新赋值数据库引用（确保 auth 完成后再获取）
+    window._firebaseDB = window._tcbDB();
+    // 同时 dispatch firebaseReady，让 app.js 的 renderAll() 能执行
+    window.dispatchEvent(new Event('firebaseAuthReady'));
+    window.dispatchEvent(new Event('firebaseReady'));
+  }).catch(err => {
+    console.error('❌ 匿名登录失败:', err);
+    // 即使登录失败也标记就绪，避免阻塞应用
+    window._firebaseCurrentUser = { uid: 'anonymous' };
+    window.dispatchEvent(new Event('firebaseReady'));
+  });
+
+  // ── Firebase API 兼容层（保持 app.js / firebase-sync.js 不动）────────────────
+
+  // TCB 数据库引用 → Firebase ref 兼容
+  function tcbRef(db, path) {
+    if (!path || path === '') return db.collection('');
+    // Firebase path: 'pending' → collection('pending')
+    //               'pending/key' → collection('pending').doc('key')
+    //               'weeklyPraise/weekStr' → collection('weeklyPraise').doc('weekStr')
+    const parts = path.split('/');
+    let query = db.collection(parts[0]);
+    if (parts.length >= 2 && parts[1]) {
+      query = query.doc(parts[1]);
+    }
+    return query;
+  }
+
+  // TCB add → Firebase push 兼容（返回带 key 的 Thenable）
+  function tcbPush(collectionRef, data) {
+    return collectionRef.add(data).then(res => ({
+      key: res.id,
+      then: (cb) => cb({ val: () => ({ key: res.id }) }),
+      catch: (cb) => Promise.resolve().catch(cb)
+    }));
+  }
+
+  // TCB set → Firebase set 兼容
+  // TCB docRef 有 id 属性，collectionRef 没有
+  function tcbSet(docRef, data) {
+    if (docRef.id !== undefined) {
+      // 单文档
+      return docRef.set(data);
+    } else {
+      // 集合引用 → 创建新文档
+      return docRef.add(data);
+    }
+  }
+
+  // TCB get → Firebase get 兼容（snapshot.val() 格式）
+  function tcbGet(docOrCollRef) {
+    const isDoc = docOrCollRef.id !== undefined;
+    if (isDoc) {
+      // 单文档查询
+      return docOrCollRef.get().then(res => ({
+        val: () => res.data || null
+      }));
+    } else {
+      // 集合查询 → Firebase: { docId: docData, ... }
+      return docOrCollRef.get().then(res => {
+        const obj = {};
+        (res.data || []).forEach(doc => { obj[doc._id] = doc; });
+        return { val: () => obj };
+      });
+    }
+  }
+
+  // TCB update → Firebase update 兼容
+  function tcbUpdate(docRef, data) {
+    return docRef.update(data);
+  }
+
+  // TCB remove → Firebase remove 兼容
+  function tcbRemove(docRef) {
+    return docRef.remove();
+  }
+
+  // TCB onSnapshot → Firebase onValue 兼容（回调式）
+  // 返回 stop() 函数供 firebase-sync.js 中可能的清理用
+  function tcbOnValue(path, callback) {
+    const db = app.database();
+    const parts = path.split('/');
+    let ref;
+    if (parts.length === 1) {
+      ref = db.collection(parts[0]);
+    } else {
+      ref = db.collection(parts[0]).doc(parts[1]);
+    }
+
+    // 监听实时变化（TCB watch）
+    const watcher = ref.watch({
+      onChange: (snapshot) => {
+        // TCB snapshot: { docs: [...], total: N }
+        // Firebase snapshot.val(): { docId: docData, ... }
+        let val;
+        if (Array.isArray(snapshot.docs)) {
+          const obj = {};
+          snapshot.docs.forEach(doc => { obj[doc._id] = doc; });
+          val = obj;
+        } else {
+          val = null;
+        }
+        callback({ val: () => val });
+      },
+      onError: (err) => {
+        console.error('TCB 监听错误:', path, err);
+      }
+    });
+
+    // 返回停止监听的函数
+    return () => { if (watcher && watcher.close) watcher.close(); };
+  }
+
+  // TCB 原子递增（Firebase increment 兼容）
+  function tcbIncrement(delta) {
+    // TCB 没有原子 increment，模拟：返回特殊标记，由 tcbSet 展开
+    return { __tcb_inc: delta };
+  }
+  // 拦截 tcbSet，对含 __tcb_inc 的字段做原子递增
+  function tcbSetWithInc(docRef, data) {
+    const hasInc = data && typeof data === 'object' &&
+      Object.values(data).some(v => v && v.__tcb_inc !== undefined);
+    if (hasInc) {
+      // 读-改-写两步走（TCB 无原子递增，这是最小侵入方案）
+      return docRef.get().then(res => {
+        const current = res.data || {};
+        const newData = { ...current };
+        for (const k in data) {
+          if (data[k] && data[k].__tcb_inc !== undefined) {
+            newData[k] = (newData[k] || 0) + data[k].__tcb_inc;
+          } else {
+            newData[k] = data[k];
+          }
+        }
+        return docRef.set(newData);
+      });
+    }
+    return docRef.set(data);
+  }
+
+  // 获取数据库实例
+  window._tcbDB = () => app.database();
+  window._firebaseDB = window._tcbDB();  // 供 app.js / firebase-sync.js 使用
+
+  // 统一封装：ref + 常见操作
+  window._firebaseRef = (db, path) => tcbRef(db, path);
+  window._firebaseSet = (ref, data) => {
+    // 特殊处理 syncScore 的 increment（delta 是 {__tcb_inc: N}）
+    if (data && data.__tcb_inc !== undefined) {
+      return tcbSetWithInc(ref, data);
+    }
+    return tcbSet(ref, data);
   };
-
-  const firebaseApp = initializeApp(firebaseConfig);
-  const db = getDatabase(firebaseApp);
-
-  // 挂载到全局供 app.js 使用
-  window._firebaseDB = db;
-  window._firebaseRef = ref;
-  window._firebaseSet = set;
-  window._firebaseOnValue = onValue;
-  window._firebasePush = push;
-  window._firebaseUpdate = update;
-  window._firebaseRemove = remove;
-  window._firebaseGet = get;
+  window._firebaseOnValue = tcbOnValue;
+  window._firebasePush = tcbPush;
+  window._firebaseUpdate = tcbUpdate;
+  window._firebaseRemove = tcbRemove;
+  window._firebaseGet = tcbGet;
+  window._firebaseIncrement = tcbIncrement;
   window._firebaseReady = true;
 
-  // 通知 app.js Firebase 已就绪
+  // 通知 app.js / firebase-sync.js TCB 已就绪
   window.dispatchEvent(new Event('firebaseReady'));
 </script>
 </head>
@@ -601,8 +748,10 @@
   </div>
 </div>
 
-<script src="data.js"></script>
-<script src="app.js?v=2"></script>
-<script src="firebase-sync.js?v=72"></script>
+<script src="data.js?v=3"></script>
+<script src="hero-constants.js?v=5"></script>
+<script src="hero-state.js?v=5"></script>
+<script src="app.js?v=5"></script>
+<script src="firebase-sync.js?v=73"></script>
 </body>
 </html>

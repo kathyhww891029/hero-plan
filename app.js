@@ -2,6 +2,19 @@
    英雄成长计划 · 主逻辑
 ══════════════════════════════════════════════════════════════ */
 
+// ── Firebase Auth Guard ────────────────────────────────────────
+// 数据库连接 且 匿名用户已登录（auth token 会自动附在所有请求上）
+function isFirebaseReady() {
+  return !!(window._firebaseReady && window._firebaseCurrentUser);
+}
+
+// ── 专注计时辅助 ───────────────────────────────────────────────
+// 根据开始时间戳精确计算已过秒数（刷新后恢复也准确）
+function getElapsedFocusSeconds() {
+  if (!state.focusStartTimestamp) return state.focusSeconds;
+  return Math.floor((Date.now() - state.focusStartTimestamp) / 1000);
+}
+
 // ── 语音朗读引擎 ───────────────────────────────────────────────
 let _currentUtterance = null;
 let _speakingBtn = null;
@@ -190,152 +203,48 @@ function updateWelcomeArea() {
 }
 
 
-const STATE_KEY = 'heroplan_v4';
-let state = loadState();
+// ═══════════════════════════════════════════════════════════════
+// 状态层已迁移至 hero-state.js
+// ═══════════════════════════════════════════════════════════════
+// state, defaultState(), loadState(), saveState(), calcTodayScore(),
+// updateTodayScore(), onParentApprove(), onParentReject(),
+// loadTotalScoreFromFirebase(), migrateWeeklyCardClaims(),
+// checkWeekUnlock(), checkDayReset() 均从 hero-state.js 加载
+// ═══════════════════════════════════════════════════════════════
 
-function defaultState() {
-  return {
-    totalScore: 25,   // 子渊在正式上线前已积累 25 分（2026-04-06 起始分）
-    mazeKnightNode: 'n_knight_spawn',  // 骑士当前位置节点（独立于迷宫节点）
-    pendingAdditions: [],    // [{type, taskId, name, score, date, isSelf}] 待审加分，审核通过后才正式入账
-    reviewedSelfLog: {},    // { "2026-04": { "2026-04-05": true, ... } } 记录每月自律（自主完成且审核通过）的日期
-    todayChecked: {},         // { taskId: true }
-
-    cardClaims: {},           // { cardId: count }
-    shopHistory: [],          // [{ id, name, cost, date }]
-    ropeRecords: [],          // [{ date, count }]
-    ropeMax: 0,
-    ropeMilestonesAchieved: [],
-    weekStart: getWeekStart(),
-    weeklyScore: 25,  // 本周起始分（含 2026-04-06 积累的 25 分）
-    consecutiveDays: {},      // 连续打卡追踪（旧字段保留）
-    consecutive930: 0,        // 连续9点半上床天数（旧字段保留）
-    // 连续天数（新版，跨天累积不被重置）
-    streaks: {
-      morning:  { count: 0, lastDate: '' },
-      night:    { count: 0, lastDate: '' },
-      homework: { count: 0, lastDate: '' },
-      focus:    { count: 0, lastDate: '' },
-    },
-    weekUnlocked: false,      // 第一周是否已解锁专项卡
-    weekStartDate: todayStr(),
-    // 英雄包状态
-    morningPack: {},          // { mp1:true, mp2:true, mp3:true }
-    nightPack: {},            // { np1:true, np2:true, np3:true }
-    morningPackBonus: false,  // 今日早晨英雄包全套奖励已发
-    nightPackBonus: false,    // 今日睡前英雄包全套奖励已发
-    // 写作业（简化单步）
-    hwCompleted: false,       // 已写完作业
-    hwBlocks: 0,              // 今日已完成专注块数
-    // 专注力时光
-    focusSelected: null,      // 今日选择的活动 id
-    focusStarted: false,      // 已开始计时
-    focusCompleted: false,    // 已完成15分钟
-    focusOvertime: false,     // 超时继续（超级专注徽章）
-    // 周度成就
-    weeklyCardCount: 0,       // 本周已完成任务卡数
-    weeklyCardClaims: {},     // 本周每张卡领取次数 {cardId: count}
-    weeklyAchievement: null,  // 本周成就等级
-    // 当前培养阶段（爸妈设置）
-    currentPhase: 1,
-    phaseStartDate: null,
-    // 阅读挑战联动
-    readCount: 0,             // 累计完成阅读卡总次数（每领取一张+1）
-    // 今日自选挑战卡
-    selfPickCard: null,       // 今日选择的挑战卡 id（每天可换）
-    selfPickClaimed: false,   // 今日自选卡是否已领分
-    // 勋章系统
-    medalClaims: {},          // { medalId: timestamp } 已获得的勋章
-    categoryPoints: {         // 分类积分（用于解锁）
-      focus: 0, habit: 0, plan: 0, challenge: 0,
-      reflect: 0, creative: 0, read: 0, sport: 0
-    },
-    ropeStreak: { count: 0, lastDate: '' }, // 跳绳连续天数
-  };
-}
-function loadState() {
-  try {
-    const s = localStorage.getItem(STATE_KEY);
-    return s ? Object.assign(defaultState(), JSON.parse(s)) : defaultState();
-  } catch(e) { return defaultState(); }
-}
-function saveState() {
-  localStorage.setItem(STATE_KEY, JSON.stringify(state));
-}
-function todayStr() {
-  // 使用本地时区，避免深夜 UTC 偏差导致日期错误
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-function yesterdayStr() {
-  // 获取昨天的日期字符串
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-function getWeekStart() {
-  const d = new Date();
-  const day = d.getDay() || 7;
-  d.setDate(d.getDate() - day + 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
-}
-
-// ── 数据格式迁移（v66：weeklyCardClaims[id] 从数字改为日期数组）──
-function migrateWeeklyCardClaims() {
-  if (!state.weeklyCardClaims) return;
-  let changed = false;
-  for (const id in state.weeklyCardClaims) {
-    const val = state.weeklyCardClaims[id];
-    // 旧格式：数字（领取次数）→ 新格式：日期数组
-    if (typeof val === 'number') {
-      const today = todayStr();
-      const weekStart = getWeekStart();
-      // 如果是本周内，且领取次数>0，则假设领取在今天（粗略迁移）
-      state.weeklyCardClaims[id] = val > 0 ? [today] : [];
-      changed = true;
-    } else if (!Array.isArray(val)) {
-      // 未知格式 → 空数组
-      state.weeklyCardClaims[id] = [];
-      changed = true;
-    }
-  }
-  if (changed) saveState();
-}
-
-// ── 初始化 ────────────────────────────────────────────────────
+// ── DOMContentLoaded 初始化（保持在此文件，因涉及 UI 渲染）──────
 document.addEventListener('DOMContentLoaded', () => {
-  migrateWeeklyCardClaims(); // 先迁移旧数据格式
+  state = loadState();
+  migrateWeeklyCardClaims();
   checkWeekUnlock();
   checkDayReset();
-  renderAll();
+
+  if (isFirebaseReady()) {
+    loadTotalScoreFromFirebase();
+    renderAll();
+  } else {
+    window.addEventListener('firebaseReady', () => {
+      loadTotalScoreFromFirebase();
+      renderAll();
+    }, { once: true });
+  }
+
+  // Page Visibility：tab 从后台恢复时，精确计算计时器
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.focusTimerRunning) {
+      const elapsed = getElapsedFocusSeconds();
+      state.focusSeconds = elapsed;
+      const d1 = document.getElementById('focusTimerDisplay');
+      const d2 = document.getElementById('focusTimerBig');
+      const t = formatFocusSecs(elapsed);
+      if (d1) d1.textContent = t;
+      if (d2) d2.textContent = t;
+    }
+  });
   bindEvents();
 });
 
-function checkWeekUnlock() {
-  // 第一周后自动解锁专项卡（距创建超7天）
-  if (!state.weekStartDate) state.weekStartDate = todayStr();
-  const start = new Date(state.weekStartDate);
-  const now = new Date();
-  const days = Math.floor((now - start) / 86400000);
-  if (days >= 7 && !state.weekUnlocked) {
-    state.weekUnlocked = true;
-    saveState();
-  }
-}
-
-function checkDayReset() {
-  // 检查是否新的一天，不自动重置（由按钮手动触发）
-}
-
+// ── 完整渲染（供初始化时调用）──────────────────────────────────
 function renderAll() {
   renderHeader();
   renderDaily();
@@ -347,7 +256,6 @@ function renderAll() {
   renderDadPage();
   renderWeekly();
   renderAchievements();
-  // 英雄行为历史（子渊Tab）
   renderDisciplineBar();
   if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
 }
@@ -372,17 +280,9 @@ function renderHeader() {
   renderMonthlyCalendar();
 }
 
-// ── 月历打卡记录 ───────────────────────────────────────────────
+// ── 月历打卡记录（保持在此，UI 渲染函数）────────────────────────
 var _calendarYear = new Date().getFullYear();
 var _calendarMonth = new Date().getMonth();
-
-function renderMonthlyCalendar() {
-  const container = document.getElementById('monthlyCalendar');
-  if (!container) return;
-  
-  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-  const year = _calendarYear;
-  const month = _calendarMonth;
   
   // 获取当月第一天和最后一天
   const firstDay = new Date(year, month, 1);
@@ -620,8 +520,8 @@ function showHistoricalCheckinModal(dateStr) {
             }
           );
         }
-                  return;
-        }
+        return;
+      }
 
       // ── 早包/晚包补卡 ────────────────────────────────
       // 防止重复提交（disabled 的按钮理论上不会触发，但多加一层保险）
@@ -687,7 +587,7 @@ function submitBackfillTask(packType, itemId, itemName, itemIcon, score, dateStr
   let bonusGain = 0;
   if (isFirstFull) {
     // 全套首次达成：补发全套与已发单件之和的差额
-    const prevPts = Math.max(0, totalDone - 1);
+    const prevPts = totalDone;
     bonusGain = fullScore - prevPts;
     state.totalScore += bonusGain;
     // 更新连续天数（基于实际完成日期）
@@ -698,16 +598,14 @@ function submitBackfillTask(packType, itemId, itemName, itemIcon, score, dateStr
   
   // 同步到 Firebase（taskId 带日期后缀，让爸妈能看到是补卡）
   const totalGain = score + bonusGain;
-  if (window._firebaseReady) {
+  if (isFirebaseReady()) {
     submitPending('pack', fullTaskId, label, score, dateStr, isSelf);
     if (bonusGain > 0) {
       const fullBonusTaskId = `${packType}_full_${dateStr}`;
       submitPending('pack', fullBonusTaskId, (packType === 'morning' ? '早晨' : '睡前') + '英雄包全套奖励', bonusGain, dateStr, isSelf);
       state.todayChecked[fullBonusTaskId] = 'pending';
     }
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + totalGain);
-    });
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(totalGain));
   }
   
   renderAll();
@@ -768,13 +666,11 @@ function submitHomeworkBackfill(blocks, isComplete, dateStr, isSelf) {
   saveState();
 
   // Firebase 同步
-  if (window._firebaseReady) {
+  if (isFirebaseReady()) {
     entries.forEach(e => {
       submitPending('homework', e.taskId, e.name, e.score, dateStr, isSelf);
     });
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + totalGain);
-    });
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(totalGain));
   }
 
   renderAll();
@@ -1281,7 +1177,7 @@ function showSelfReportUnified(taskId, taskName, score, icon, onConfirm) {
     state.selfReport[today][taskId] = isSelf ? 'self' : 'reminded';
     saveState();
     renderDisciplineBar();
-    if (window._firebaseReady) {
+    if (isFirebaseReady()) {
       window._firebaseSet(
         window._firebaseRef(window._firebaseDB, `selfReport/${today}/${taskId}`),
         isSelf ? 'self' : 'reminded'
@@ -1305,12 +1201,14 @@ function togglePackItem(packType, id, score) {
     // 取消：从待审加分池移除，同时扣减已加的积分
     const label = (packType==='morning'?'早晨':'睡前')+'英雄包·'+id;
     const fullTaskId = `${packType}_${id}`;
-    const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.taskId === fullTaskId && p.actualDate === undefined);
-    let deductGain = 0;
-    if (idx !== -1) {
-      deductGain = state.pendingAdditions[idx].score || 0;
-      state.pendingAdditions.splice(idx, 1);
+    const idx = state.pendingAdditions.findIndex(p => p.type === 'pack' && p.taskId === fullTaskId && p.date === today && p.actualDate === today && !p.isBackfill);
+    // 找不到对应记录则不处理（防止状态异常时乱删）
+    if (idx === -1) {
+      console.warn('[togglePackItem] 撤销失败：未找到 pending 记录', { fullTaskId, today, pendingAdditions: state.pendingAdditions });
+      return;
     }
+    const deductGain = state.pendingAdditions[idx].score || 0;
+    state.pendingAdditions.splice(idx, 1);
     // 从 todayChecked 中移除
     delete state.todayChecked[fullTaskId];
     delete state[packKey][id];
@@ -1327,10 +1225,8 @@ function togglePackItem(packType, id, score) {
     state.totalScore = Math.max(0, state.totalScore - deductGain);
     saveState();
     // 同步到 Firebase
-    if (window._firebaseReady && deductGain > 0) {
-      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductGain));
-      });
+    if (isFirebaseReady() && deductGain > 0) {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-deductGain));
     }
     renderAll();
     return;
@@ -1391,10 +1287,8 @@ function doCheckIn(packType, id, score) {
   saveState();
 
   // 立即同步到 Firebase
-  if (window._firebaseReady) {
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + gain);
-    });
+  if (isFirebaseReady()) {
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(gain));
   }
 
   renderAll();
@@ -1404,7 +1298,7 @@ function doCheckIn(packType, id, score) {
 
   // 弹自律确认
   showSelfReportUnified(`${packType}_${id}_${today}`, packItemName, gain, packIcon, (isSelf) => {
-    if (window._firebaseReady) submitPending('pack', fullTaskId, label, gain, '', isSelf);
+    if (isFirebaseReady()) submitPending('pack', fullTaskId, label, gain, '', isSelf);
     const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === fullTaskId && p.date === today && p.actualDate === today);
     if (entry) { entry.isSelf = isSelf; saveState(); }
     const toastMsg = `已完成${todayDone}/${pack.length}件，${isFull ? '全套达成！🎉' : '再完成' + (pack.length - todayDone) + '件有惊喜！'}`;
@@ -1430,10 +1324,8 @@ function undoHomework() {
   }
   saveState();
   // 同步到 Firebase
-  if (window._firebaseReady) {
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - HOMEWORK_TASK.scoreComplete));
-    });
+  if (isFirebaseReady()) {
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-HOMEWORK_TASK.scoreComplete));
     // 删除pending记录
     submitPending('homework', 'hw_complete', null, null);
   }
@@ -1468,16 +1360,14 @@ function completeHomework() {
   updateStreak('homework');
   saveState();
   // 立即同步到 Firebase
-  if (window._firebaseReady) {
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + HOMEWORK_TASK.scoreComplete);
-    });
+  if (isFirebaseReady()) {
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(HOMEWORK_TASK.scoreComplete));
   }
   renderAll();
   // 先弹自律自报弹窗，等用户选择后再提交审核
   showSelfReportUnified('hw_complete', '今日作业完成', HOMEWORK_TASK.scoreComplete, '📚', (isSelf) => {
     // 提交到待审（带 isSelf）
-    if (window._firebaseReady) {
+    if (isFirebaseReady()) {
       submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete, '', isSelf);
     }
     // 更新 pendingAdditions 中的 isSelf
@@ -1507,10 +1397,8 @@ function toggleFocusBlock(idx) {
     state.totalScore = Math.max(0, state.totalScore - deductPts);
     state.hwBlocks = idx - 1;
     saveState();
-    if (window._firebaseReady) {
-      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductPts));
-      });
+    if (isFirebaseReady()) {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-deductPts));
       submitPending('homework', 'hw_block_' + idx, null, null);
     }
     renderAll();
@@ -1536,10 +1424,8 @@ function toggleFocusBlock(idx) {
     state.todayChecked[blockTaskId] = 'pending';
     state.totalScore += HOMEWORK_TASK.scorePerBlock;
     saveState();
-    if (window._firebaseReady) {
-      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + HOMEWORK_TASK.scorePerBlock);
-      });
+    if (isFirebaseReady()) {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(HOMEWORK_TASK.scorePerBlock));
       submitPending('homework', blockTaskId, `专注块第${newBlock}块`, HOMEWORK_TASK.scorePerBlock);
     }
     renderAll();
@@ -1549,8 +1435,6 @@ function toggleFocusBlock(idx) {
 
 // ── 专注力时光（独立模块）────────────────────────────────────
 let _focusTimer = null;
-let _focusSeconds = 0;
-let _focusTimerRunning = false;
 
 function renderFocusTime() {
   const el = document.getElementById('dailyFocusTime');
@@ -1571,7 +1455,7 @@ function renderFocusTime() {
           <div class="ft-sub">${
             overtime ? '⚡ 超级专注模式！停不下来最棒了！' :
             completed ? '✅ 今日专注力时光完成！' :
-            started ? `⏱️ 专注中：<span id="focusTimerDisplay">${formatFocusSecs(_focusSeconds)}</span>` :
+            started ? `⏱️ 专注中：<span id="focusTimerDisplay">${formatFocusSecs(state.focusSeconds)}</span>` :
             ft.sub
           }</div>
         </div>
@@ -1592,11 +1476,11 @@ function renderFocusTime() {
             ${selected ? `▶ 开始专注（${ft.minutes}分钟）` : '👆 先选一件事'}
           </button>` :
         `<div class="ft-timer-row">
-          <div class="ft-timer-big" id="focusTimerBig">${formatFocusSecs(_focusSeconds)}</div>
+          <div class="ft-timer-big" id="focusTimerBig">${formatFocusSecs(state.focusSeconds)}</div>
           <div class="ft-timer-hint">${ft.minutes}分钟 = 完成！停不下来就继续 🔥</div>
-          <button class="btn-ft-done ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}" onclick="completeFocusTime(false)" ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}>✅ 完成了！（${ft.minutes}分钟到了）</button>
-          <button class="btn-ft-overtime ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}" onclick="completeFocusTime(true)" ${_focusSeconds < ft.minutes * 60 ? 'disabled' : ''}>⚡ 停不下来！继续超时（+${ft.bonusScore}分）</button>
-          ${_focusSeconds < ft.minutes * 60 ? '<div style="margin-top:8px;font-size:0.8rem;color:#f44336">⏱️ 专注满' + ft.minutes + '分钟才能打卡哦，再坚持一下！</div>' : ''}
+          <button class="btn-ft-done ${state.focusSeconds < ft.minutes * 60 ? 'disabled' : ''}" onclick="completeFocusTime(false)" ${state.focusSeconds < ft.minutes * 60 ? 'disabled' : ''}>✅ 完成了！（${ft.minutes}分钟到了）</button>
+          <button class="btn-ft-overtime ${state.focusSeconds < ft.minutes * 60 ? 'disabled' : ''}" onclick="completeFocusTime(true)" ${state.focusSeconds < ft.minutes * 60 ? 'disabled' : ''}>⚡ 停不下来！继续超时（+${ft.bonusScore}分）</button>
+          ${state.focusSeconds < ft.minutes * 60 ? '<div style="margin-top:8px;font-size:0.8rem;color:#f44336">⏱️ 专注满' + ft.minutes + '分钟才能打卡哦，再坚持一下！</div>' : ''}
         </div>`}
       </div>` :
       `<div class="ft-done-summary">
@@ -1608,7 +1492,7 @@ function renderFocusTime() {
       </div>`}
     </div>`;
 
-  if (started && !completed && _focusTimerRunning) {
+  if (started && !completed && state.focusTimerRunning) {
     _startFocusDisplayUpdate();
   }
 }
@@ -1623,34 +1507,45 @@ function selectFocusActivity(id) {
 function startFocusTime() {
   if (!state.focusSelected || state.focusStarted) return;
   state.focusStarted = true;
-  _focusSeconds = 0;
-  _focusTimerRunning = true;
+  state.focusSeconds = 0;
+  state.focusTimerRunning = true;
+  state.focusStartTimestamp = Date.now(); // 记录开始时刻
   saveState();
+  _startFocusTimer();  // 先启动计时器（renderFocusTime 里有条件判断，timer 启动后会阻止重复创建）
   renderFocusTime();
-  _startFocusTimer();
   showCelebration('🧠', '专注开始！', '找一个安静的地方，关掉干扰，专心做你选的事！');
 }
 
 function _startFocusTimer() {
   if (_focusTimer) clearInterval(_focusTimer);
+  let _saveCounter = 0;
   _focusTimer = setInterval(() => {
-    _focusSeconds++;
+    // 用时间戳计算已过秒数（刷新后恢复依然准确）
+    const elapsed = getElapsedFocusSeconds();
+    state.focusSeconds = elapsed;
     const d1 = document.getElementById('focusTimerDisplay');
     const d2 = document.getElementById('focusTimerBig');
-    const t = formatFocusSecs(_focusSeconds);
+    const t = formatFocusSecs(elapsed);
     if (d1) d1.textContent = t;
     if (d2) d2.textContent = t;
+    // 每5秒持久化一次，避免刷新后计时归零
+    _saveCounter++;
+    if (_saveCounter >= 5) { _saveCounter = 0; saveState(); }
   }, 1000);
 }
 
+// 专注力计时更新（仅在 renderFocusTime 时调用，用于恢复显示）
+// 加 !_focusTimer 守卫：避免 startFocusTime() 中 renderFocusTime() 触发时重复创建 timer
 function _startFocusDisplayUpdate() {
+  if (_focusTimer) return; // 已有计时器在跑，不再重复创建
   const d1 = document.getElementById('focusTimerDisplay');
   const d2 = document.getElementById('focusTimerBig');
-  if ((d1 || d2) && _focusTimerRunning) {
-    if (_focusTimer) clearInterval(_focusTimer);
+  if ((d1 || d2) && state.focusTimerRunning) {
     _focusTimer = setInterval(() => {
-      _focusSeconds++;
-      const t = formatFocusSecs(_focusSeconds);
+      // 用时间戳计算已过秒数（刷新后恢复依然准确）
+      const elapsed = getElapsedFocusSeconds();
+      state.focusSeconds = elapsed;
+      const t = formatFocusSecs(elapsed);
       if (d1) d1.textContent = t;
       if (d2) d2.textContent = t;
     }, 1000);
@@ -1670,10 +1565,11 @@ function undoFocusTime() {
   state.focusCompleted = false;
   state.focusOvertime = false;
   state.focusSelected = null;
-  state.focusStarted = null;
-  _focusSeconds = 0;
+  state.focusStarted = false;
+  state.focusSeconds = 0;
   if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
-  _focusTimerRunning = false;
+  state.focusTimerRunning = false;
+  state.focusStartTimestamp = null;
   // 从待审加分池移除，同时扣减已加的积分
   const idx = state.pendingAdditions.findIndex(p => p.type === 'focus' && p.taskId === 'focus_time');
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
@@ -1685,10 +1581,8 @@ function undoFocusTime() {
     state.streaks.focus.lastDate = '';
   }
   saveState();
-  if (window._firebaseReady) {
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - pts));
-    });
+  if (isFirebaseReady()) {
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-pts));
     submitPending('focus', 'focus_time', null, null);
   }
   renderAll();
@@ -1697,8 +1591,8 @@ function undoFocusTime() {
 
 function completeFocusTime(isOvertime) {
   // 时间未到时不允许提交，给出提示
-  if (!state.focusCompleted && _focusSeconds < FOCUS_TIME.minutes * 60) {
-    showCelebration('⏱️', '还没到时间哦', `再坚持一下，还差${FOCUS_TIME.minutes * 60 - _focusSeconds}秒！💪`);
+  if (!state.focusCompleted && state.focusSeconds < FOCUS_TIME.minutes * 60) {
+    showCelebration('⏱️', '还没到时间哦', `再坚持一下，还差${FOCUS_TIME.minutes * 60 - state.focusSeconds}秒！💪`);
     return;
   }
   if (state.focusCompleted) {
@@ -1707,7 +1601,8 @@ function completeFocusTime(isOvertime) {
     return;
   }
   if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
-  _focusTimerRunning = false;
+  state.focusTimerRunning = false;
+  state.focusStartTimestamp = null;
   state.focusCompleted = true;
   state.focusOvertime = isOvertime;
   const pts = FOCUS_TIME.score + (isOvertime ? FOCUS_TIME.bonusScore : 0);
@@ -1728,16 +1623,14 @@ function completeFocusTime(isOvertime) {
   updateStreak('focus');
   saveState();
   // 立即同步到 Firebase
-  if (window._firebaseReady) {
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + pts);
-    });
+  if (isFirebaseReady()) {
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(pts));
   }
   renderAll();
   // 先弹自律自报弹窗，等用户选择后再提交审核
   showSelfReportUnified('focus_time', '专注力时光', pts, isOvertime ? '⚡' : '🧠', (isSelf) => {
     // 提交到待审（带 isSelf）
-    if (window._firebaseReady) {
+    if (isFirebaseReady()) {
       submitPending('focus', 'focus_time', '专注力时光', pts, '', isSelf);
     }
     // 更新 pendingAdditions 中的 isSelf
@@ -1758,8 +1651,19 @@ function toggleDaily(id, score) {
   if (state.todayChecked[id]) {
     // 取消打卡（只能取消待审状态，不能取消已通过的）
     if (state.todayChecked[id] === 'pending') {
+      const today = todayStr();
+      const idx = state.pendingAdditions.findIndex(p => p.type === 'daily' && p.taskId === id && p.date === today);
+      let deductGain = 0;
+      if (idx !== -1) {
+        deductGain = state.pendingAdditions[idx].score || 0;
+        state.pendingAdditions.splice(idx, 1);
+      }
       delete state.todayChecked[id];
+      state.totalScore = Math.max(0, state.totalScore - deductGain);
       saveState();
+      if (isFirebaseReady() && deductGain > 0) {
+        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-deductGain));
+      }
       renderAll();
       showCelebration('↩️', '已取消申请', '打卡已撤销');
     } else {
@@ -1788,16 +1692,14 @@ function toggleDaily(id, score) {
     state.totalScore += score;
     saveState();
     // 立即同步到 Firebase
-    if (window._firebaseReady) {
-      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + score);
-      });
+    if (isFirebaseReady()) {
+      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(score));
     }
     renderAll();
     // 弹出自律自报弹窗，确定后再提交审核
     setTimeout(() => showSelfReportUnified(id, task ? task.name : id, score, '🦸', (isSelf) => {
       // 提交到待审（带 isSelf）
-      if (task && window._firebaseReady) {
+      if (task && isFirebaseReady()) {
         submitPending('daily', id, task.name, score, '', isSelf);
       }
       // 更新 pendingAdditions 中的 isSelf
@@ -1828,10 +1730,8 @@ const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAIL
   state.totalScore += score;
   saveState();
   // 立即同步到 Firebase
-  if (window._firebaseReady) {
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + score);
-    });
+  if (isFirebaseReady()) {
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(score));
     submitPending('daily', id, task2 ? task2.name : id, score);
   }
   renderAll();
@@ -1845,7 +1745,7 @@ const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAIL
         saveState();
       }
       // 更新 Firebase pending 记录中的 isSelf
-      if (window._firebaseReady) {
+      if (isFirebaseReady()) {
         updatePendingSelf('daily', id, todayStr(), isSelf);
       }
     }
@@ -1866,89 +1766,6 @@ function isBRewardUnlocked() {
   const now = new Date();
   const { rate } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
   return rate >= 85;
-}
-
-// ── 自律能量条渲染 ────────────────────────────────────────────
-
-function calcTodayScore() {
-  const today = todayStr();
-  const todayStart = new Date(today).setHours(0, 0, 0, 0);
-  const todayEnd = new Date(today).setHours(23, 59, 59, 999);
-
-  // 1. 固定任务 + 可选任务 + 作业（从 todayChecked）
-  const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
-    const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
-    const t = all.find(x => x.id === id);
-    return sum + (t ? t.score : 0);
-  }, 0);
-
-  // 2. 待审加分池（挑战卡、早晨包、睡前包等）当天提交的
-  const pendingScore = (state.pendingAdditions || [])
-    .filter(p => p.date === today)
-    .reduce((sum, p) => sum + (p.score || 0), 0);
-
-  // 3. 勋章奖励（当天领取的）
-  const medalScore = Object.entries(state.medalClaims || {})
-    .filter(([id, ts]) => ts >= todayStart && ts <= todayEnd)
-    .reduce((sum, [medalId, ts]) => {
-      const medal = MEDALS.find(m => m.id === medalId);
-      return sum + (medal ? medal.bonus : 0);
-    }, 0);
-
-  return taskScore + pendingScore + medalScore;
-}
-
-function updateTodayScore() {
-  const today = calcTodayScore();
-  document.getElementById('todayScore').textContent = today;
-  // 同步顶部今日得分
-  const el = document.getElementById('headerTodayScore');
-  if (el) el.textContent = today > 0 ? `+${today}` : '+0';
-}
-
-// ── 父母审核回调：本地积分处理 ──────────────────────────────────
-// 审核通过：积分在孩子完成时已入账，只需从 pendingAdditions 移除并更新自律统计
-// isSelf: 是否自主完成（影响自律统计）
-function onParentApprove(taskType, taskId, effectiveScore, isSelf) {
-  const today = todayStr();
-  // 找到对应的待审加分记录并移除（按 type + taskId 匹配，同一天通常只有一条）
-  const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
-  if (idx !== -1) state.pendingAdditions.splice(idx, 1);
-  // 将 pending 标记改为 approved（今日积分仍应计入该任务）
-  if (taskId && state.todayChecked[taskId] === 'pending') {
-    state.todayChecked[taskId] = 'approved';  // 而非 delete，保证今日积分仍含此分
-  }
-  // 自律统计：自主完成且审核通过，记录到月度自律日志
-  if (isSelf === true) {
-    const ym = today.slice(0, 7);  // e.g. "2026-04"
-    if (!state.reviewedSelfLog[ym]) state.reviewedSelfLog[ym] = {};
-    state.reviewedSelfLog[ym][today] = true;
-  }
-  saveState();
-  renderAll();
-}
-
-// 审核驳回：从 pendingAdditions 移除，并扣减积分（孩子在完成时已得积分）
-function onParentReject(taskType, taskId, isSelf, deductScore) {
-  const today = todayStr();
-  const idx = state.pendingAdditions.findIndex(p => p.type === taskType && p.taskId === taskId && p.date === today);
-  if (idx !== -1) state.pendingAdditions.splice(idx, 1);
-  // 清除 todayChecked 中的 pending 标记
-  if (taskId && state.todayChecked[taskId] === 'pending') {
-    delete state.todayChecked[taskId];
-  }
-  // 扣减积分（孩子在完成时已加）
-  if (deductScore && deductScore > 0) {
-    state.totalScore = Math.max(0, state.totalScore - deductScore);
-    // 同步到 Firebase
-    if (window._firebaseReady) {
-      window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductScore));
-      });
-    }
-  }
-  saveState();
-  renderAll();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3482,11 +3299,9 @@ function claimCard(id, isSelf) {
     }, 400);
   }
   // 同步到 Firebase（同时走 submitPending，让爸妈能在 Firebase 后台看到）
-  if (window._firebaseReady) {
+  if (isFirebaseReady()) {
     submitPending('card', id, card.name, card.score, '', isSelf);
-    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-      window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), (snap.val() || 0) + card.score);
-    });
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(card.score));
   }
   closeModal('cardModal');
   renderAll();
@@ -3765,7 +3580,7 @@ function clearAllData() {
   localStorage.removeItem('heroplan_state');
 
   // ── 2. 清空 Firebase 所有数据路径 ────────────────────────
-  if (window._firebaseReady) {
+  if (isFirebaseReady()) {
     try {
       const db = window._firebaseDB;
       const ref = window._firebaseRef;
@@ -4203,10 +4018,8 @@ function bindEvents() {
       // 扣减累计积分
       state.totalScore = Math.max(0, state.totalScore - deductToday);
       // 同步 Firebase syncScore
-      if (window._firebaseReady) {
-        window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncScore')).then(snap => {
-          window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore'), Math.max(0, (snap.val() || 0) - deductToday));
-        });
+      if (isFirebaseReady()) {
+        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-deductToday));
       }
 
       // 重置所有状态
@@ -4217,10 +4030,19 @@ function bindEvents() {
       state.nightPackBonus = false;
       state.hwCompleted = false;
       state.hwBlocks = 0;
-      state.pendingAdditions = [];
+      // 只清非补卡的待审记录；补卡记录保留（等父母审核）
+      state.pendingAdditions = state.pendingAdditions.filter(p => p.isBackfill);
+      // 重置专注力时光状态
+      state.focusSelected = null;
+      state.focusStarted = false;
+      state.focusCompleted = false;
+      state.focusOvertime = false;
+      state.focusSeconds = 0;
+      state.focusTimerRunning = false;
+      if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
       state.selfReport = {};
       // 同步清除 Firebase 上当天的 pending 记录
-      if (window._firebaseReady && typeof clearPendingByDate === 'function') {
+      if (isFirebaseReady() && typeof clearPendingByDate === 'function') {
         clearPendingByDate(today);
       }
       saveState();
