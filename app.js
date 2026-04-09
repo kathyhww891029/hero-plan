@@ -219,6 +219,9 @@ document.addEventListener('DOMContentLoaded', () => {
   checkWeekUnlock();
   checkDayReset();
 
+  // 先初始化 Firebase（app.js 监听器先注册，再触发事件）
+  initFirebase();
+
   if (isFirebaseReady()) {
     loadTotalScoreFromFirebase();
     renderAll();
@@ -283,6 +286,13 @@ function renderHeader() {
 // ── 月历打卡记录（保持在此，UI 渲染函数）────────────────────────
 var _calendarYear = new Date().getFullYear();
 var _calendarMonth = new Date().getMonth();
+
+function renderMonthlyCalendar(year, month) {
+  // 如果未传参，使用全局日历状态
+  if (year === undefined) year = _calendarYear;
+  if (month === undefined) month = _calendarMonth;
+  const weekdays = ['日','一','二','三','四','五','六'];
+  const container = document.getElementById('monthlyCalendar');
   
   // 获取当月第一天和最后一天
   const firstDay = new Date(year, month, 1);
@@ -1186,11 +1196,24 @@ function showSelfReportUnified(taskId, taskName, score, icon, onConfirm) {
     if (onConfirm) onConfirm(isSelf);
   }
 
+  // 点击遮罩 = 取消（仅对挑战卡场景有意义：重置 selfPickCard）
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+      // 重置挑战卡状态，回到未选
+      state.selfPickCard = null;
+      state.selfPickClaimed = false;
+      saveState();
+      renderAll();
+    }
+  });
+
   document.getElementById('_srSelfBtn').onclick = () => close(true);
   document.getElementById('_srRemindBtn').onclick = () => close(false);
 }
 
 function togglePackItem(packType, id, score) {
+  const today = todayStr();
   const packKey = packType === 'morning' ? 'morningPack' : 'nightPack';
   const pack = packType === 'morning' ? MORNING_PACK : NIGHT_PACK;
   const fullScore = packType === 'morning' ? MORNING_PACK_FULL : NIGHT_PACK_FULL;
@@ -3267,6 +3290,8 @@ function claimCard(id, isSelf) {
     state.readCount = (state.readCount || 0) + 1;
   }
   // 走本地 pendingAdditions（与早晨包/睡前包一致）
+  const isFirstThisWeek = existing.length === 0; // 是否本周首次领（决定 weeklyCardCount 是否+1）
+  const isReadingCard = !!(card.series && card.series.includes('阅读'));
   state.pendingAdditions.push({
     type: 'card',
     taskId: id,
@@ -3274,7 +3299,10 @@ function claimCard(id, isSelf) {
     icon: card.stars ? '🃏' : '🎴',
     score: card.score,
     date: today,
-    isSelf: isSelf
+    isSelf: isSelf,
+    // 驳回时需要回滚的标记
+    incrementedWeeklyCount: isFirstThisWeek,
+    isReadingCard: isReadingCard
   });
   // 添加到 todayChecked，让 calcTodayScore 能统计（审核通过后改为 'approved'，驳回时删除）
   state.todayChecked[id] = 'pending';
@@ -4004,22 +4032,16 @@ function bindEvents() {
     if (confirm('确定开始新的一天？今日打卡记录将重置。')) {
       const today = todayStr();
 
-      // 计算今日已入账积分（需从 totalScore 中扣减）
-      const taskScore = Object.keys(state.todayChecked).reduce((sum, id) => {
-        const all = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK];
-        const t = all.find(x => x.id === id);
-        return sum + (t ? t.score : 0);
-      }, 0);
-      const pendingScore = (state.pendingAdditions || [])
-        .filter(p => p.date === today)
-        .reduce((sum, p) => sum + (p.score || 0), 0);
-      const deductToday = taskScore + pendingScore;
-
-      // 扣减累计积分
-      state.totalScore = Math.max(0, state.totalScore - deductToday);
-      // 同步 Firebase syncScore
-      if (isFirebaseReady()) {
-        window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-deductToday));
+      // ── 今日我的挑战卡分数扣减 ────────────────────────────────
+      // 如果今日挑战卡已领取，从累计积分中扣减（与 Firebase 同步）
+      const cardWasClaimed = state.selfPickClaimed && state.selfPickCard;
+      const claimedCard = cardWasClaimed ? TASK_CARDS.find(c => c.id === state.selfPickCard) : null;
+      if (claimedCard) {
+        state.totalScore = Math.max(0, state.totalScore - claimedCard.score);
+        // 同步扣减到 Firebase（供父母端看到）
+        if (isFirebaseReady()) {
+          window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), state.totalScore);
+        }
       }
 
       // 重置所有状态
@@ -4030,6 +4052,9 @@ function bindEvents() {
       state.nightPackBonus = false;
       state.hwCompleted = false;
       state.hwBlocks = 0;
+      // 今日我的挑战卡（自选挑战）重置
+      state.selfPickCard = null;
+      state.selfPickClaimed = false;
       // 只清非补卡的待审记录；补卡记录保留（等父母审核）
       state.pendingAdditions = state.pendingAdditions.filter(p => p.isBackfill);
       // 重置专注力时光状态
@@ -5354,4 +5379,19 @@ function closeMedalsModal() {
   if (modal) document.body.removeChild(modal);
 }
 
-// ── 渲染任务卡 ─────────────────────────────────────────────────
+// ── Firebase 初始化（从 <head> 移入，确保 app.js 监听器先注册）────
+function initFirebase() {
+  app.auth().signInAnonymously().then(() => {
+    console.log('🔐 腾讯云开发匿名登录成功');
+    window._firebaseReady = true;
+    window._firebaseCurrentUser = { uid: 'anonymous' };
+    window._firebaseDB = window._tcbDB();
+    window.dispatchEvent(new Event('firebaseAuthReady'));
+    window.dispatchEvent(new Event('firebaseReady'));
+  }).catch(err => {
+    console.error('❌ 匿名登录失败:', err);
+    window._firebaseReady = true;
+    window._firebaseCurrentUser = { uid: 'anonymous' };
+    window.dispatchEvent(new Event('firebaseReady'));
+  });
+}

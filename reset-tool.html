@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>英雄成长计划 · 重置工具</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eef;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: #16213e;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    h1 { font-size: 1.8em; margin-bottom: 10px; }
+    .subtitle { color: #aaa; margin-bottom: 30px; font-size: 0.95em; }
+    .warning {
+      background: rgba(255,200,0,0.1);
+      border: 1px solid rgba(255,200,0,0.3);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 30px;
+      text-align: left;
+    }
+    .warning h3 { color: #ffc800; margin-bottom: 10px; font-size: 1.1em; }
+    .warning ul { padding-left: 20px; line-height: 1.8; color: #ccc; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      margin-bottom: 12px;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-danger {
+      background: linear-gradient(135deg, #e74c3c, #c0392b);
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(231,76,60,0.4);
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #aaa;
+      font-size: 0.9em;
+      padding: 12px;
+    }
+    .log {
+      margin-top: 20px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 0.85em;
+      color: #0f0;
+      text-align: left;
+      max-height: 150px;
+      overflow-y: auto;
+      display: none;
+    }
+    .log.show { display: block; }
+    .emoji { font-size: 3em; margin-bottom: 20px; }
+    .success-msg { color: #2ecc71; font-weight: bold; margin: 20px 0; display: none; }
+    .success-msg.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">🧹</div>
+    <h1>重置工具</h1>
+    <p class="subtitle">英雄成长计划 · 调试专用</p>
+
+    <div class="warning">
+      <h3>⚠️ 此操作不可逆</h3>
+      <ul>
+        <li>清除所有累计积分（totalScore → 0）</li>
+        <li>清除今日所有打卡状态</li>
+        <li>清除早/晚英雄包状态</li>
+        <li>清除作业完成状态</li>
+        <li>清除专注力时光记录</li>
+        <li>清除所有自律统计和连续打卡记录</li>
+        <li>清除 Firebase 上当天 pending 记录</li>
+      </ul>
+    </div>
+
+    <button class="btn btn-danger" id="btnReset">🗑️ 一键重置所有数据</button>
+    <button class="btn btn-secondary" id="btnBack">← 返回小程序</button>
+
+    <div class="success-msg" id="successMsg">✅ 重置完成！请回到小程序刷新页面</div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="hero-constants.js"></script>
+  <script src="firebase-sync.js"></script>
+  <script src="hero-state.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const log = document.getElementById('log');
+    const successMsg = document.getElementById('successMsg');
+
+    function appendLog(msg) {
+      log.innerHTML += msg + '\n';
+      log.scrollTop = log.scrollHeight;
+    }
+
+    document.getElementById('btnReset').addEventListener('click', async () => {
+      log.classList.add('show');
+      log.innerHTML = '';
+      successMsg.classList.remove('show');
+
+      try {
+        // 1. 清除 localStorage
+        appendLog('🔧 清除 localStorage...');
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('hero') || key.includes('firebase'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => {
+          appendLog('   删除: ' + k);
+          localStorage.removeItem(k);
+        });
+        appendLog('   ✓ 共清除 ' + keysToRemove.length + ' 条记录\n');
+
+        // 2. 重置 state 对象
+        appendLog('🔧 重置内存中的 state 对象...');
+        state = defaultState();
+        appendLog('   totalScore → 0');
+        appendLog('   todayChecked → {}');
+        appendLog('   morningPack → {}');
+        appendLog('   nightPack → {}');
+        appendLog('   pendingAdditions → []');
+        appendLog('   streaks → 全归零\n');
+
+        // 3. 保存到 localStorage
+        appendLog('🔧 保存初始状态到 localStorage...');
+        saveState();
+        appendLog('   ✓ 已写入 hero_plan_state_v2\n');
+
+        // 4. 尝试清除 Firebase 当天 pending 记录
+        appendLog('🔧 尝试清除 Firebase pending 记录...');
+        try {
+          if (isFirebaseReady()) {
+            const today = todayStr();
+            await clearPendingByDate(today);
+            appendLog('   ✓ Firebase pending 已清除');
+          } else {
+            appendLog('   ⚠ Firebase 未就绪，跳过');
+          }
+        } catch(e) {
+          appendLog('   ⚠ Firebase 清除失败: ' + e.message);
+        }
+
+        appendLog('\n✅ 重置完成！请回到小程序刷新页面重新测试。');
+        successMsg.classList.add('show');
+        document.getElementById('btnReset').disabled = true;
+        document.getElementById('btnReset').innerText = '✓ 已重置';
+
+      } catch(e) {
+        appendLog('\n❌ 错误: ' + e.message);
+        console.error(e);
+      }
+    });
+
+    document.getElementById('btnBack').addEventListener('click', () => {
+      window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

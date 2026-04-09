@@ -89,7 +89,10 @@ async function uploadToCOS(content, cloudPath, contentType) {
 }
 
 async function fetchLocal(path) {
-  const r = await fetch(LOCAL_BASE + '/' + path + '?t=' + Date.now());
+  const r = await fetch(LOCAL_BASE + '/' + path + '?t=' + Date.now(), {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache' }
+  });
   if (!r.ok) throw new Error(`获取 ${path} 失败: HTTP ${r.status}`);
   return r.text();
 }

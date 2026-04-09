@@ -28,26 +28,9 @@
   // 环境配置
   const TCB_ENV_ID = 'kathyhww1029-7gop3h5x37223dd9';
 
-  // 初始化 TCB
+  // 初始化 TCB（同步，返回 app 实例；匿名登录异步，在 app.js DOMContentLoaded 中调用）
   const app = cloudbase.init({
     env: TCB_ENV_ID
-  });
-
-  // 匿名登录
-  app.auth().signInAnonymously().then(() => {
-    console.log('🔐 腾讯云开发匿名登录成功');
-    // 兼容 app.js 的 isFirebaseReady() 检查
-    window._firebaseCurrentUser = { uid: 'anonymous' };
-    // 重新赋值数据库引用（确保 auth 完成后再获取）
-    window._firebaseDB = window._tcbDB();
-    // 同时 dispatch firebaseReady，让 app.js 的 renderAll() 能执行
-    window.dispatchEvent(new Event('firebaseAuthReady'));
-    window.dispatchEvent(new Event('firebaseReady'));
-  }).catch(err => {
-    console.error('❌ 匿名登录失败:', err);
-    // 即使登录失败也标记就绪，避免阻塞应用
-    window._firebaseCurrentUser = { uid: 'anonymous' };
-    window.dispatchEvent(new Event('firebaseReady'));
   });
 
   // ── Firebase API 兼容层（保持 app.js / firebase-sync.js 不动）────────────────
@@ -197,10 +180,6 @@
   window._firebaseRemove = tcbRemove;
   window._firebaseGet = tcbGet;
   window._firebaseIncrement = tcbIncrement;
-  window._firebaseReady = true;
-
-  // 通知 app.js / firebase-sync.js TCB 已就绪
-  window.dispatchEvent(new Event('firebaseReady'));
 </script>
 </head>
 <body>
@@ -751,7 +730,7 @@
 <script src="data.js?v=3"></script>
 <script src="hero-constants.js?v=5"></script>
 <script src="hero-state.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=9"></script>
 <script src="firebase-sync.js?v=73"></script>
 </body>
 </html>

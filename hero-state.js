@@ -233,10 +233,10 @@ function calcTodayScore() {
     return sum + (t ? t.score : 0);
   }, 0);
 
-  // 4. 待审加分（不含补卡，排除已通过 optionalTaskScore 计入的项目）
+  // 4. 待审加分（不含补卡，排除已通过 optionalTaskScore 计入的项目，以及早/晚包项目）
   const countedOptionalIds = optionalIds;
   const pendingScore = (state.pendingAdditions || [])
-    .filter(p => p.date === today && !p.isBackfill && !countedOptionalIds.includes(p.taskId))
+    .filter(p => p.date === today && !p.isBackfill && !countedOptionalIds.includes(p.taskId) && !p.taskId.startsWith('morning_') && !p.taskId.startsWith('night_'))
     .reduce((sum, p) => sum + (p.score || 0), 0);
 
   // 5. 勋章奖励（当日获得）
@@ -310,6 +310,7 @@ function onParentReject(taskType, taskId, isSelf, deductScore) {
   const idx = state.pendingAdditions.findIndex(p =>
     p.type === taskType && p.taskId === taskId && p.date === today
   );
+  const record = idx !== -1 ? state.pendingAdditions[idx] : null;
   if (idx !== -1) state.pendingAdditions.splice(idx, 1);
 
   if (taskId && state.todayChecked[taskId] === 'pending') {
@@ -324,6 +325,31 @@ function onParentReject(taskType, taskId, isSelf, deductScore) {
       );
     }
   }
+
+  // ── 挑战卡计数回滚 ──────────────────────────────────
+  if (taskType === 'card' && taskId) {
+    // 回滚 weeklyCardClaims：从数组中移除今天
+    if (state.weeklyCardClaims[taskId]) {
+      state.weeklyCardClaims[taskId] = state.weeklyCardClaims[taskId].filter(d => d !== today);
+      if (state.weeklyCardClaims[taskId].length === 0) {
+        delete state.weeklyCardClaims[taskId];
+      }
+    }
+    // 回滚 cardClaims 计数
+    if (state.cardClaims[taskId]) {
+      state.cardClaims[taskId]--;
+      if (state.cardClaims[taskId] <= 0) delete state.cardClaims[taskId];
+    }
+    // 回滚 weeklyCardCount（仅当本周首次领卡时才会+1）
+    if (record && record.incrementedWeeklyCount) {
+      state.weeklyCardCount = Math.max(0, (state.weeklyCardCount || 0) - 1);
+    }
+    // 回滚阅读计数
+    if (record && record.isReadingCard) {
+      state.readCount = Math.max(0, (state.readCount || 0) - 1);
+    }
+  }
+
   saveState();
   renderAll();
 }
