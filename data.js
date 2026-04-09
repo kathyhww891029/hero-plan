@@ -177,7 +177,6 @@ const DAILY_OPTIONAL_INTEREST = [
 // ── 可选任务 · 学习/娱乐类（均直接可见）────────────────────
 // 注：专注力时光（FOCUS_TIME）也纳入此数组，供 calcTodayScore 正确查找积分
 const DAILY_OPTIONAL_FUN = [
-  FOCUS_TIME,  // 专注力时光（score:3, bonusScore:2）
   { id:'of1', icon:'⚡', name:'闪电侠速算训练', sub:'口算做完了，来领分！⚡', score:3, type:'optional', category:'fun',
     tip:'做完口算主动来领分，不做不扣分',
     speech:'闪电侠速算训练！口算做完了吗？做完主动来领分，得3分！不做也不扣分，做了就是赚到！' },

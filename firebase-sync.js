@@ -130,22 +130,6 @@ function submitPending(type, id, name, score, extra, isSelf) {
   return window._firebasePush(fbRef('pending'), record).then(ref => ref.key);
 }
 
-// 更新待审记录的 isSelf（用于自律弹窗确定后更新 Firebase 中的记录）
-function updatePendingSelf(type, taskId, date, isSelf) {
-  if (!isFirebaseReady()) return;
-  // 在 pending 中找到对应记录并更新 isSelf
-  window._firebaseGet(fbRef('pending')).then(snap => {
-    const data = snap.val();
-    if (!data) return;
-    const entry = Object.entries(data).find(([k, v]) =>
-      v.type === type && v.taskId === taskId && v.date === date
-    );
-    if (entry) {
-      window._firebaseSet(fbRef('pending/' + entry[0]), { ...entry[1], isSelf });
-    }
-  });
-}
-
 // ── 按日期清除 pending 记录（重置今日打卡时调用） ──────────────
 function clearPendingByDate(date) {
   if (!isFirebaseReady()) return;
@@ -375,72 +359,26 @@ function rejectOneConfirm(key) {
 
 // ── 审核通过单条 ──────────────────────────────────────────────
 // 固定任务地板机制：计算可选任务实际应得分数
-function calcOptionalEffectiveScore(item, score) {
-  if (item.type !== 'daily') return score; // 任务卡不受影响
-  // 判断是否是可选任务（do开头）
-  const isOptional = item.taskId && item.taskId.startsWith('do');
-  if (!isOptional) return score;
-
-  // 从 state 中读取今日固定任务完成情况
-  const st = (typeof state !== 'undefined') ? state : null;
-  if (!st) return score;
-
-  const today = new Date().toISOString().slice(0, 10);
-  const todayDate = item.date || today;
-
-  // 统计固定任务完成数（从 reviewedList 中查当天固定任务通过数）
-  // 简化版：通过检查 todayChecked 中固定任务通过数量
-  const fixedIds = (typeof DAILY_FIXED !== 'undefined') ? DAILY_FIXED.map(t => t.id) : [];
-  const totalFixed = fixedIds.length;
-  if (totalFixed === 0) return score;
-
-  // 统计当天固定任务通过数（approved状态）
-  const approvedFixed = fixedIds.filter(id => {
-    const s = st.todayChecked && st.todayChecked[id];
-    return s === 'approved';
-  }).length;
-
-  const rate = approvedFixed / totalFixed;
-
-  if (rate >= 0.8) {
-    return score; // ✅ 全额
-  } else if (rate >= 0.5) {
-    return Math.floor(score / 2); // 🔶 减半
-  } else {
-    return 0; // ❌ 不计分
-  }
-}
-
 // 内部实现：审核通过（isSelf 由父母在第二步明确选择）
 function doApproveOne(key, score, name, taskId, taskType, isSelf) {
   if (!isFirebaseReady()) return;
-  // 固定任务地板机制：可选任务检查
-  const fakeItem = { type: taskType || 'daily', taskId: taskId || '' };
-  const effectiveScore = calcOptionalEffectiveScore(fakeItem, score);
-  const scoreNote = effectiveScore < score
-    ? `（固定任务未达标，实得${effectiveScore}分）`
-    : '';
 
   // 加入已审记录（含 isSelf）
   window._firebasePush(fbRef('reviewed'), {
-    name, score: effectiveScore, originalScore: score, result: 'approved',
+    name, score, result: 'approved',
     isSelf: isSelf,  // 父母明确选择的自律结果
     reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
     reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10),
-    scoreNote
+    date: new Date().toISOString().slice(0, 10)
   });
   // 更新 Firebase 总分（积分在孩子完成时已入账，审核通过时不再重复加）
   // 更新月度自律统计
   if (typeof onParentApprove === 'function') {
-    onParentApprove(taskType || 'daily', taskId || '', effectiveScore, isSelf);
+    onParentApprove(taskType || 'daily', taskId || '', score, isSelf);
   }
   // 删除 pending
   window._firebaseRemove(fbRef('pending/' + key));
-  const msg = effectiveScore < score
-    ? `✅ 已通过「${name}」，+${effectiveScore}分${scoreNote}`
-    : `✅ 已通过「${name}」，+${score}分！`;
-  showParentToast(msg);
+  showParentToast(`✅ 已通过「${name}」，+${score}分！`);
 }
 
 // 内部实现：驳回单条
@@ -498,18 +436,17 @@ function doApproveAllWithSelf(isSelf) {
     if (!data) return;
     let totalAdd = 0;
     Object.entries(data).forEach(([key, val]) => {
-      const fakeItem = { type: val.type || 'daily', taskId: val.taskId || '' };
-      const effectiveScore = calcOptionalEffectiveScore(fakeItem, val.score);
-      totalAdd += effectiveScore;
+      const score = val.score || 0;
+      totalAdd += score;
       window._firebasePush(fbRef('reviewed'), {
-        name: val.name, score: effectiveScore, originalScore: val.score, result: 'approved',
+        name: val.name, score, result: 'approved',
         isSelf: isSelf,  // 父母明确选择的自律结果
         reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
         reviewedAt: Date.now(),
         date: new Date().toISOString().slice(0, 10)
       });
       if (typeof onParentApprove === 'function') {
-        onParentApprove(val.type || 'daily', val.taskId || '', effectiveScore, isSelf);
+        onParentApprove(val.type || 'daily', val.taskId || '', score, isSelf);
       }
       window._firebaseRemove(fbRef('pending/' + key));
     });
@@ -617,15 +554,14 @@ function adjustScore() {
     reviewedAt: Date.now(),
     date: new Date().toISOString().slice(0, 10)
   });
-  // 更新 Firebase syncScore（先读检查避免负数，再用 increment 原子操作）
-  window._firebaseGet(fbRef('syncScore/score')).then(s => {
-    const current = s.val() || 0;
-    const newScore = current + score;
-    if (newScore < 0) {
-      showParentToast('❌ 分数不能为负数！');
-      return;
-    }
-    window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
+  // 用本地 state.totalScore 做负数检查（父母的本地值已是最新）
+  const newScore = state.totalScore + score;
+  if (newScore < 0) {
+    showParentToast('❌ 分数不能为负数！');
+    return;
+  }
+  // 写入 Firebase reviewed 记录后，原子 increment 更新 syncScore
+  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score)).then(() => {
     // 同时更新本地 state
     state.totalScore = newScore;
     saveState();
@@ -634,10 +570,10 @@ function adjustScore() {
     const emoji = score > 0 ? '📈' : '📉';
     const label = score > 0 ? `+${score}` : `${score}`;
     showParentToast(`${emoji} 已调整 ${label}分：` + reason);
+    // 清空表单
+    document.getElementById('adjustInput').value = '';
+    document.getElementById('adjustReason').value = '';
   });
-  // 清空表单
-  document.getElementById('adjustInput').value = '';
-  document.getElementById('adjustReason').value = '';
 }
 
 // ── Toast提示 ─────────────────────────────────────────────────

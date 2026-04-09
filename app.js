@@ -208,7 +208,7 @@ function updateWelcomeArea() {
 // ═══════════════════════════════════════════════════════════════
 // state, defaultState(), loadState(), saveState(), calcTodayScore(),
 // updateTodayScore(), onParentApprove(), onParentReject(),
-// loadTotalScoreFromFirebase(), migrateWeeklyCardClaims(),
+// loadTotalScoreFromFirebase(), loadSelfReportFromFirebase(), migrateWeeklyCardClaims(),
 // checkWeekUnlock(), checkDayReset() 均从 hero-state.js 加载
 // ═══════════════════════════════════════════════════════════════
 
@@ -224,10 +224,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (isFirebaseReady()) {
     loadTotalScoreFromFirebase();
+    loadSelfReportFromFirebase();
     renderAll();
   } else {
     window.addEventListener('firebaseReady', () => {
       loadTotalScoreFromFirebase();
+      loadSelfReportFromFirebase();
       renderAll();
     }, { once: true });
   }
@@ -1200,10 +1202,12 @@ function showSelfReportUnified(taskId, taskName, score, icon, onConfirm) {
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
       modal.remove();
-      // 重置挑战卡状态，回到未选
-      state.selfPickCard = null;
-      state.selfPickClaimed = false;
-      saveState();
+      // 只对挑战卡场景重置 selfPickCard，其他任务类型无需此操作
+      if (taskId.startsWith('card_')) {
+        state.selfPickCard = null;
+        state.selfPickClaimed = false;
+        saveState();
+      }
       renderAll();
     }
   });
@@ -1345,12 +1349,16 @@ function undoHomework() {
     state.streaks.homework.count = 0;
     state.streaks.homework.lastDate = '';
   }
+  // 提取 fbKey（completeHomework 时已保存），用于精准删除 Firebase 记录
+  const entry = state.pendingAdditions.find(p => p.type === 'homework' && p.taskId === 'hw_complete');
+  const fbKey = entry ? entry.fbKey : null;
+  state.pendingAdditions.splice(state.pendingAdditions.findIndex(p => p.type === 'homework' && p.taskId === 'hw_complete'), 1);
   saveState();
   // 同步到 Firebase
   if (isFirebaseReady()) {
     window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-HOMEWORK_TASK.scoreComplete));
-    // 删除pending记录
-    submitPending('homework', 'hw_complete', null, null);
+    // 用已知 key 精准删除 pending 记录，而非新建垃圾记录
+    if (fbKey) window._firebaseRemove(window._firebaseRef(window._firebaseDB, 'pending/' + fbKey));
   }
   renderAll();
   showCelebration('↩️', '已撤销', '作业打卡已撤销');
@@ -1391,7 +1399,13 @@ function completeHomework() {
   showSelfReportUnified('hw_complete', '今日作业完成', HOMEWORK_TASK.scoreComplete, '📚', (isSelf) => {
     // 提交到待审（带 isSelf）
     if (isFirebaseReady()) {
-      submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete, '', isSelf);
+      submitPending('homework', 'hw_complete', '作业完成', HOMEWORK_TASK.scoreComplete, '', isSelf)
+      .then((key) => {
+        // 保存 Firebase key，以便撤销时精准删除而非新建垃圾记录
+        const entry = state.pendingAdditions.find(p => p.type === 'homework' && p.taskId === 'hw_complete' && p.date === today);
+        if (entry) entry.fbKey = key;
+        saveState();
+      });
     }
     // 更新 pendingAdditions 中的 isSelf
     const entry = state.pendingAdditions.find(p => p.type === 'homework' && p.taskId === 'hw_complete' && p.date === today);
@@ -1422,7 +1436,6 @@ function toggleFocusBlock(idx) {
     saveState();
     if (isFirebaseReady()) {
       window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-deductPts));
-      submitPending('homework', 'hw_block_' + idx, null, null);
     }
     renderAll();
     showCelebration('↩️', '已撤销', `第${idx}块及之后的专注块已撤销`);
@@ -1593,9 +1606,10 @@ function undoFocusTime() {
   if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
   state.focusTimerRunning = false;
   state.focusStartTimestamp = null;
-  // 从待审加分池移除，同时扣减已加的积分
-  const idx = state.pendingAdditions.findIndex(p => p.type === 'focus' && p.taskId === 'focus_time');
-  if (idx !== -1) state.pendingAdditions.splice(idx, 1);
+  // 提取 fbKey（completeFocusTime 时已保存），用于精准删除 Firebase 记录
+  const entry = state.pendingAdditions.find(p => p.type === 'focus' && p.taskId === 'focus_time');
+  const fbKey = entry ? entry.fbKey : null;
+  state.pendingAdditions.splice(state.pendingAdditions.findIndex(p => p.type === 'focus' && p.taskId === 'focus_time'), 1);
   // 扣减积分
   state.totalScore = Math.max(0, state.totalScore - pts);
   // 撤销streak
@@ -1606,7 +1620,8 @@ function undoFocusTime() {
   saveState();
   if (isFirebaseReady()) {
     window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(-pts));
-    submitPending('focus', 'focus_time', null, null);
+    // 用已知 key 精准删除 pending 记录，而非新建垃圾记录
+    if (fbKey) window._firebaseRemove(window._firebaseRef(window._firebaseDB, 'pending/' + fbKey));
   }
   renderAll();
   showCelebration('↩️', '已撤销', '专注力时光打卡已撤销');
@@ -1654,7 +1669,12 @@ function completeFocusTime(isOvertime) {
   showSelfReportUnified('focus_time', '专注力时光', pts, isOvertime ? '⚡' : '🧠', (isSelf) => {
     // 提交到待审（带 isSelf）
     if (isFirebaseReady()) {
-      submitPending('focus', 'focus_time', '专注力时光', pts, '', isSelf);
+      submitPending('focus', 'focus_time', '专注力时光', pts, '', isSelf)
+      .then((key) => {
+        const entry = state.pendingAdditions.find(p => p.type === 'focus' && p.taskId === 'focus_time' && p.date === todayStr());
+        if (entry) entry.fbKey = key;
+        saveState();
+      });
     }
     // 更新 pendingAdditions 中的 isSelf
     const today = todayStr();
@@ -1737,11 +1757,10 @@ function toggleDaily(id, score) {
     return;
   }
 
-  // 可选/作业任务：先提交（isSelf=null），再弹自律弹窗，弹窗确定后更新 Firebase 中的 isSelf
-  state.todayChecked[id] = 'pending';
-const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
+  // 可选/作业任务：先弹自律弹窗，确认后再提交审核（与固定任务时序统一）
+  const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAILY_TEMP_TASKS];
   const task2 = allTasks2.find(t => t.id === id);
-  // 加入待审加分池，同时立即加积分
+  // 加入待审加分池（isSelf 待弹窗确定后更新），同时立即加积分
   state.pendingAdditions.push({
     type: 'daily',
     taskId: id,
@@ -1752,25 +1771,24 @@ const allTasks2 = [...DAILY_FIXED, ...DAILY_OPTIONAL, ...DAILY_HOMEWORK, ...DAIL
   });
   state.totalScore += score;
   saveState();
-  // 立即同步到 Firebase
+  // 立即同步到 Firebase（积分同步，无 pending 记录）
   if (isFirebaseReady()) {
     window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(score));
-    submitPending('daily', id, task2 ? task2.name : id, score);
   }
   renderAll();
   setTimeout(() => showSelfReportUnified(id, task2 ? task2.name : id, score, '🎮', (isSelf) => {
+    // 弹窗确认后才写 pending，避免点遮罩时 isSelf 丢失
+    state.todayChecked[id] = 'pending';
+    // 立即同步自律标签到 Firebase（带真实 isSelf）
+    if (isFirebaseReady()) {
+      submitPending('daily', id, task2 ? task2.name : id, score, '', isSelf);
+    }
     // 更新 pendingAdditions 中的 isSelf（本地）
-    if (task2) {
-      const today = todayStr();
-      const entry = state.pendingAdditions.find(p => p.type === 'daily' && p.taskId === id && p.date === today);
-      if (entry) {
-        entry.isSelf = isSelf;
-        saveState();
-      }
-      // 更新 Firebase pending 记录中的 isSelf
-      if (isFirebaseReady()) {
-        updatePendingSelf('daily', id, todayStr(), isSelf);
-      }
+    const today = todayStr();
+    const entry = state.pendingAdditions.find(p => p.type === 'daily' && p.taskId === id && p.date === today);
+    if (entry) {
+      entry.isSelf = isSelf;
+      saveState();
     }
     showCelebration('⏳', '已提交！等待确认', `「${task2 ? task2.name : id}」等爸爸妈妈审核后积分确认 💪`);
     setTimeout(() => tryShowShopBoost(score, true), 1600);

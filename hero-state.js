@@ -50,6 +50,7 @@ function defaultState() {
     pendingAdditions: [],     // [{type, taskId, name, score, date, actualDate, isSelf, isBackfill}]
 
     // ── 自律统计 ───────────────────────────────────────────
+    selfReport: {},            // { "2026-04-10": { "hw_complete": "self" | "reminded" } }
     reviewedSelfLog: {},      // { "2026-04": { "2026-04-05": true } }
 
     // ── 连续打卡追踪 ────────────────────────────────────────
@@ -281,6 +282,52 @@ function loadTotalScoreFromFirebase() {
 }
 
 // ══════════════════════════════════════════════════════════════
+// Firebase 自律数据加载（Bug 4 修复：读回 selfReport 和 reviewedSelfLog）
+// ══════════════════════════════════════════════════════════════
+
+function loadSelfReportFromFirebase() {
+  if (!isFirebaseReady()) return;
+  const db = window._firebaseDB;
+
+  // 读取 selfReport
+  window._firebaseGet(window._firebaseRef(db, 'selfReport')).then(snap => {
+    const fb = snap.val();
+    if (fb && typeof fb === 'object') {
+      if (!state.selfReport) state.selfReport = {};
+      // 合并：Firebase 数据优先（跨设备打卡以 Firebase 为准）
+      for (const dateStr in fb) {
+        if (!state.selfReport[dateStr]) state.selfReport[dateStr] = {};
+        for (const taskId in fb[dateStr]) {
+          state.selfReport[dateStr][taskId] = fb[dateStr][taskId];
+        }
+      }
+      saveState();
+      // 重新渲染自律进度条（若有的话）
+      if (typeof renderDisciplineBar === 'function') renderDisciplineBar();
+    }
+  }).catch(err => {
+    console.error('加载自律数据失败:', err);
+  });
+
+  // 读取 reviewedSelfLog
+  window._firebaseGet(window._firebaseRef(db, 'reviewedSelfLog')).then(snap => {
+    const fb = snap.val();
+    if (fb && typeof fb === 'object') {
+      if (!state.reviewedSelfLog) state.reviewedSelfLog = {};
+      for (const ym in fb) {
+        if (!state.reviewedSelfLog[ym]) state.reviewedSelfLog[ym] = {};
+        for (const dateStr in fb[ym]) {
+          state.reviewedSelfLog[ym][dateStr] = true;
+        }
+      }
+      saveState();
+    }
+  }).catch(err => {
+    console.error('加载审核自律记录失败:', err);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
 // 父母审核回调
 // ══════════════════════════════════════════════════════════════
 
@@ -299,6 +346,13 @@ function onParentApprove(taskType, taskId, effectiveScore, isSelf) {
     const ym = today.slice(0, 7);
     if (!state.reviewedSelfLog[ym]) state.reviewedSelfLog[ym] = {};
     state.reviewedSelfLog[ym][today] = true;
+    // Bug 5 修复：同步 reviewedSelfLog 到 Firebase
+    if (isFirebaseReady()) {
+      window._firebaseSet(
+        window._firebaseRef(window._firebaseDB, `reviewedSelfLog/${ym}/${today}`),
+        true
+      );
+    }
   }
   saveState();
   renderAll();

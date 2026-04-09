@@ -1,14 +1,20 @@
-const CACHE_NAME = 'hero-plan-v75';  // ← 每次改动这里，强制刷新缓存
+const CACHE_NAME = 'hero-plan-v76';  // ← 每次改动这里，强制刷新缓存
 const urlsToCache = [
   './',
   './index.html',
   './style.css',
-  './app.js?v=4',
-  './data.js',
-  './hero-constants.js?v=4',
-  './hero-state.js?v=4',
+  './data.js?v=3',
+  './hero-constants.js?v=5',
+  './hero-state.js?v=5',
+  './app.js?v=9',
   './firebase-sync.js?v=73',
-  './manifest.json'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './sounds/bonus.mp3',
+  './sounds/celebration.mp3',
+  './sounds/success.mp3',
+  './sounds/ta-da.mp3'
 ];
 
 // 安装 - 缓存所有文件
