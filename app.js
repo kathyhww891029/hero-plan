@@ -3902,19 +3902,41 @@ function importData(fileInput) {
     try {
       const allData = JSON.parse(e.target.result);
       let imported = 0;
+      const importedKeys = [];
       for (const k in allData) {
         if (allData[k] !== null && allData[k] !== undefined) {
           localStorage.setItem(k, allData[k]);
           imported++;
+          importedKeys.push(k + '(' + (allData[k].length || 0) + 'b)');
         }
       }
-      alert('✅ 成功导入 ' + imported + ' 条数据！\n页面将重新加载…');
       fileInput.value = '';
-      setTimeout(() => location.reload(), 500);
+
+      // ── 不刷新页面！直接重新加载状态并渲染 ──────────────
+      // 原因：iPad PWA 中 location.reload() 可能被 SW 缓存拦截，
+      // 或 iOS PWA 独立窗口的 localStorage 在 reload 时被重置。
+      console.log('📥 导入完成，共 ' + imported + ' 条: ' + importedKeys.slice(0,5).join(', ') + (importedKeys.length>5?'...':''));
+      state = loadState();
+
+      // 重新渲染整个页面
+      renderAll();
+
+      // 显示成功提示（带诊断信息）
+      var debugInfo = '已导入 ' + imported + ' 条数据\n';
+      debugInfo += '当前积分: ' + (state.totalScore || 0) + ' 分\n';
+      debugInfo += '独立窗口: ' + (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone || false);
+      alert('✅ 导入成功！' + debugInfo);
+
     } catch(err) {
+      console.error('❌ 导入失败:', err);
       alert('❌ 导入失败：文件格式错误\n' + err.message);
       fileInput.value = '';
     }
+  };
+  reader.onerror = function(err) {
+    console.error('❌ 文件读取失败:', err);
+    alert('❌ 文件读取失败，请重试');
+    fileInput.value = '';
   };
   reader.readAsText(file);
 }
