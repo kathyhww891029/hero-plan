@@ -6,7 +6,7 @@
 const CACHE_NAME = 'hero-plan-v110';
 const CACHE_DATE = '2026-05-07-async-tcb';
 
-// 核心资源（按需缓存）
+// 核心资源（按需缓存，缓存在线）
 const urlsToCache = [
   './',
   './index.html',
@@ -31,6 +31,7 @@ self.addEventListener('install', event => {
       console.log('🦸 SW v110 安装中…');
       return cache.addAll(urlsToCache).catch(err => {
         console.warn('⚠️ 部分资源缓存失败（非致命）:', err);
+        // 继续，不因为一个资源失败就阻止 SW 安装
       });
     })
   );
@@ -73,20 +74,24 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request)
         .then(response => {
+          // 更新缓存
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(() => {
+          // 网络失败 → 用缓存
+          return caches.match(event.request);
+        })
     );
     return;
   }
 
-  // 其他资源：缓存优先 + 后台更新
+  // 其他资源：缓存优先
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) {
-        // stale-while-revalidate
+        // 后台更新缓存（stale-while-revalidate）
         fetch(event.request).then(response => {
           if (response && response.status === 200) {
             caches.open(CACHE_NAME).then(cache => cache.put(event.request, response));

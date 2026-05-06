@@ -19,170 +19,115 @@
   // 注册 Service Worker（PWA离线支持）
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw-new.js?v=1')
+      navigator.serviceWorker.register('./sw-new.js?v=2')
         .then(reg => console.log('✅ SW 注册成功'))
         .catch(err => console.log('SW 注册失败:', err));
     });
   }
 </script>
-<!-- 腾讯云开发 TCB SDK -->
-<script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
+<!-- 腾讯云开发 TCB SDK（异步加载，不阻塞页面渲染） -->
 <script>
-  // 环境配置
-  const TCB_ENV_ID = 'kathyhww1029-7gop3h5x37223dd9';
+  (function() {
+    var TCB_ENV_ID = 'kathyhww1029-7gop3h5x37223dd9';
+    window._tcbReady = false;
 
-  // 初始化 TCB（同步，返回 app 实例；匿名登录异步，在 app.js DOMContentLoaded 中调用）
-  const app = cloudbase.init({
-    env: TCB_ENV_ID
-  });
+    // 占位函数，确保后续代码不报错
+    window._tcbDB = function() { return null; };
+    window._firebaseDB = null;
 
-  // ── Firebase API 兼容层（保持 app.js / firebase-sync.js 不动）────────────────
+    var s = document.createElement('script');
+    s.src = 'https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js';
 
-  // TCB 数据库引用 → Firebase ref 兼容
-  function tcbRef(db, path) {
-    if (!path || path === '') return db.collection('');
-    // Firebase path: 'pending' → collection('pending')
-    //               'pending/key' → collection('pending').doc('key')
-    //               'weeklyPraise/weekStr' → collection('weeklyPraise').doc('weekStr')
-    const parts = path.split('/');
-    let query = db.collection(parts[0]);
-    if (parts.length >= 2 && parts[1]) {
-      query = query.doc(parts[1]);
-    }
-    return query;
-  }
+    s.onload = function() {
+      try {
+        if (typeof cloudbase === 'undefined') throw new Error('SDK not loaded');
+        var app = cloudbase.init({ env: TCB_ENV_ID });
+        window._tcbApp = app;
 
-  // TCB add → Firebase push 兼容（返回带 key 的 Thenable）
-  function tcbPush(collectionRef, data) {
-    return collectionRef.add(data).then(res => ({
-      key: res.id,
-      then: (cb) => cb({ val: () => ({ key: res.id }) }),
-      catch: (cb) => Promise.resolve().catch(cb)
-    }));
-  }
-
-  // TCB set → Firebase set 兼容
-  // TCB docRef 有 id 属性，collectionRef 没有
-  function tcbSet(docRef, data) {
-    if (docRef.id !== undefined) {
-      // 单文档
-      return docRef.set(data);
-    } else {
-      // 集合引用 → 创建新文档
-      return docRef.add(data);
-    }
-  }
-
-  // TCB get → Firebase get 兼容（snapshot.val() 格式）
-  function tcbGet(docOrCollRef) {
-    const isDoc = docOrCollRef.id !== undefined;
-    if (isDoc) {
-      // 单文档查询
-      return docOrCollRef.get().then(res => ({
-        val: () => res.data || null
-      }));
-    } else {
-      // 集合查询 → Firebase: { docId: docData, ... }
-      return docOrCollRef.get().then(res => {
-        const obj = {};
-        (res.data || []).forEach(doc => { obj[doc._id] = doc; });
-        return { val: () => obj };
-      });
-    }
-  }
-
-  // TCB update → Firebase update 兼容
-  function tcbUpdate(docRef, data) {
-    return docRef.update(data);
-  }
-
-  // TCB remove → Firebase remove 兼容
-  function tcbRemove(docRef) {
-    return docRef.remove();
-  }
-
-  // TCB onSnapshot → Firebase onValue 兼容（回调式）
-  // 返回 stop() 函数供 firebase-sync.js 中可能的清理用
-  function tcbOnValue(path, callback) {
-    const db = app.database();
-    const parts = path.split('/');
-    let ref;
-    if (parts.length === 1) {
-      ref = db.collection(parts[0]);
-    } else {
-      ref = db.collection(parts[0]).doc(parts[1]);
-    }
-
-    // 监听实时变化（TCB watch）
-    const watcher = ref.watch({
-      onChange: (snapshot) => {
-        // TCB snapshot: { docs: [...], total: N }
-        // Firebase snapshot.val(): { docId: docData, ... }
-        let val;
-        if (Array.isArray(snapshot.docs)) {
-          const obj = {};
-          snapshot.docs.forEach(doc => { obj[doc._id] = doc; });
-          val = obj;
-        } else {
-          val = null;
+        // ── Firebase API 兼容层 ──────────────────────────
+        function ref(db, path) {
+          if (!path) return db.collection('');
+          var p = path.split('/');
+          var q = db.collection(p[0]);
+          if (p.length >= 2 && p[1]) q = q.doc(p[1]);
+          return q;
         }
-        callback({ val: () => val });
-      },
-      onError: (err) => {
-        console.error('TCB 监听错误:', path, err);
-      }
-    });
-
-    // 返回停止监听的函数
-    return () => { if (watcher && watcher.close) watcher.close(); };
-  }
-
-  // TCB 原子递增（Firebase increment 兼容）
-  function tcbIncrement(delta) {
-    // TCB 没有原子 increment，模拟：返回特殊标记，由 tcbSet 展开
-    return { __tcb_inc: delta };
-  }
-  // 拦截 tcbSet，对含 __tcb_inc 的字段做原子递增
-  function tcbSetWithInc(docRef, data) {
-    const hasInc = data && typeof data === 'object' &&
-      Object.values(data).some(v => v && v.__tcb_inc !== undefined);
-    if (hasInc) {
-      // 读-改-写两步走（TCB 无原子递增，这是最小侵入方案）
-      return docRef.get().then(res => {
-        const current = res.data || {};
-        const newData = { ...current };
-        for (const k in data) {
-          if (data[k] && data[k].__tcb_inc !== undefined) {
-            newData[k] = (newData[k] || 0) + data[k].__tcb_inc;
-          } else {
-            newData[k] = data[k];
+        function push(colRef, data) {
+          return colRef.add(data).then(function(r) {
+            return { key: r.id, then: function(cb) { cb({ val: function() { return { key: r.id }; } }); }, catch: function() {} };
+          });
+        }
+        function set(docRef, data) {
+          if (docRef.id !== undefined) return docRef.set(data);
+          return docRef.add(data);
+        }
+        function get(docRef) {
+          var isDoc = docRef.id !== undefined;
+          if (isDoc) {
+            return docRef.get().then(function(r) { return { val: function() { return r.data || null; } }; });
           }
+          return docRef.get().then(function(r) {
+            var o = {};
+            (r.data || []).forEach(function(d) { o[d._id] = d; });
+            return { val: function() { return o; } };
+          });
         }
-        return docRef.set(newData);
-      });
-    }
-    return docRef.set(data);
-  }
+        function update(docRef, data) { return docRef.update(data); }
+        function remove(docRef) { return docRef.remove(); }
+        function setWithInc(docRef, data) {
+          var hasInc = false;
+          for (var k in data) { if (data[k] && data[k].__tcb_inc !== undefined) { hasInc = true; break; } }
+          if (!hasInc) return docRef.set(data);
+          return docRef.get().then(function(r) {
+            var cur = r.data || {};
+            for (var k in data) {
+              if (data[k] && data[k].__tcb_inc !== undefined) cur[k] = (cur[k] || 0) + data[k].__tcb_inc;
+              else cur[k] = data[k];
+            }
+            return docRef.set(cur);
+          });
+        }
 
-  // 获取数据库实例
-  window._tcbDB = () => app.database();
-  window._firebaseDB = window._tcbDB();  // 供 app.js / firebase-sync.js 使用
+        window._tcbDB = function() { return app.database(); };
+        window._firebaseDB = app.database();
+        window._firebaseRef = ref;
+        window._firebaseSet = function(r, d) {
+          if (d && d.__tcb_inc !== undefined) return setWithInc(r, d);
+          for (var k in d) { if (d[k] && d[k].__tcb_inc !== undefined) return setWithInc(r, d); }
+          return set(r, d);
+        };
+        window._firebaseGet = get;
+        window._firebasePush = push;
+        window._firebaseUpdate = update;
+        window._firebaseRemove = remove;
+        window._firebaseOnValue = function(path, cb) {
+          var db = app.database();
+          var p = path.split('/');
+          var r = (p.length === 1) ? db.collection(p[0]) : db.collection(p[0]).doc(p[1]);
+          var w = r.watch({
+            onChange: function(s) {
+              var v = {};
+              if (Array.isArray(s.docs)) s.docs.forEach(function(d) { v[d._id] = d; });
+              cb({ val: function() { return v; } });
+            },
+            onError: function(e) { console.error('TCB err:', path, e); }
+          });
+          return function() { if (w && w.close) w.close(); };
+        };
+        window._firebaseIncrement = function(d) { return { __tcb_inc: d }; };
+        window._tcbReady = true;
+        console.log('✅ TCB 异步初始化成功');
+      } catch(e) {
+        console.warn('⚠️ TCB 失败，纯本地模式:', e.message);
+      }
+    };
 
-  // 统一封装：ref + 常见操作
-  window._firebaseRef = (db, path) => tcbRef(db, path);
-  window._firebaseSet = (ref, data) => {
-    // 特殊处理 syncScore 的 increment（delta 是 {__tcb_inc: N}）
-    if (data && data.__tcb_inc !== undefined) {
-      return tcbSetWithInc(ref, data);
-    }
-    return tcbSet(ref, data);
-  };
-  window._firebaseOnValue = tcbOnValue;
-  window._firebasePush = tcbPush;
-  window._firebaseUpdate = tcbUpdate;
-  window._firebaseRemove = tcbRemove;
-  window._firebaseGet = tcbGet;
-  window._firebaseIncrement = tcbIncrement;
+    s.onerror = function() {
+      console.warn('⚠️ TCB SDK CDN 不可达，纯本地模式');
+    };
+
+    document.head.appendChild(s);
+  })();
 </script>
 </head>
 <body>
@@ -735,7 +680,7 @@
 <script src="data.js?v=3c"></script>
 <script src="hero-constants.js?v=5c"></script>
 <script src="hero-state.js?v=13c"></script>
-<script src="app.js?v=14c"></script>
+<script src="app.js?v=15c"></script>
 <script src="firebase-sync.js?v=76c"></script>
 </body>
 </html>

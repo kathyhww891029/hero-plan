@@ -2,6 +2,60 @@
    英雄成长计划 · 主逻辑
 ══════════════════════════════════════════════════════════════ */
 
+// ── Service Worker 更新检测 ──────────────────────────────────
+if ('serviceWorker' in navigator) {
+  // 监听 SW 消息：新版本激活时自动刷新
+  navigator.serviceWorker.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'SW_VERSION' && event.data.action === 'reload') {
+      console.log('🔄 检测到新版本 [' + event.data.cacheName + ']，2秒后自动刷新…');
+      setTimeout(function() { window.location.reload(); }, 2000);
+    }
+  });
+
+  // 监听 SW 更新完成（controllerchange = 新 SW 接管页面）
+  var refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (refreshing) return;
+    refreshing = true;
+    console.log('🔄 SW 已更新，刷新页面…');
+    window.location.reload();
+  });
+}
+
+// ── 诊断工具（在页面顶部显示 debug 信息条）────────────────────
+window._showDebugBar = function(msg) {
+  var bar = document.getElementById('debug-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'debug-bar';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#1a1a2e;color:#ffd700;font-size:11px;padding:6px 12px;text-align:center;font-family:monospace;';
+    document.body.prepend(bar);
+  }
+  bar.textContent = '🔧 ' + msg;
+};
+
+// 启动时输出诊断信息（3秒后自动消失）
+(function() {
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone || false;
+  var hasState = !!localStorage.getItem('hero_plan_state_v2');
+  var hasPins = !!localStorage.getItem('heroplan_pins');
+  var score = 0;
+  try {
+    var raw = localStorage.getItem('hero_plan_state_v2');
+    if (raw) score = JSON.parse(raw).totalScore || 0;
+  } catch(e) {}
+  var tcbStatus = window._tcbReady ? '✅云同步' : '📦纯本地';
+  console.log('🦸 启动诊断 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
+  if (!hasState || score === 0) {
+    window._showDebugBar('启动完成 | 独立窗口:' + standalone + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
+  }
+  setTimeout(function() {
+    var bar = document.getElementById('debug-bar');
+    if (bar) bar.style.opacity = '0';
+    setTimeout(function() { if (bar) bar.remove(); }, 500);
+  }, 6000);
+})();
+
 // ── Firebase Auth Guard ────────────────────────────────────────
 // 数据库连接 且 匿名用户已登录（auth token 会自动附在所有请求上）
 function isFirebaseReady() {
