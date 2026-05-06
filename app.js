@@ -3620,8 +3620,21 @@ function renderDadPage() {
         <div class="dad-tip-box" style="background:#EDFFF9;border-left:4px solid #06D6A0;margin-top:16px;text-align:center">
           <div class="dad-tip-text" style="line-height:2;color:#00897B;font-size:14px">${nl2br(g.parentClosing)}</div>
         </div>
-        <!-- 清空测试数据（受 PIN 保护） -->
+        <!-- 数据备份与恢复 -->
         <div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center">
+          <div style="font-size:12px;color:#aaa;margin-bottom:8px">💾 数据备份与恢复</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+            <button onclick="exportData()" style="background:#06D6A0;border:none;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;">
+              📤 导出数据
+            </button>
+            <button onclick="document.getElementById('importFileInput').click()" style="background:#118AB2;border:none;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;">
+              📥 导入数据
+            </button>
+          </div>
+          <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importData(this)">
+        </div>
+        <!-- 清空测试数据（受 PIN 保护） -->
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid #eee;text-align:center">
           <div style="font-size:12px;color:#aaa;margin-bottom:8px">⚠️ 测试阶段专用，正式使用前请清空数据</div>
           <button onclick="showSecureClearModal()" style="background:#fff;border:2px solid #FF6B35;color:#FF6B35;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">
             🗑️ 清空所有测试数据
@@ -3798,6 +3811,58 @@ function clearAllData() {
 
   // ── 3. 重载页面 ───────────────────────────────────────────
   location.reload();
+}
+
+// ── 数据导出（下载 JSON 备份）─────────────────────────────────
+function exportData() {
+  const allData = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    allData[k] = localStorage.getItem(k);
+  }
+  const json = JSON.stringify(allData, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'hero-plan-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── 数据导入（从 JSON 文件恢复）───────────────────────────────
+function importData(fileInput) {
+  const file = fileInput.files[0];
+  if (!file) return;
+  if (!file.name.endsWith('.json')) {
+    alert('⚠️ 请选择 .json 格式的备份文件');
+    fileInput.value = '';
+    return;
+  }
+  if (!confirm('📥 导入将覆盖当前所有数据！\n\n建议：导入前先点「导出数据」备份当前数据。\n\n继续吗？')) {
+    fileInput.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const allData = JSON.parse(e.target.result);
+      let imported = 0;
+      for (const k in allData) {
+        if (allData[k] !== null && allData[k] !== undefined) {
+          localStorage.setItem(k, allData[k]);
+          imported++;
+        }
+      }
+      alert('✅ 成功导入 ' + imported + ' 条数据！\n页面将重新加载…');
+      fileInput.value = '';
+      setTimeout(() => location.reload(), 500);
+    } catch(err) {
+      alert('❌ 导入失败：文件格式错误\n' + err.message);
+      fileInput.value = '';
+    }
+  };
+  reader.readAsText(file);
 }
 
 // ── 彩蛋弹窗 ───────────────────────────────────────────────────
