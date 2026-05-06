@@ -215,24 +215,24 @@ function updateWelcomeArea() {
 // ── DOMContentLoaded 初始化（保持在此文件，因涉及 UI 渲染）──────
 document.addEventListener('DOMContentLoaded', () => {
   state = loadState();
+  // alert('数据: ' + JSON.stringify(localStorage).substring(0,500));
+  // 诊断信息显示在页面左上角（仅供调试）
+  const diag = document.createElement('div');
+  diag.id = '_diag_bar';
+  diag.style = 'position:fixed;top:4px;left:4px;z-index:9999;background:#000;color:#0f0;font-size:11px;padding:4px 8px;border-radius:4px;max-width:90vw;overflow:auto;font-family:monospace;line-height:1.4;';
+  diag.innerHTML = '📦 SW缓存: ' + (typeof CACHE_DATE !== 'undefined' ? CACHE_DATE : '未定义') + '<br>STATE_KEY: ' + STATE_KEY + '<br>localStorage: ' + Object.keys(localStorage).map(k => k + ':' + (localStorage.getItem(k) ? '有' : '空')).join(' | ') + '<br>lastActiveDate: ' + (state.lastActiveDate || '无');
+  document.body.appendChild(diag);
+  setTimeout(() => { const d = document.getElementById('_diag_bar'); if(d) d.remove(); }, 5000); // 5秒后自动消失
   migrateWeeklyCardClaims();
   checkWeekUnlock();
   checkDayReset();
 
-  // 先初始化 Firebase（app.js 监听器先注册，再触发事件）
-  initFirebase();
+  // 调试诊断（可删除）
+  const debug = window._debugLoad;
+  console.log('[诊断] loadState 结果:', debug, '| localStorage:', window._localStorageDebug ? window._localStorageDebug() : 'N/A');
 
-  if (isFirebaseReady()) {
-    loadTotalScoreFromFirebase();
-    loadSelfReportFromFirebase();
-    renderAll();
-  } else {
-    window.addEventListener('firebaseReady', () => {
-      loadTotalScoreFromFirebase();
-      loadSelfReportFromFirebase();
-      renderAll();
-    }, { once: true });
-  }
+  // 数据保存在本地设备，同时异步同步至云端（腾讯云开发 TCB）
+  renderAll();
 
   // Page Visibility：tab 从后台恢复时，精确计算计时器
   document.addEventListener('visibilitychange', () => {
@@ -392,6 +392,26 @@ function onCalendarDayClick(dateStr) {
 }
 
 // 历史补卡弹窗
+// 补卡是否已提交（跨天持久化，用 backfillLog 判断）
+// taskId 格式：morning_X_2026-04-01、homework_block_1_2026-04-01 等
+function isBackfillDone(taskId, dateStr) {
+  if (!state.backfillLog) return false;
+  const dates = state.backfillLog[taskId];
+  if (!dates) return false;
+  // 只要该 taskId 在任意日期有记录即算已补卡（防止跨天重复）
+  return dates.length > 0;
+}
+
+// 标记补卡为已完成（持久化到 backfillLog）
+function markBackfillDone(taskId, dateStr) {
+  if (!state.backfillLog) state.backfillLog = {};
+  if (!state.backfillLog[taskId]) state.backfillLog[taskId] = [];
+  if (!state.backfillLog[taskId].includes(dateStr)) {
+    state.backfillLog[taskId].push(dateStr);
+  }
+  saveState();
+}
+
 function showHistoricalCheckinModal(dateStr) {
   // dateStr 格式：'2026-04-05'
   const date = new Date(dateStr);
@@ -424,7 +444,7 @@ function showHistoricalCheckinModal(dateStr) {
         <div style="font-size:0.85rem;color:#888;margin-bottom:8px;">🌅 早晨英雄包</div>
         ${MORNING_PACK.map(item => {
           const taskId = `morning_${item.id}_${dateStr}`;
-          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const alreadySubmitted = isBackfillDone(taskId, dateStr);
           const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
           return `
           <button class="backfill-task-btn" data-type="morning" data-id="${item.id}" data-name="${item.name}" data-icon="${item.icon}" data-score="${item.score}" ${disabled}
@@ -440,7 +460,7 @@ function showHistoricalCheckinModal(dateStr) {
         <div style="font-size:0.85rem;color:#888;margin:16px 0 8px;">🌙 睡前英雄包</div>
         ${NIGHT_PACK.map(item => {
           const taskId = `night_${item.id}_${dateStr}`;
-          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const alreadySubmitted = isBackfillDone(taskId, dateStr);
           const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
           return `
           <button class="backfill-task-btn" data-type="night" data-id="${item.id}" data-name="${item.name}" data-icon="${item.icon}" data-score="${item.score}" ${disabled}
@@ -456,7 +476,7 @@ function showHistoricalCheckinModal(dateStr) {
         <div style="font-size:0.85rem;color:#888;margin:16px 0 8px;">📚 写作业</div>
         ${[1,2,3].map(n => {
           const taskId = `homework_block_${n}_${dateStr}`;
-          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const alreadySubmitted = isBackfillDone(taskId, dateStr);
           const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
           return `
           <button class="backfill-task-btn" data-pack="homework" data-hw-blocks="${n}" data-name="🍅专注块×${n}" data-icon="📚" data-score="${n}" ${disabled}
@@ -470,7 +490,7 @@ function showHistoricalCheckinModal(dateStr) {
         }).join('')}
         ${(() => {
           const taskId = `homework_complete_${dateStr}`;
-          const alreadySubmitted = (state.pendingAdditions||[]).some(p => p.taskId === taskId);
+          const alreadySubmitted = isBackfillDone(taskId, dateStr);
           const disabled = alreadySubmitted ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : '';
           return `
           <button class="backfill-task-btn" data-pack="homework" data-hw-complete="1" data-name="📖写完作业" data-icon="📚" data-score="2" ${disabled}
@@ -608,15 +628,19 @@ function submitBackfillTask(packType, itemId, itemName, itemIcon, score, dateStr
 
   saveState();
   
-  // 同步到 Firebase（taskId 带日期后缀，让爸妈能看到是补卡）
+  // 补卡完成记录（持久化，不受跨天重置影响）
+  markBackfillDone(fullTaskId, dateStr);
+  
+  // 写入父母审核队列（纯本地，与 Firebase 无关）
   const totalGain = score + bonusGain;
+  submitPending('pack', fullTaskId, label, score, dateStr, isSelf);
+  if (bonusGain > 0) {
+    const fullBonusTaskId = `${packType}_full_${dateStr}`;
+    submitPending('pack', fullBonusTaskId, (packType === 'morning' ? '早晨' : '睡前') + '英雄包全套奖励', bonusGain, dateStr, isSelf);
+    state.todayChecked[fullBonusTaskId] = 'pending';
+  }
+  // Firebase 同步（可选，仅在 Firebase 可用时）
   if (isFirebaseReady()) {
-    submitPending('pack', fullTaskId, label, score, dateStr, isSelf);
-    if (bonusGain > 0) {
-      const fullBonusTaskId = `${packType}_full_${dateStr}`;
-      submitPending('pack', fullBonusTaskId, (packType === 'morning' ? '早晨' : '睡前') + '英雄包全套奖励', bonusGain, dateStr, isSelf);
-      state.todayChecked[fullBonusTaskId] = 'pending';
-    }
     window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(totalGain));
   }
   
@@ -643,6 +667,7 @@ function submitHomeworkBackfill(blocks, isComplete, dateStr, isSelf) {
       isSelf: isSelf,
       isBackfill: true
     });
+    markBackfillDone(`homework_block_${blocks}_${dateStr}`, dateStr);
   }
 
   if (isComplete) {
@@ -657,6 +682,7 @@ function submitHomeworkBackfill(blocks, isComplete, dateStr, isSelf) {
       isSelf: isSelf,
       isBackfill: true
     });
+    markBackfillDone(`homework_complete_${dateStr}`, dateStr);
   }
 
   if (entries.length === 0) return;
@@ -677,11 +703,12 @@ function submitHomeworkBackfill(blocks, isComplete, dateStr, isSelf) {
 
   saveState();
 
-  // Firebase 同步
+  // 写入父母审核队列（纯本地，与 Firebase 无关）
+  entries.forEach(e => {
+    submitPending('homework', e.taskId, e.name, e.score, dateStr, isSelf);
+  });
+  // Firebase 同步（可选，仅在 Firebase 可用时）
   if (isFirebaseReady()) {
-    entries.forEach(e => {
-      submitPending('homework', e.taskId, e.name, e.score, dateStr, isSelf);
-    });
     window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(totalGain));
   }
 
@@ -1325,7 +1352,7 @@ function doCheckIn(packType, id, score) {
 
   // 弹自律确认
   showSelfReportUnified(`${packType}_${id}_${today}`, packItemName, gain, packIcon, (isSelf) => {
-    if (isFirebaseReady()) submitPending('pack', fullTaskId, label, gain, '', isSelf);
+    submitPending('pack', fullTaskId, label, gain, '', isSelf);
     const entry = state.pendingAdditions.find(p => p.type === 'pack' && p.taskId === fullTaskId && p.date === today && p.actualDate === today);
     if (entry) { entry.isSelf = isSelf; saveState(); }
     const toastMsg = `已完成${todayDone}/${pack.length}件，${isFull ? '全套达成！🎉' : '再完成' + (pack.length - todayDone) + '件有惊喜！'}`;
@@ -3344,9 +3371,10 @@ function claimCard(id, isSelf) {
       });
     }, 400);
   }
-  // 同步到 Firebase（同时走 submitPending，让爸妈能在 Firebase 后台看到）
+  // 写入父母审核队列（纯本地，与 Firebase 无关）
+  submitPending('card', id, card.name, card.score, '', isSelf);
+  // Firebase 同步（可选，仅在 Firebase 可用时）
   if (isFirebaseReady()) {
-    submitPending('card', id, card.name, card.score, '', isSelf);
     window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncScore/score'), window._firebaseIncrement(card.score));
   }
   closeModal('cardModal');
@@ -5508,6 +5536,10 @@ function claimMedal(medalId) {
   state.medalClaims[medalId] = Date.now();
   state.totalScore += medal.bonus;
   saveState();
+
+  // 刷新页面分数显示
+  document.getElementById('totalScore').textContent = state.totalScore;
+  document.getElementById('shopScore').textContent = state.totalScore;
 
   // 显示领取成功
   showToast(`🏆 获得「${medal.name}」！+${medal.bonus}分`, 'success');

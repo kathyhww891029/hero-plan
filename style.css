@@ -30,8 +30,10 @@ body {
   font-family: -apple-system, 'PingFang SC', '微软雅黑', sans-serif;
   background: #F0F4F8;
   color: var(--text);
-  min-height: 100vh;
+  min-height: 100dvh;
   padding-bottom: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── 头部 ── */

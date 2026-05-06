@@ -8,15 +8,87 @@
 // ── 全局状态（由 loadState / saveState 管理）────────────────────
 var state;
 
-// ── localStorage 读写 ──────────────────────────────────────────
+// ── localStorage 读写（兼容旧 key，自动迁移）────────────────────
+const FALLBACK_STATE_KEYS = ['heroplan_state_v2', 'heroplan_state', 'hero_plan_state_v2'];
+
+// 调试：把所有 localStorage key 记录到诊断信息
+window._localStorageDebug = function() {
+  const keys = ['hero_plan_state_v2', 'heroplan_state_v2', 'heroplan_state', 'heroplan_state_backup'];
+  const info = {};
+  keys.forEach(k => { info[k] = localStorage.getItem(k) ? '[有数据，长度' + localStorage.getItem(k).length + ']' : 'null'; });
+  return info;
+};
+
 function loadState() {
-  try {
-    const s = localStorage.getItem(STATE_KEY);
-    return s ? Object.assign(defaultState(), JSON.parse(s)) : defaultState();
-  } catch(e) { return defaultState(); }
+  // 1. 优先用当前 STATE_KEY（本地缓存，同步加载，保证 UI 立即可用）
+  let data = _loadStateFromKey(STATE_KEY);
+  window._debugLoad = { step: 'new_key', found: !!data, totalScore: data ? data.totalScore : null, STATE_KEY, _rawTotalScore: (() => { try { const raw = localStorage.getItem('hero_plan_state_v2'); return raw ? JSON.parse(raw).totalScore : 'no_data'; } catch(e) { 'parse_error'; } })() };
+  // 2. 若没有，依次尝试旧 key（并做迁移）
+  if (!data) {
+    for (const key of FALLBACK_STATE_KEYS) {
+      if (key === STATE_KEY) continue;
+      data = _loadStateFromKey(key);
+      if (data) {
+        window._debugLoad = { step: 'migrated_from_' + key, found: true, totalScore: data.totalScore, _rawTotalScore: (() => { try { const raw = localStorage.getItem(STATE_KEY); return raw ? JSON.parse(raw).totalScore : 'no_data'; } catch(e) { 'parse_error'; } })() };
+        console.log(`从旧 key '${key}' 迁移数据到 '${STATE_KEY}'`);
+        state = data;
+        saveState();
+        localStorage.removeItem(key);
+        break;
+      }
+    }
+  }
+  if (!data) {
+    window._debugLoad = { step: 'default', found: false, totalScore: 0 };
+  } else {
+    if (!data.lastActiveDate) data.lastActiveDate = todayStr();
+  }
+
+  const loaded = data || defaultState();
+
+  // 3. 异步从 Firebase 云端拉取（如果有）并在后台对比时间戳恢复更新数据
+  if (window._firebaseDB && window._firebaseGet) {
+    window._firebaseGet(window._firebaseRef(window._firebaseDB, 'syncState/main')).then(snapshot => {
+      const cloudState = snapshot.val();
+      if (cloudState && cloudState.state) {
+        const cloudTime = cloudState.savedAt || 0;
+        const localTime = loaded.lastSaveTime || 0;
+        if (cloudTime > localTime) {
+          console.log('📡 云端数据更新（时间戳更新），恢复云端状态');
+          state = cloudState.state;
+          state.lastSaveTime = cloudTime; // 保持云端时间戳
+          saveState();
+          renderAll();
+        }
+      }
+    }).catch(err => {
+      console.warn('⚠️ Firebase 拉取失败，使用本地缓存:', err);
+    });
+  }
+
+  return loaded;
 }
+
+function _loadStateFromKey(key) {
+  try {
+    const s = localStorage.getItem(key);
+    return s ? Object.assign(defaultState(), JSON.parse(s)) : null;
+  } catch(e) { return null; }
+}
+
 function saveState() {
+  // 先更新时间戳，确保本地和云端都是一致的
+  state.lastSaveTime = Date.now();
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
+  // ── Firebase 云端同步（异步，不阻塞 UI）──────────────────
+  if (window._firebaseDB && window._firebaseSet) {
+    window._firebaseSet(window._firebaseRef(window._firebaseDB, 'syncState/main'), {
+      state: state,
+      savedAt: state.lastSaveTime
+    }).catch(err => {
+      console.warn('⚠️ Firebase 同步失败:', err);
+    });
+  }
 }
 
 // ── 初始状态 ──────────────────────────────────────────────────
@@ -48,6 +120,7 @@ function defaultState() {
 
     // ── 待审加分池 ──────────────────────────────────────────
     pendingAdditions: [],     // [{type, taskId, name, score, date, actualDate, isSelf, isBackfill}]
+    backfillLog: {},          // { taskId: [dateStr, ...] } 已补卡记录（跨天保留，清空后仍可查到）
 
     // ── 自律统计 ───────────────────────────────────────────
     selfReport: {},            // { "2026-04-10": { "hw_complete": "self" | "reminded" } }
@@ -74,6 +147,7 @@ function defaultState() {
     // ── 阶段 ────────────────────────────────────────────────
     currentPhase: 1,
     phaseStartDate: null,
+    lastSaveTime: 0,         // 上次保存时间戳（用于云端同步冲突判断）
 
     // ── 月度自律率（B类奖励解锁）────────────────────────────
     monthlyDisciplineLog: {}, // { "2026-04": { "2026-04-05": { morning:true, night:true, ... } } }
@@ -112,6 +186,9 @@ function defaultState() {
     settings: {
       focusMinutes: DEFAULT_SETTINGS.focusMinutes,
     },
+
+    // ── 上次活跃日期（用于自动检测新一天）──────────────────
+    lastActiveDate: null,
   };
 }
 
@@ -183,7 +260,62 @@ function checkWeekUnlock() {
 }
 
 function checkDayReset() {
-  // 目前由按钮手动触发，不自动重置
+  const today = todayStr();
+  if (state.lastActiveDate === today) return; // 同一天，不用重置
+
+  // 跨天了！保存昨天连续打卡记录，然后重置每日状态
+  const yesterday = yesterdayStr();
+  const wasYesterday = state.lastActiveDate === yesterday;
+
+  // ── 更新连续打卡（以昨晚为基准）────────────────────────────
+  function updateStreak(key, packKey) {
+    if (!state.streaks[key]) state.streaks[key] = { count: 0, lastDate: '' };
+    const s = state.streaks[key];
+    if (wasYesterday) {
+      // 昨天也活跃 → 连续
+      if (s.lastDate === yesterday) {
+        s.count = (s.count || 0) + 1;
+      } else {
+        s.count = 1; // 断了重新计
+      }
+    } else {
+      // 不是连续两天 → 重新计
+      s.count = 1;
+    }
+    s.lastDate = yesterday;
+  }
+
+  // 早包/晚包/作业/专注 各自算一次"昨天完成"
+  const morningDone = MORNING_PACK.length > 0 && MORNING_PACK.every(t => state.morningPack[t.id]);
+  const nightDone = NIGHT_PACK.length > 0 && NIGHT_PACK.every(t => state.nightPack[t.id]);
+  const hwDone = state.hwCompleted || (state.hwBlocks && state.hwBlocks > 0);
+  const focusDone = state.focusCompleted;
+
+  if (morningDone) updateStreak('morning', 'morningPack');
+  if (nightDone) updateStreak('night', 'nightPack');
+  if (hwDone) updateStreak('homework', 'hwCompleted');
+  if (focusDone) updateStreak('focus', 'focusCompleted');
+
+  // ── 重置每日状态（保留累计数据）────────────────────────────
+  state.morningPack = {};
+  state.nightPack = {};
+  state.hwCompleted = false;
+  state.hwBlocks = 0;
+  state.focusSelected = null;
+  state.focusStarted = false;
+  state.focusCompleted = false;
+  state.focusOvertime = false;
+  state.focusSeconds = 0;
+  state.focusTimerRunning = false;
+  state.focusStartTimestamp = null;
+  state.todayChecked = {};
+  state.selfPickCard = null;
+  state.selfPickClaimed = false;
+  state.pendingAdditions = state.pendingAdditions.filter(p => p.date === today); // 只保留今天的
+
+  // ── 更新活跃日期 ─────────────────────────────────────────
+  state.lastActiveDate = today;
+  saveState();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -261,24 +393,54 @@ function updateTodayScore() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// Firebase 累计积分加载
+// Firebase 累计积分加载（离线时回退到本地存储）
 // ══════════════════════════════════════════════════════════════
+const LOCAL_TOTAL_SCORE_KEY = 'heroplan_total_score_v2';
+
+function getLocalTotalScore() {
+  try {
+    return parseInt(localStorage.getItem(LOCAL_TOTAL_SCORE_KEY)) || 0;
+  } catch(e) { return 0; }
+}
+
+function setLocalTotalScore(score) {
+  localStorage.setItem(LOCAL_TOTAL_SCORE_KEY, String(score));
+}
 
 function loadTotalScoreFromFirebase() {
-  if (!isFirebaseReady()) return;
+  // 先把 localStorage 里的值取出来备用（即使 Firebase 可用也先显示本地值）
+  const localVal = getLocalTotalScore();
+  // 如果 state.totalScore 为 0 但 localStorage 有值，用本地值
+  if (state.totalScore === 0 && localVal > 0) {
+    state.totalScore = localVal;
+    _updateScoreDisplay();
+  }
+
+  if (!isFirebaseReady()) return; // Firebase 未就绪，保持本地值
   const db = window._firebaseDB;
   window._firebaseGet(window._firebaseRef(db, 'syncScore/score')).then(snap => {
     const val = snap.val();
-    if (typeof val === 'number') {
+    if (typeof val === 'number' && val > 0) {
       state.totalScore = val;
-      const scoreEl = document.getElementById('totalScore');
-      const shopEl = document.getElementById('shopScore');
-      if (scoreEl) scoreEl.textContent = state.totalScore;
-      if (shopEl) shopEl.textContent = state.totalScore;
+      setLocalTotalScore(val);
+      _updateScoreDisplay();
     }
   }).catch(err => {
-    console.error('加载累计积分失败:', err);
+    console.error('Firebase 加载累计积分失败，使用本地值:', err);
   });
+}
+
+function _updateScoreDisplay() {
+  const scoreEl = document.getElementById('totalScore');
+  const shopEl = document.getElementById('shopScore');
+  if (scoreEl) scoreEl.textContent = state.totalScore;
+  if (shopEl) shopEl.textContent = state.totalScore;
+}
+
+// ── 积分变动时同步到本地专用存储 ─────────────────────────────
+function syncTotalScoreToLocal() {
+  setLocalTotalScore(state.totalScore);
+  _updateScoreDisplay();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -342,17 +504,11 @@ function onParentApprove(taskType, taskId, effectiveScore, isSelf) {
   if (taskId && state.todayChecked[taskId] === 'pending') {
     state.todayChecked[taskId] = 'approved';
   }
+  // ✅ 审核通过不加两次分：分数在孩子提交时已计入（pending），审核通过只改状态
   if (isSelf === true) {
     const ym = today.slice(0, 7);
     if (!state.reviewedSelfLog[ym]) state.reviewedSelfLog[ym] = {};
     state.reviewedSelfLog[ym][today] = true;
-    // Bug 5 修复：同步 reviewedSelfLog 到 Firebase
-    if (isFirebaseReady()) {
-      window._firebaseSet(
-        window._firebaseRef(window._firebaseDB, `reviewedSelfLog/${ym}/${today}`),
-        true
-      );
-    }
   }
   saveState();
   renderAll();
@@ -372,12 +528,6 @@ function onParentReject(taskType, taskId, isSelf, deductScore) {
   }
   if (deductScore && deductScore > 0) {
     state.totalScore = Math.max(0, state.totalScore - deductScore);
-    if (isFirebaseReady()) {
-      window._firebaseSet(
-        window._firebaseRef(window._firebaseDB, 'syncScore/score'),
-        window._firebaseIncrement(-deductScore)
-      );
-    }
   }
 
   // ── 挑战卡计数回滚 ──────────────────────────────────

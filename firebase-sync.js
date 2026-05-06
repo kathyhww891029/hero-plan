@@ -111,9 +111,40 @@ function parentLogout() {
   document.getElementById('parentLogin').style.display = 'block';
 }
 
+// ── 本地存储待审记录（不依赖Firebase） ────────────────────────
+const PENDING_KEY = 'heroplan_pending';
+
+function getLocalPending() {
+  try {
+    const s = localStorage.getItem(PENDING_KEY);
+    return s ? JSON.parse(s) : {};
+  } catch(e) { return {}; }
+}
+
+function saveLocalPending(data) {
+  localStorage.setItem(PENDING_KEY, JSON.stringify(data));
+}
+
+function addLocalPending(record) {
+  const pending = getLocalPending();
+  const key = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+  pending[key] = record;
+  saveLocalPending(pending);
+  return key;
+}
+
+function removeLocalPending(key) {
+  const pending = getLocalPending();
+  delete pending[key];
+  saveLocalPending(pending);
+}
+
+function clearLocalPending() {
+  saveLocalPending({});
+}
+
 // ── 提交待审申请（孩子打卡时调用） ────────────────────────────
 function submitPending(type, id, name, score, extra, isSelf) {
-  if (!isFirebaseReady()) return null;
   const record = {
     type,       // 'daily' | 'card' | 'rope' | 'homework' | 'focus' | 'pack'
     taskId: id,
@@ -126,22 +157,83 @@ function submitPending(type, id, name, score, extra, isSelf) {
     status: 'pending',
     submittedAt: Date.now()
   };
-  // 返回 push() 的 ThenableReference，从中获取 key
-  return window._firebasePush(fbRef('pending'), record).then(ref => ref.key);
+
+  // 同时写本地存储（主要）
+  addLocalPending(record);
+
+  // 刷新审核列表（如果当前在审核 tab）
+  loadPendingList();
+
+  // ✅ 明显的视觉反馈，让用户知道提交成功了
+  showSubmitToast(name, score);
+
+  // 数据仅保存在本地设备，不上传云端
+  return Promise.resolve();
+}
+
+// ── 提交成功弹出提示（用户必须看到） ───────────────────────────
+function showSubmitToast(name, score) {
+  let toast = document.getElementById('submitToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'submitToast';
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #27ae60;
+      color: white;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      z-index: 99999;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      transition: opacity 0.3s;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = `✅ 已提交待审：${name} (+${score}分)`;
+  toast.style.opacity = '1';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
+// ── 诊断：查看 localStorage 原始数据 ───────────────────────────
+function showLocalStorageDiag() {
+  const diag = document.getElementById('localStorageDiag');
+  if (!diag) return;
+  const isHidden = diag.style.display === 'none' || diag.style.display === '';
+  if (isHidden) {
+    try {
+      const pendingRaw = localStorage.getItem('heroplan_pending') || '（空）';
+      const stateRaw = localStorage.getItem('heroplan_state') || '（空）';
+      const pinsRaw = localStorage.getItem('heroplan_pins') || '（空）';
+      diag.innerHTML = `<b>PENDING_KEY (heroplan_pending):</b><br>${escHtml(pendingRaw)}<br><br><b>STATE_KEY (heroplan_state):</b><br>${escHtml(stateRaw)}<br><br><b>PIN_KEY (heroplan_pins):</b><br>${escHtml(pinsRaw)}`;
+      diag.style.display = 'block';
+    } catch(e) { diag.innerHTML = '读取失败: ' + e; diag.style.display = 'block'; }
+  } else {
+    diag.style.display = 'none';
+  }
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── 按日期清除 pending 记录（重置今日打卡时调用） ──────────────
 function clearPendingByDate(date) {
-  if (!isFirebaseReady()) return;
-  window._firebaseGet(fbRef('pending')).then(snap => {
-    const data = snap.val();
-    if (!data) return;
-    Object.entries(data).forEach(([key, record]) => {
-      if (record.date === date && !record.isBackfill) {
-        window._firebaseRemove(fbRef('pending/' + key));
-      }
-    });
+  // 清本地
+  const pending = getLocalPending();
+  let hasLocalChange = false;
+  Object.entries(pending).forEach(([key, record]) => {
+    if (record.date === date && !record.isBackfill) {
+      delete pending[key];
+      hasLocalChange = true;
+    }
   });
+  if (hasLocalChange) saveLocalPending(pending);
+  // 数据仅保存在本地设备，不上传云端
 }
 
 // ── 加载待审列表 ──────────────────────────────────────────────
@@ -245,21 +337,20 @@ function formatBackfillDate(dateStr) {
 }
 
 function loadPendingList() {
-  if (!isFirebaseReady()) return;
-  window._firebaseOnValue(fbRef('pending'), (snapshot) => {
-    const el = document.getElementById('pendingList');
-    const batchBtns = document.getElementById('batchBtns');
-    if (!el) return;
+  // 从本地存储读取（不依赖Firebase）
+  const el = document.getElementById('pendingList');
+  const batchBtns = document.getElementById('batchBtns');
+  if (!el) return;
 
-    const data = snapshot.val();
-    if (!data) {
-      el.innerHTML = '<div class="empty-tip">暂无待审记录 🎉</div>';
-      batchBtns.style.display = 'none';
-      return;
-    }
+  const data = getLocalPending();
+  if (!data || Object.keys(data).length === 0) {
+    el.innerHTML = '<div class="empty-tip">暂无待审记录 🎉</div>';
+    batchBtns.style.display = 'none';
+    return;
+  }
 
-    const items = Object.entries(data).map(([key, val]) => ({ key, ...val }));
-    items.sort((a, b) => a.submittedAt - b.submittedAt);
+  const items = Object.entries(data).map(([key, val]) => ({ key, ...val }));
+  items.sort((a, b) => a.submittedAt - b.submittedAt);
 
     el.innerHTML = items.map(item => {
       const icon = getTaskIcon(item.taskId, item.type);
@@ -304,7 +395,6 @@ function loadPendingList() {
       </div>`;
     }).join('');
     batchBtns.style.display = 'flex';
-  });
 }
 
 function typeLabel(type) {
@@ -342,68 +432,56 @@ function cancelStep2(key) {
 }
 // Step2: 确认"完成了"且选择了是否自主完成 → 执行通过
 function confirmDone(key, isSelf) {
-  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
-    const val = snap.val();
-    if (!val) { showParentToast('记录不存在'); return; }
-    doApproveOne(key, val.score, val.name, val.taskId || '', val.type || 'daily', isSelf);
-  });
+  // 从本地存储读取
+  const pending = getLocalPending();
+  const val = pending[key];
+  if (!val) { showParentToast('记录不存在'); return; }
+  doApproveOne(key, val.score, val.name, val.taskId || '', val.type || 'daily', isSelf);
 }
 // Step2: 确认驳回
 function rejectOneConfirm(key) {
-  window._firebaseGet(fbRef('pending/' + key)).then(snap => {
-    const val = snap.val();
-    if (!val) { showParentToast('记录不存在'); return; }
-    doRejectOne(key, val.name, val.taskId || '', val.type || 'daily', val.score);
-  });
+  // 从本地存储读取
+  const pending = getLocalPending();
+  const val = pending[key];
+  if (!val) { showParentToast('记录不存在'); return; }
+  doRejectOne(key, val.name, val.taskId || '', val.type || 'daily', val.score);
 }
 
 // ── 审核通过单条 ──────────────────────────────────────────────
 // 固定任务地板机制：计算可选任务实际应得分数
 // 内部实现：审核通过（isSelf 由父母在第二步明确选择）
 function doApproveOne(key, score, name, taskId, taskType, isSelf) {
-  if (!isFirebaseReady()) return;
+  // 先删本地pending
+  removeLocalPending(key);
 
-  // 加入已审记录（含 isSelf）
-  window._firebasePush(fbRef('reviewed'), {
-    name, score, result: 'approved',
-    isSelf: isSelf,  // 父母明确选择的自律结果
-    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-    reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10)
-  });
-  // 更新 Firebase 总分（积分在孩子完成时已入账，审核通过时不再重复加）
   // 更新月度自律统计
   if (typeof onParentApprove === 'function') {
     onParentApprove(taskType || 'daily', taskId || '', score, isSelf);
   }
-  // 删除 pending
-  window._firebaseRemove(fbRef('pending/' + key));
+
+  // 刷新列表
+  loadPendingList();
   showParentToast(`✅ 已通过「${name}」，+${score}分！`);
 }
 
 // 内部实现：驳回单条
 function doRejectOne(key, name, taskId, taskType, score) {
-  if (!isFirebaseReady()) return;
-  window._firebasePush(fbRef('reviewed'), {
-    name, score: 0, originalScore: score, result: 'rejected',
-    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-    reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10)
-  });
-  // 孩子完成时已加积分，驳回时需扣回
-  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(-(score || 0)));
-  // 更新本地：审核驳回
+  // 先删本地pending
+  removeLocalPending(key);
+
+  // 审核驳回扣分
   if (typeof onParentReject === 'function') {
     onParentReject(taskType || 'daily', taskId || '', null, score || 0);
   }
-  window._firebaseRemove(fbRef('pending/' + key));
+
+  // 刷新列表
+  loadPendingList();
   showParentToast(`❌ 已驳回「${name}」`);
 }
 
 // ── 全部通过 ──────────────────────────────────────────────────
 // 第一步：弹出自律选择 modal
 function approveAll() {
-  if (!isFirebaseReady()) return;
   showBatchApproveModal();
 }
 
@@ -431,58 +509,53 @@ function closeBatchModal() {
 // 实际执行批量通过，isSelf 由父母在 modal 中选择
 function doApproveAllWithSelf(isSelf) {
   closeBatchModal();
-  window._firebaseGet(fbRef('pending')).then(snap => {
-    const data = snap.val();
-    if (!data) return;
-    let totalAdd = 0;
-    Object.entries(data).forEach(([key, val]) => {
-      const score = val.score || 0;
-      totalAdd += score;
-      window._firebasePush(fbRef('reviewed'), {
-        name: val.name, score, result: 'approved',
-        isSelf: isSelf,  // 父母明确选择的自律结果
-        reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-        reviewedAt: Date.now(),
-        date: new Date().toISOString().slice(0, 10)
-      });
-      if (typeof onParentApprove === 'function') {
-        onParentApprove(val.type || 'daily', val.taskId || '', score, isSelf);
-      }
-      window._firebaseRemove(fbRef('pending/' + key));
-    });
-    // 积分在孩子完成时已入账，批量通过时不再重复加（totalAdd 仅用于提示）
-    showParentToast(`✅ 全部通过！共 +${totalAdd}分！`);
+  // 从本地存储读取
+  const data = getLocalPending();
+  if (!data || Object.keys(data).length === 0) {
+    showParentToast('暂无待审记录');
+    return;
+  }
+  let totalAdd = 0;
+  Object.entries(data).forEach(([key, val]) => {
+    const score = val.score || 0;
+    totalAdd += score;
+    if (typeof onParentApprove === 'function') {
+      onParentApprove(val.type || 'daily', val.taskId || '', score, isSelf);
+    }
   });
+
+  // 清空本地pending
+  clearLocalPending();
+
+  // 刷新列表
+  loadPendingList();
+  showParentToast(`✅ 全部通过！共 +${totalAdd}分！`);
 }
 
 // ── 全部驳回 ──────────────────────────────────────────────────
 function rejectAll() {
-  if (!isFirebaseReady()) return;
   if (!confirm('确定要驳回所有待审记录吗？')) return;
-  window._firebaseGet(fbRef('pending')).then(snap => {
-    const data = snap.val();
-    if (!data) return;
-    let totalDeduct = 0;
-    Object.entries(data).forEach(([key, val]) => {
-      totalDeduct += val.score || 0;
-      window._firebasePush(fbRef('reviewed'), {
-        name: val.name, score: 0, originalScore: val.score, result: 'rejected',
-        reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-        reviewedAt: Date.now(),
-        date: new Date().toISOString().slice(0, 10)
-      });
-      // 孩子完成时已加积分，驳回时需扣回
-      if (typeof onParentReject === 'function') {
-        onParentReject(val.type || 'daily', val.taskId || '', null, val.score || 0);
-      }
-      window._firebaseRemove(fbRef('pending/' + key));
-    });
-    // 扣减 Firebase 总分
-    if (totalDeduct > 0) {
-      window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(-totalDeduct));
+  // 从本地存储读取
+  const data = getLocalPending();
+  if (!data || Object.keys(data).length === 0) {
+    showParentToast('暂无待审记录');
+    return;
+  }
+  let totalDeduct = 0;
+  Object.entries(data).forEach(([key, val]) => {
+    totalDeduct += val.score || 0;
+    // 驳回扣分
+    if (typeof onParentReject === 'function') {
+      onParentReject(val.type || 'daily', val.taskId || '', null, val.score || 0);
     }
-    showParentToast('❌ 全部已驳回');
   });
+
+  // 清空本地pending
+  clearLocalPending();
+
+  // 刷新列表
+  loadPendingList();
+  showParentToast('❌ 全部已驳回');
 }
 
 // ── 加载已审历史 ──────────────────────────────────────────────
@@ -514,15 +587,13 @@ function addManualBonus() {
   const score = parseInt(document.getElementById('bonusInput').value);
   const reason = document.getElementById('bonusReason').value.trim() || '父母奖励';
   if (!score || score < 1) { showParentToast('❌ 请输入有效分数'); return; }
-  window._firebasePush(fbRef('reviewed'), {
-    name: reason, score, result: 'approved',
-    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-    reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10)
-  });
-  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
+  // 仅本地操作
+  state.totalScore += score;
+  saveState();
   document.getElementById('bonusInput').value = '';
   document.getElementById('bonusReason').value = '';
+  renderHeader();
+  renderShop();
   showParentToast(`🎁 已发放 +${score}分！`);
 }
 
@@ -547,33 +618,22 @@ function adjustScore() {
   if (score < 0) {
     if (!confirm(`确定要扣除 ${Math.abs(score)} 分吗？`)) return;
   }
-  // 写入 Firebase reviewed 记录（type=adjustment 区分于普通奖励）
-  window._firebasePush(fbRef('reviewed'), {
-    name: reason, score, result: 'adjustment',
-    reviewer: currentParent === 'mom' ? '妈妈' : '爸爸',
-    reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10)
-  });
-  // 用本地 state.totalScore 做负数检查（父母的本地值已是最新）
+  // 仅本地操作
   const newScore = state.totalScore + score;
   if (newScore < 0) {
     showParentToast('❌ 分数不能为负数！');
     return;
   }
-  // 写入 Firebase reviewed 记录后，原子 increment 更新 syncScore
-  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score)).then(() => {
-    // 同时更新本地 state
-    state.totalScore = newScore;
-    saveState();
-    renderHeader();
-    renderShop();
-    const emoji = score > 0 ? '📈' : '📉';
-    const label = score > 0 ? `+${score}` : `${score}`;
-    showParentToast(`${emoji} 已调整 ${label}分：` + reason);
-    // 清空表单
-    document.getElementById('adjustInput').value = '';
-    document.getElementById('adjustReason').value = '';
-  });
+  state.totalScore = newScore;
+  saveState();
+  renderHeader();
+  renderShop();
+  const emoji = score > 0 ? '📈' : '📉';
+  const label = score > 0 ? `+${score}` : `${score}`;
+  showParentToast(`${emoji} 已调整 ${label}分：` + reason);
+  // 清空表单
+  document.getElementById('adjustInput').value = '';
+  document.getElementById('adjustReason').value = '';
 }
 
 // ── Toast提示 ─────────────────────────────────────────────────
@@ -663,32 +723,17 @@ function recordHeroAction(checkId, name, score, praise) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const reviewer = currentParent === 'mom' ? '妈妈' : '爸爸';
 
-  // 1. 存入 Firebase reviewed（走积分审核通道，直接 approved）
-  window._firebasePush(fbRef('reviewed'), {
-    name: `🏅 品格记录·${name}`,
-    score,
-    result: 'approved',
-    reviewer,
-    reviewedAt: Date.now(),
-    date: todayStr,
-    type: 'character',
-    checkId,
-    praise
-  });
-
-  // 2. 同步积分
-  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
-
-  // 3. 存入英雄行为历史（供子渊Tab查看）
-  window._firebasePush(fbRef('heroActions'), {
-    checkId, name, score, praise, reviewer,
-    date: todayStr,
-    ts: Date.now()
-  });
+  // 仅本地操作
+  state.totalScore += score;
+  if (!state.heroActions) state.heroActions = [];
+  state.heroActions.push({ checkId, name, score, praise, reviewer, date: todayStr, ts: Date.now() });
+  saveState();
 
   showParentToast(`🏅 已记录「${name}」+${score}分！子渊可以看到这条记录 💛`);
 
-  // 4. 刷新子渊端历史
+  // 刷新显示
+  renderHeader();
+  renderShop();
   if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
 }
 
@@ -702,32 +747,17 @@ function submitWeeklyPraise() {
   const reviewer = currentParent === 'mom' ? '妈妈' : '爸爸';
   const weekStr = getWeekStartStr();
 
-  // 存入 Firebase reviewed（积分通道）
-  window._firebasePush(fbRef('reviewed'), {
-    name: `📝 每周评价`,
-    score,
-    result: 'approved',
-    reviewer,
-    reviewedAt: Date.now(),
-    date: new Date().toISOString().slice(0, 10),
-    type: 'weeklyPraise',
-    praiseText: text
-  });
-
-  // 同步积分
-  window._firebaseSet(fbRef('syncScore/score'), window._firebaseIncrement(score));
-
-  // 存入每周评价历史（供子渊Tab查看）
-  window._firebaseSet(fbRef(`weeklyPraise/${weekStr}`), {
-    text, reviewer,
-    score,
-    ts: Date.now(),
-    week: weekStr
-  });
+  // 仅本地操作
+  state.totalScore += score;
+  if (!state.weeklyPraises) state.weeklyPraises = {};
+  state.weeklyPraises[weekStr] = { text, reviewer, score, ts: Date.now(), week: weekStr };
+  saveState();
 
   if (textarea) textarea.value = '';
   showParentToast(`📝 本周评价已记录 +${score}分！子渊可以在自己的页面看到 💛`);
 
+  renderHeader();
+  renderShop();
   if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
 }
 

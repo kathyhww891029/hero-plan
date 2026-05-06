@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>🦸 英雄成长计划</title>
 <!-- PWA 支持 -->
 <link rel="manifest" href="manifest.json">
@@ -11,12 +14,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="英雄计划">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=3c">
 <script>
   // 注册 Service Worker（PWA离线支持）
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
+      navigator.serviceWorker.register('./sw-new.js?v=1')
         .then(reg => console.log('✅ SW 注册成功'))
         .catch(err => console.log('SW 注册失败:', err));
     });
@@ -185,6 +188,7 @@
 <body>
 
 <!-- 顶部导航 -->
+
 <header class="app-header">
   <div class="header-left">
     <div class="header-title">🦸 小英雄子渊成长计划</div>
@@ -574,6 +578,7 @@
     <!-- 待审列表 -->
     <div class="parent-section">
       <div class="section-header orange">⏳ 待审核申请</div>
+
       <div id="pendingList">
         <div class="empty-tip">暂无待审记录 🎉</div>
       </div>
@@ -727,10 +732,10 @@
   </div>
 </div>
 
-<script src="data.js?v=3"></script>
-<script src="hero-constants.js?v=5"></script>
-<script src="hero-state.js?v=5"></script>
-<script src="app.js?v=9"></script>
-<script src="firebase-sync.js?v=73"></script>
+<script src="data.js?v=3c"></script>
+<script src="hero-constants.js?v=5c"></script>
+<script src="hero-state.js?v=13c"></script>
+<script src="app.js?v=14c"></script>
+<script src="firebase-sync.js?v=76c"></script>
 </body>
 </html>

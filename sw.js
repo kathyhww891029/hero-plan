@@ -1,13 +1,15 @@
-const CACHE_NAME = 'hero-plan-v76';  // ← 每次改动这里，强制刷新缓存
+const CACHE_NAME = 'hero-plan-v95';  // ← 每次改动这里，强制刷新缓存
+const CACHE_DATE = '2026-04-23-debug';
+
 const urlsToCache = [
   './',
   './index.html',
   './style.css',
-  './data.js?v=3',
-  './hero-constants.js?v=5',
-  './hero-state.js?v=5',
-  './app.js?v=9',
-  './firebase-sync.js?v=73',
+  './data.js?v=3c',
+  './hero-constants.js?v=5c',
+  './hero-state.js?v=12c',
+  './app.js?v=14c',
+  './firebase-sync.js?v=76c',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -17,18 +19,16 @@ const urlsToCache = [
   './sounds/ta-da.mp3'
 ];
 
-// 安装 - 缓存所有文件
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('缓存文件中...');
+      console.log('SW 缓存文件中...', CACHE_NAME);
       return cache.addAll(urlsToCache);
     })
   );
   self.skipWaiting();
 });
 
-// 激活 - 清理旧缓存
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -36,6 +36,17 @@ self.addEventListener('activate', event => {
         cacheNames.filter(name => name !== CACHE_NAME)
           .map(name => caches.delete(name))
       );
+    }).then(() => {
+      // 通知所有客户端 SW 版本信息
+      return self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'SW_VERSION',
+            cacheName: CACHE_NAME,
+            cacheDate: CACHE_DATE
+          });
+        });
+      });
     })
   );
   self.clients.claim();
