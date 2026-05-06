@@ -776,6 +776,7 @@ function getWeekStartStr() {
 
 // ── 子渊端：渲染英雄行为历史（每日记录 + 每周评价）──────────────
 function renderKidHeroHistory() {
+  try {
   const el = document.getElementById('kidHeroHistory');
   if (!el) return;
 
@@ -789,73 +790,73 @@ function renderKidHeroHistory() {
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 30); // 最多显示30条
 
-    const praiseList = Object.values(praises)
-      .sort((a, b) => b.ts - a.ts)
-      .slice(0, 10); // 最多显示10周
+  const praiseList = Object.values(praises)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 10); // 最多显示10周
 
-    if (actionList.length === 0 && praiseList.length === 0) {
-      el.innerHTML = `
-        <div style="background:#FFF8E7;border-radius:14px;padding:16px;text-align:center;margin:0 4px">
-          <div style="font-size:2rem;margin-bottom:8px">🌱</div>
-          <div style="font-size:13px;color:#888">爸爸妈妈还没有记录英雄行为哦<br>继续加油，他们一直在观察你！</div>
-        </div>`;
-      return;
-    }
+  if (actionList.length === 0 && praiseList.length === 0) {
+    el.innerHTML = `
+      <div style="background:#FFF8E7;border-radius:14px;padding:16px;text-align:center;margin:0 4px">
+        <div style="font-size:2rem;margin-bottom:8px">🌱</div>
+        <div style="font-size:13px;color:#888">爸爸妈妈还没有记录英雄行为哦<br>继续加油，他们一直在观察你！</div>
+      </div>`;
+    return;
+  }
 
-    let html = `<div style="padding:4px 0 8px">
-      <div style="font-size:15px;font-weight:700;color:#1a1a2e;padding:8px 4px 12px">🏅 爸妈眼中的你</div>`;
+  let html = `<div style="padding:4px 0 8px">
+    <div style="font-size:15px;font-weight:700;color:#1a1a2e;padding:8px 4px 12px">🏅 爸妈眼中的你</div>`;
 
-    // 每周评价板块
-    if (praiseList.length > 0) {
-      html += `<div style="background:linear-gradient(135deg,#E8F5E9,#F1F8E9);border-radius:14px;padding:14px;margin-bottom:14px;border:1.5px solid #A5D6A7">
-        <div style="font-size:13px;font-weight:700;color:#2E7D32;margin-bottom:10px">📝 爸妈的每周评价</div>`;
-      praiseList.forEach(p => {
-        const d = new Date(p.ts);
-        const dateStr = d.getMonth()+1 + '月' + d.getDate() + '日这一周';
-        html += `<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;border-left:3px solid #4CAF50">
-          <div style="font-size:12px;color:#4CAF50;font-weight:700;margin-bottom:4px">${dateStr} · ${p.reviewer}写的 · +${p.score}分</div>
-          <div style="font-size:13px;color:#333;line-height:1.6">"${p.text}"</div>
-        </div>`;
-      });
-      html += `</div>`;
-    }
-
-    // 每日英雄行为记录
-    if (actionList.length > 0) {
-      // 按日期分组
-      const byDate = {};
-      actionList.forEach(a => {
-        if (!byDate[a.date]) byDate[a.date] = [];
-        byDate[a.date].push(a);
-      });
-
-      html += `<div style="background:#FFF9F0;border-radius:14px;padding:14px;border:1.5px solid #FFCC80">
-        <div style="font-size:13px;font-weight:700;color:#E65100;margin-bottom:10px">✨ 英雄行为记录</div>`;
-
-      Object.keys(byDate).sort((a,b) => b.localeCompare(a)).forEach(date => {
-        const items = byDate[date];
-        const d = new Date(date + 'T00:00:00');
-        const dateLabel = (d.getMonth()+1) + '月' + d.getDate() + '日';
-        const dayTotal = items.reduce((s, i) => s + i.score, 0);
-        html += `<div style="margin-bottom:10px">
-          <div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:6px;letter-spacing:0.5px">${dateLabel} · 共+${dayTotal}分</div>`;
-        items.forEach(a => {
-          html += `<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:6px;border-left:3px solid #FF6B35">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:700;color:#1a1a2e">${a.name}</span>
-              <span style="font-size:12px;color:#FF6B35;font-weight:700">+${a.score}分</span>
-            </div>
-            <div style="font-size:12px;color:#888;line-height:1.5">${a.praise}</div>
-            <div style="font-size:11px;color:#ccc;margin-top:4px">${a.reviewer}记录</div>
-          </div>`;
-        });
-        html += `</div>`;
-      });
-      html += `</div>`;
-    }
-
+  // 每周评价板块
+  if (praiseList.length > 0) {
+    html += `<div style="background:linear-gradient(135deg,#E8F5E9,#F1F8E9);border-radius:14px;padding:14px;margin-bottom:14px;border:1.5px solid #A5D6A7">
+      <div style="font-size:13px;font-weight:700;color:#2E7D32;margin-bottom:10px">📝 爸妈的每周评价</div>`;
+    praiseList.forEach(p => {
+      const d = new Date(p.ts);
+      const dateStr = d.getMonth()+1 + '月' + d.getDate() + '日这一周';
+      html += `<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;border-left:3px solid #4CAF50">
+        <div style="font-size:12px;color:#4CAF50;font-weight:700;margin-bottom:4px">${dateStr} · ${p.reviewer}写的 · +${p.score}分</div>
+        <div style="font-size:13px;color:#333;line-height:1.6">"${p.text}"</div>
+      </div>`;
+    });
     html += `</div>`;
-    el.innerHTML = html;
+  }
+
+  // 每日英雄行为记录
+  if (actionList.length > 0) {
+    // 按日期分组
+    const byDate = {};
+    actionList.forEach(a => {
+      if (!byDate[a.date]) byDate[a.date] = [];
+      byDate[a.date].push(a);
+    });
+
+    html += `<div style="background:#FFF9F0;border-radius:14px;padding:14px;border:1.5px solid #FFCC80">
+      <div style="font-size:13px;font-weight:700;color:#E65100;margin-bottom:10px">✨ 英雄行为记录</div>`;
+
+    Object.keys(byDate).sort((a,b) => b.localeCompare(a)).forEach(date => {
+      const items = byDate[date];
+      const d = new Date(date + 'T00:00:00');
+      const dateLabel = (d.getMonth()+1) + '月' + d.getDate() + '日';
+      const dayTotal = items.reduce((s, i) => s + i.score, 0);
+      html += `<div style="margin-bottom:10px">
+        <div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:6px;letter-spacing:0.5px">${dateLabel} · 共+${dayTotal}分</div>`;
+      items.forEach(a => {
+        html += `<div style="background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:6px;border-left:3px solid #FF6B35">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:13px;font-weight:700;color:#1a1a2e">${a.name}</span>
+            <span style="font-size:12px;color:#FF6B35;font-weight:700">+${a.score}分</span>
+          </div>
+          <div style="font-size:12px;color:#888;line-height:1.5">${a.praise}</div>
+          <div style="font-size:11px;color:#ccc;margin-top:4px">${a.reviewer}记录</div>
+        </div>`;
+      });
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  el.innerHTML = html;
   } catch(err) {
     console.error('加载英雄行为历史失败', err);
     el.innerHTML = '<div style="text-align:center;color:#ccc;font-size:12px;padding:12px">加载失败，请刷新重试</div>';

@@ -3,8 +3,8 @@
    策略：index.html 网络优先（保证 PWA 始终获取最新版本）
          JS/CSS 缓存优先（query string 版本控制）
 ══════════════════════════════════════════════════════════════ */
-const CACHE_NAME = 'hero-plan-v112';
-const CACHE_DATE = '2026-05-07-kid-hero-fix';
+const CACHE_NAME = 'hero-plan-v113';
+const CACHE_DATE = '2026-05-07-trycatch-fix';
 
 // 核心资源（按需缓存，缓存在线）
 const urlsToCache = [
