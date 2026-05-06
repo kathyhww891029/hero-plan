@@ -590,6 +590,7 @@ function addManualBonus() {
   // 仅本地操作
   state.totalScore += score;
   saveState();
+  syncTotalScoreToLocal();
   document.getElementById('bonusInput').value = '';
   document.getElementById('bonusReason').value = '';
   renderHeader();
@@ -626,6 +627,7 @@ function adjustScore() {
   }
   state.totalScore = newScore;
   saveState();
+  syncTotalScoreToLocal();
   renderHeader();
   renderShop();
   const emoji = score > 0 ? '📈' : '📉';
@@ -728,6 +730,7 @@ function recordHeroAction(checkId, name, score, praise) {
   if (!state.heroActions) state.heroActions = [];
   state.heroActions.push({ checkId, name, score, praise, reviewer, date: todayStr, ts: Date.now() });
   saveState();
+  syncTotalScoreToLocal();
 
   showParentToast(`🏅 已记录「${name}」+${score}分！子渊可以看到这条记录 💛`);
 
@@ -752,6 +755,7 @@ function submitWeeklyPraise() {
   if (!state.weeklyPraises) state.weeklyPraises = {};
   state.weeklyPraises[weekStr] = { text, reviewer, score, ts: Date.now(), week: weekStr };
   saveState();
+  syncTotalScoreToLocal();
 
   if (textarea) textarea.value = '';
   showParentToast(`📝 本周评价已记录 +${score}分！子渊可以在自己的页面看到 💛`);
@@ -773,19 +777,15 @@ function getWeekStartStr() {
 // ── 子渊端：渲染英雄行为历史（每日记录 + 每周评价）──────────────
 function renderKidHeroHistory() {
   const el = document.getElementById('kidHeroHistory');
-  if (!el || !isFirebaseReady()) return;
+  if (!el) return;
 
-  el.innerHTML = '<div style="text-align:center;color:#ccc;font-size:13px;padding:12px">加载中…</div>';
+  // 从本地 state 读取（Bug 修复：之前从错误的 Firebase 路径读取，数据源不匹配）
+  const actions = (state && state.heroActions) ? state.heroActions : [];
+  const praises = (state && state.weeklyPraises) ? state.weeklyPraises : {};
 
-  // 同时读取 heroActions 和 weeklyPraise
-  Promise.all([
-    window._firebaseGet(fbRef('heroActions')),
-    window._firebaseGet(fbRef('weeklyPraise'))
-  ]).then(([actSnap, praiseSnap]) => {
-    const actions = actSnap.val() || {};
-    const praises = praiseSnap.val() || {};
-
-    const actionList = Object.values(actions)
+  const actionList = Array.isArray(actions)
+    ? actions.slice().sort((a, b) => b.ts - a.ts).slice(0, 30)
+    : Object.values(actions)
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 30); // 最多显示30条
 
@@ -856,10 +856,10 @@ function renderKidHeroHistory() {
 
     html += `</div>`;
     el.innerHTML = html;
-  }).catch(err => {
+  } catch(err) {
     console.error('加载英雄行为历史失败', err);
     el.innerHTML = '<div style="text-align:center;color:#ccc;font-size:12px;padding:12px">加载失败，请刷新重试</div>';
-  });
+  }
 }
 
 
