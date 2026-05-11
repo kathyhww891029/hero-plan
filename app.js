@@ -5364,6 +5364,30 @@ function mathShowSection(id) {
 // [showSelfReportModal/submitSelfReport 已合并入 showSelfReportUnified]
 
 // ── 月度自律率计算 ─────────────────────────────────────────────
+// ── 辅助：检查 selfReport 复合键中是否包含某固定任务 ID ──────
+// selfReport 存储格式：state.selfReport['2026-05-12']['morning_mp1_2026-05-12'] = 'self'
+// 但 calcMonthlyDisciplineRate 用简单 ID（如 'mp1'）查找 → 永远找不到
+// 此函数做边界匹配避免 mp1 误匹配 mp10
+function _hasFixedTask(tasks, fixedId) {
+  if (tasks[fixedId]) return true; // 兼容简单键（未来可能修复存储侧）
+  if (fixedId === 'hw_main') return Object.keys(tasks).some(k => k.includes('homework'));
+  const escaped = fixedId.replace(new RegExp('[.*+?^${}()|[\]\\]', 'g'), '\$&');
+  const re = new RegExp(`(^|_)${escaped}(_|$)`);
+  return Object.keys(tasks).some(k => re.test(k));
+}
+function _getFixedTaskValue(tasks, fixedId) {
+  if (tasks[fixedId]) return tasks[fixedId];
+  if (fixedId === 'hw_main') {
+    const key = Object.keys(tasks).find(k => k.includes('homework'));
+    return key ? tasks[key] : undefined;
+  }
+  const escaped = fixedId.replace(new RegExp('[.*+?^${}()|[\]\\]', 'g'), '\$&');
+  const re = new RegExp(`(^|_)${escaped}(_|$)`);
+  const key = Object.keys(tasks).find(k => re.test(k));
+  return key ? tasks[key] : undefined;
+}
+
+// ── 月度自律率计算 ───────────────────────────────────────────
 function calcMonthlyDisciplineRate(year, month) {
   if (!state.selfReport) return { rate: 0, selfDays: 0, totalDays: 0 };
   const prefix = `${year}-${String(month).padStart(2,'0')}`;
@@ -5380,8 +5404,8 @@ function calcMonthlyDisciplineRate(year, month) {
     const tasks = state.selfReport[dateStr];
     if (!tasks) { dayBy65[d] = false; continue; }
     const fixedIds = DAILY_FIXED.map(t => t.id);
-    const completedFixed = fixedIds.filter(id => tasks[id]);
-    const allSelf = completedFixed.length > 0 && completedFixed.every(id => tasks[id] === 'self');
+    const completedFixed = fixedIds.filter(id => _hasFixedTask(tasks, id));
+    const allSelf = completedFixed.length > 0 && completedFixed.every(id => _getFixedTaskValue(tasks, id) === 'self');
     dayBy65[d] = (completedFixed.length / fixedIds.length >= 0.65) && allSelf;
   }
 
