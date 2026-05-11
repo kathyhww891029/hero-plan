@@ -28,7 +28,7 @@ const urlsToCache = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('🦸 SW v110 安装中…');
+      console.log('🦸 SW v116 安装中…');
       return cache.addAll(urlsToCache).catch(err => {
         console.warn('⚠️ 部分资源缓存失败（非致命）:', err);
         // 继续，不因为一个资源失败就阻止 SW 安装
