@@ -5451,10 +5451,29 @@ function renderDisciplineBar() {
   const unlocked = rate >= 85;
   const filled = Math.round(rate / 10);
   const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+
+  // ── 诊断信息 ──────────────────────────────────────────
+  const prefix = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const diag = [];
+  for (let d = 1; d <= now.getDate(); d++) {
+    const ds = `${prefix}-${String(d).padStart(2,'0')}`;
+    const tasks = state.selfReport?.[ds];
+    if (tasks && Object.keys(tasks).length > 0) {
+      const fixedIds = DAILY_FIXED.map(t => t.id);
+      const hits = fixedIds.filter(id => _hasFixedTask(tasks, id));
+      const allSelf = hits.length > 0 && hits.every(id => _getFixedTaskValue(tasks, id) === 'self');
+      const pct = fixedIds.length > 0 ? Math.round(hits.length / fixedIds.length * 100) : 0;
+      diag.push(`${ds.slice(5)} ${hits.length}/${fixedIds.length}(${pct}%) ${allSelf ? '✓自主' : '✗'}`);
+    }
+  }
+  const diagHTML = diag.length > 0
+    ? `<div style="margin-top:8px;font-size:0.73rem;color:#999;font-family:monospace;line-height:1.4;">📋 ${diag.join(' | ')}</div>`
+    : '<div style="margin-top:8px;font-size:0.73rem;color:#e57373;">⚠️ selfReport 本月无数据 — 完成任务时请点「我自己想起来的」</div>';
+
   el.innerHTML = `
     <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条</span>
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v116</span></span>
         <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
       </div>
       <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};letter-spacing:2px;">${bar}</div>
@@ -5471,6 +5490,7 @@ function renderDisciplineBar() {
           ? `<div style="margin-top:8px;font-size:0.85rem;color:#F9A825;">还差${85-rate}%解锁本月大奖，加油！💪</div>`
           : '<div style="margin-top:8px;font-size:0.85rem;color:#aaa;">开始打卡，积累自律能量！</div>'
       }
+      ${diagHTML}
     </div>
   `;
 }

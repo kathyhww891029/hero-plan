@@ -3,19 +3,19 @@
    策略：index.html 网络优先（保证 PWA 始终获取最新版本）
          JS/CSS 缓存优先（query string 版本控制）
 ══════════════════════════════════════════════════════════════ */
-const CACHE_NAME = 'hero-plan-v115';
-const CACHE_DATE = '2026-05-12-cache-bust';
+const CACHE_NAME = 'hero-plan-v116';
+const CACHE_DATE = '2026-05-12-diagnostics';
 
 // 核心资源（按需缓存，缓存在线）
 const urlsToCache = [
   './',
   './index.html',
   './style.css',
-  './data.js?v=3d',
-  './hero-constants.js?v=5d',
-  './hero-state.js?v=13d',
-  './app.js?v=17c',
-  './firebase-sync.js?v=76d',
+  './data.js?v=3e',
+  './hero-constants.js?v=5e',
+  './hero-state.js?v=13e',
+  './app.js?v=18c',
+  './firebase-sync.js?v=76e',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
