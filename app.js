@@ -5370,18 +5370,18 @@ function mathShowSection(id) {
 // 此函数做边界匹配避免 mp1 误匹配 mp10
 function _hasFixedTask(tasks, fixedId) {
   if (tasks[fixedId]) return true; // 兼容简单键（未来可能修复存储侧）
-  if (fixedId === 'hw_main') return Object.keys(tasks).some(k => k.includes('homework'));
-  const escaped = fixedId.replace(new RegExp('[.*+?^${}()|[\]\\]', 'g'), '\$&');
+  if (fixedId === 'hw_main') return Object.keys(tasks).some(k => k.startsWith('hw_') || k.includes('homework'));
+  const escaped = fixedId.replace(new RegExp('[.*+?^${}()|[\]\]', 'g'), '\$&');
   const re = new RegExp(`(^|_)${escaped}(_|$)`);
   return Object.keys(tasks).some(k => re.test(k));
 }
 function _getFixedTaskValue(tasks, fixedId) {
   if (tasks[fixedId]) return tasks[fixedId];
   if (fixedId === 'hw_main') {
-    const key = Object.keys(tasks).find(k => k.includes('homework'));
+    const key = Object.keys(tasks).find(k => k.startsWith('hw_') || k.includes('homework'));
     return key ? tasks[key] : undefined;
   }
-  const escaped = fixedId.replace(new RegExp('[.*+?^${}()|[\]\\]', 'g'), '\$&');
+  const escaped = fixedId.replace(new RegExp('[.*+?^${}()|[\]\]', 'g'), '\$&');
   const re = new RegExp(`(^|_)${escaped}(_|$)`);
   const key = Object.keys(tasks).find(k => re.test(k));
   return key ? tasks[key] : undefined;
