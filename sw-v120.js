@@ -1,38 +1,28 @@
+// SW v120 自毁升级版 — 清除所有缓存 → 卸载自身 → 强制刷新 → 加载 v121
 self.addEventListener('install', (event) => {
-  console.log('SW v120 安装中…');
-  const CACHE_NAME = 'hero-plan-v120';
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([
-        './',
-        './index.html',
-        './app.js?v=23',
-        './manifest.json',
-        './icon-192.png',
-        './icon-512.png'
-      ]);
-    }).then(() => self.skipWaiting())
-  );
+  console.log('SW v120 升级版 - 跳过等待…');
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('SW v120 激活中…');
+  console.log('SW v120 升级版 - 清除缓存并自毁…');
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.filter(name => name !== 'hero-plan-v120').map(name => {
-          console.log('删除旧缓存:', name);
-          return caches.delete(name);
-        })
-      );
-    }).then(() => self.clients.claim())
+    caches.keys()
+      .then(names => {
+        console.log('删除缓存:', names);
+        return Promise.all(names.map(n => caches.delete(n)));
+      })
+      .then(() => self.registration.unregister())
+      .then(() => {
+        console.log('SW 已卸载，强制刷新所有窗口…');
+        return self.clients.matchAll().then(clients =>
+          clients.forEach(client => client.navigate(client.url))
+        );
+      })
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
-  );
+  // 直通网络，不做任何缓存
+  event.respondWith(fetch(event.request));
 });
