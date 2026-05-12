@@ -22,13 +22,19 @@
       navigator.serviceWorker.register('./sw-v121.js?v=2')
         .then(reg => {
           console.log('✅ SW 注册成功 v121');
+          // 监听 SW 接管（新 SW 激活时自动刷新）
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('🔄 SW 已切换，刷新页面…');
+            window.location.reload();
+          });
           // 检测新版本
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('🔄 发现新版本，即将刷新…');
-                setTimeout(() => location.reload(), 800);
+                console.log('🔄 发现新版本，发送 skipWaiting…');
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                window.location.reload();
               }
             });
           });
