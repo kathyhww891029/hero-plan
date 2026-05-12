@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>英雄计划 · 升级</title>
+<style>
+  body { font-family: -apple-system, sans-serif; text-align: center; padding-top: 30vh; background: #0a0a2e; color: #fff; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #333; border-top-color: #f0c040; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 20px auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .log { font-size: 12px; color: #888; margin-top: 20px; }
+</style>
+</head>
+<body>
+<h2>⚡ 正在升级英雄计划…</h2>
+<div class="spinner"></div>
+<div class="log" id="log"></div>
+<script>
+var logEl = document.getElementById('log');
+function log(msg) { logEl.textContent += msg + '\n'; console.log(msg); }
+
+log('🔍 检测 Service Worker…');
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    log('发现 ' + regs.length + ' 个 SW 注册');
+    return Promise.all(regs.map(function(r) {
+      log('🗑 卸载: ' + (r.active ? r.active.scriptURL : r.scope));
+      return r.unregister();
+    }));
+  }).then(function() {
+    log('✅ SW 已全部卸载');
+    log('🧹 清除所有缓存…');
+    return caches.keys();
+  }).then(function(names) {
+    log('缓存: ' + (names.length ? names.join(', ') : '无'));
+    return Promise.all(names.map(function(n) { return caches.delete(n); }));
+  }).then(function() {
+    log('✅ 缓存已清除');
+    log('🔄 跳转到英雄计划…');
+    setTimeout(function() {
+      location.replace('./');
+    }, 800);
+  }).catch(function(err) {
+    log('⚠️ ' + err.message);
+    log('直接跳转…');
+    setTimeout(function() { location.replace('./'); }, 500);
+  });
+} else {
+  log('无需清理');
+  setTimeout(function() { location.replace('./'); }, 500);
+}
+</script>
+</body>
+</html>
