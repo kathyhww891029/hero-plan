@@ -19,7 +19,7 @@
   // 注册 Service Worker（PWA离线支持）
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw-v117.js')
+      navigator.serviceWorker.register('./sw-v118.js')
         .then(reg => console.log('✅ SW 注册成功'))
         .catch(err => console.log('SW 注册失败:', err));
     });
@@ -680,7 +680,7 @@
 <script src="data.js?v=3f"></script>
 <script src="hero-constants.js?v=5f"></script>
 <script src="hero-state.js?v=13f"></script>
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 <script src="firebase-sync.js?v=77f"></script>
 </body>
 </html>
