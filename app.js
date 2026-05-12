@@ -5450,7 +5450,13 @@ function renderDisciplineBar() {
   const remainDays = daysInMonth - now.getDate();
   const unlocked = rate >= 85;
   const filled = Math.round(rate / 10);
-  const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+  // 十个格子，每个带编号 ①-⑩
+  const segNums = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+  let barSegs = '';
+  for (let i = 0; i < 10; i++) {
+    const ch = i < filled ? '█' : '░';
+    barSegs += `<span style="display:inline-block;text-align:center;width:1.4em;">${ch}<br><span style="font-size:0.55rem;line-height:1;">${segNums[i]}</span></span>`;
+  }
 
   // ── 诊断信息 ──────────────────────────────────────────
   const prefix = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -5473,10 +5479,10 @@ function renderDisciplineBar() {
   el.innerHTML = `
     <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v116</span></span>
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v117-编号</span></span>
         <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
       </div>
-      <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};letter-spacing:2px;">${bar}</div>
+      <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};line-height:1.5;">${barSegs}</div>
       <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.82rem;color:#888;">
         <span>自律天数：${selfDays}/${totalDays}天</span>
         <span>剩余：${remainDays}天</span>
