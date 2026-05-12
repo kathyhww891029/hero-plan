@@ -63,10 +63,10 @@ window._showDebugBar = function(msg) {
         var m = swURL.match(/sw-v(\d+)/);
         var ver = m ? 'v' + m[1] : '?';
         window._swVer = ver;
-        window._showDebugBar('🦸 v119-诊断版 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
+        window._showDebugBar('🦸 v120-技能测试 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
       } else {
         window._swVer = '?';
-        window._showDebugBar('🦸 v119-诊断版 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
+        window._showDebugBar('🦸 v120-技能测试 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
       }
     });
   } catch(e) { window._swVer = '?'; }
@@ -74,12 +74,12 @@ window._showDebugBar = function(msg) {
   // 同时更新页面顶部 header subtitle 显示版本号
   var subtitleEl = document.getElementById('headerMotto');
   if (subtitleEl) {
-    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v119</span>';
+    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v120</span>';
   }
 
-  console.log('🦸 启动诊断 v119 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
+  console.log('🦸 启动诊断 v120 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
   if (!hasState || score === 0) {
-    window._showDebugBar('🦸 v119-诊断版 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
+    window._showDebugBar('🦸 v120-技能测试 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
   }
   setTimeout(function() {
     var bar = document.getElementById('debug-bar');
@@ -5520,7 +5520,7 @@ function renderDisciplineBar() {
   el.innerHTML = `
     <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v119</span></span>
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v120</span></span>
         <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
       </div>
       <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};line-height:1.5;">${barSegs}</div>
