@@ -1,20 +1,17 @@
 self.addEventListener('install', (event) => {
   console.log('SW v120 安装中…');
   const CACHE_NAME = 'hero-plan-v120';
-  const CACHE_DATE = '2026-05-13-技能测试';
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll([
         './',
         './index.html',
-        './app.js?v=121',
+        './app.js?v=23',
         './manifest.json',
         './icon-192.png',
         './icon-512.png'
       ]);
-    }).then(() => {
-      return self.skipWaiting();
-    })
+    }).then(() => self.skipWaiting())
   );
 });
 
@@ -28,9 +25,7 @@ self.addEventListener('activate', (event) => {
           return caches.delete(name);
         })
       );
-    }).then(() => {
-      return self.clients.claim();
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
