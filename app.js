@@ -5529,19 +5529,20 @@ function calcMonthlyDisciplineRate(year, month) {
   }
 
   // 统计自律天数：65%条件 OR 连续7天每天有self
-  const counted = {};
   let selfDays = 0;
   for (let d = 1; d <= lastDay; d++) {
-    if (counted[d]) continue;
-    if (dayBy65[d]) { selfDays++; counted[d] = true; continue; }
-    let streakOk = d >= 7;
-    for (let k = d - 6; k <= d; k++) {
-      if (!dayHasSelf[k]) { streakOk = false; break; }
+    if (dayBy65[d]) { selfDays++; continue; }
+    // 检查当天是否处于某个连续7天每天有self的窗口内
+    let inStreak = false;
+    const maxW = Math.min(d + 6, lastDay);
+    for (let w = Math.max(d, 7); w <= maxW; w++) {
+      let ok = true;
+      for (let k = w - 6; k <= w; k++) {
+        if (!dayHasSelf[k]) { ok = false; break; }
+      }
+      if (ok) { inStreak = true; break; }
     }
-    if (streakOk) {
-      for (let k = d - 6; k <= d; k++) counted[k] = true;
-      selfDays += 7;
-    }
+    if (inStreak) selfDays++;
   }
 
   const totalDays = lastDay;
