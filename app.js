@@ -74,10 +74,10 @@ window._showDebugBar = function(msg) {
   // 同时更新页面顶部 header subtitle 显示版本号
   var subtitleEl = document.getElementById('headerMotto');
   if (subtitleEl) {
-    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v120</span>';
+    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v121</span>';
   }
 
-  console.log('🦸 启动诊断 v120 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
+  console.log('🦸 启动诊断 v121 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
   if (!hasState || score === 0) {
     window._showDebugBar('🦸 v121-自律激励版 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
   }
