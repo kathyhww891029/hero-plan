@@ -5,7 +5,7 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll([
         './',
-        './index.html?v=' + Date.now(),
+        './index.html',
         './app.js?v=25',
         './style.css?v=4a',
         './manifest.json',
@@ -14,6 +14,13 @@ self.addEventListener('install', (event) => {
       ]);
     }).then(() => self.skipWaiting())
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('SW v121 收到 skipWaiting 指令');
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {
@@ -31,7 +38,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // 对于 HTML 请求，始终尝试网络优先
+  // 对于 HTML 请求，始终网络优先
   if (event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html')) {
     event.respondWith(
       fetch(event.request).then(response => {
