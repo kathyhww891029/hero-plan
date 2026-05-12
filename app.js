@@ -63,10 +63,10 @@ window._showDebugBar = function(msg) {
         var m = swURL.match(/sw-v(\d+)/);
         var ver = m ? 'v' + m[1] : '?';
         window._swVer = ver;
-        window._showDebugBar('🦸 v118-可见版 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
+        window._showDebugBar('🦸 v119-诊断版 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
       } else {
         window._swVer = '?';
-        window._showDebugBar('🦸 v118-可见版 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
+        window._showDebugBar('🦸 v119-诊断版 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
       }
     });
   } catch(e) { window._swVer = '?'; }
@@ -74,12 +74,12 @@ window._showDebugBar = function(msg) {
   // 同时更新页面顶部 header subtitle 显示版本号
   var subtitleEl = document.getElementById('headerMotto');
   if (subtitleEl) {
-    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v118</span>';
+    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v119</span>';
   }
 
-  console.log('🦸 启动诊断 v118 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
+  console.log('🦸 启动诊断 v119 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
   if (!hasState || score === 0) {
-    window._showDebugBar('🦸 v118-可见版 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
+    window._showDebugBar('🦸 v119-诊断版 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
   }
   setTimeout(function() {
     var bar = document.getElementById('debug-bar');
@@ -5504,6 +5504,15 @@ function renderDisciplineBar() {
       diag.push(`${ds.slice(5)} ${hits.length}/${fixedIds.length}(${pct}%) ${allSelf ? '✓自主' : '✗'}`);
     }
   }
+  // 🔍 诊断：显示今天 selfReport 原始数据
+  const todayDs = `${prefix}-${String(now.getDate()).padStart(2,'0')}`;
+  const todayTasks = state.selfReport?.[todayDs];
+  const todayKeys = todayTasks ? Object.keys(todayTasks) : [];
+  const rawDump = todayKeys.length > 0
+    ? todayKeys.map(k => `${k}=${todayTasks[k]}`).join(', ')
+    : '（空）';
+  const dumpHTML = `<div style="margin-top:4px;font-size:0.7rem;color:#888;font-family:monospace;">🔍 今天(${todayDs}) selfReport: ${rawDump}</div>`;
+
   const diagHTML = diag.length > 0
     ? `<div style="margin-top:8px;font-size:0.73rem;color:#999;font-family:monospace;line-height:1.4;">📋 ${diag.join(' | ')}</div>`
     : '<div style="margin-top:8px;font-size:0.73rem;color:#e57373;">⚠️ selfReport 本月无数据 — 完成任务时请点「我自己想起来的」</div>';
@@ -5511,7 +5520,7 @@ function renderDisciplineBar() {
   el.innerHTML = `
     <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v118</span></span>
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v119</span></span>
         <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
       </div>
       <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};line-height:1.5;">${barSegs}</div>
@@ -5529,6 +5538,7 @@ function renderDisciplineBar() {
           : '<div style="margin-top:8px;font-size:0.85rem;color:#aaa;">开始打卡，积累自律能量！</div>'
       }
       ${diagHTML}
+      ${dumpHTML}
     </div>
   `;
 }
