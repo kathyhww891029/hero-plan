@@ -63,10 +63,10 @@ window._showDebugBar = function(msg) {
         var m = swURL.match(/sw-v(\d+)/);
         var ver = m ? 'v' + m[1] : '?';
         window._swVer = ver;
-        window._showDebugBar('🦸 v120-技能测试 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
+        window._showDebugBar('🦸 v120-诊断版 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
       } else {
         window._swVer = '?';
-        window._showDebugBar('🦸 v120-技能测试 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
+        window._showDebugBar('🦸 v120-诊断版 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
       }
     });
   } catch(e) { window._swVer = '?'; }
@@ -79,7 +79,7 @@ window._showDebugBar = function(msg) {
 
   console.log('🦸 启动诊断 v120 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
   if (!hasState || score === 0) {
-    window._showDebugBar('🦸 v120-技能测试 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
+    window._showDebugBar('🦸 v120-诊断版 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
   }
   setTimeout(function() {
     var bar = document.getElementById('debug-bar');
