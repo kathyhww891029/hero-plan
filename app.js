@@ -5508,41 +5508,11 @@ function calcMonthlyDisciplineRate(year, month) {
   const isCurrentMonth = (today.getFullYear() === year && today.getMonth() + 1 === month);
   const lastDay = isCurrentMonth ? today.getDate() : daysInMonth;
 
-  // 每天：固定任务≥65%且全部self
-  const dayBy65 = {};
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${prefix}-${String(d).padStart(2,'0')}`;
-    const tasks = state.selfReport[dateStr];
-    if (!tasks) { dayBy65[d] = false; continue; }
-    const fixedIds = DAILY_FIXED.map(t => t.id);
-    const completedFixed = fixedIds.filter(id => _hasFixedTask(tasks, id));
-    const allSelf = completedFixed.length > 0 && completedFixed.every(id => _getFixedTaskValue(tasks, id) === 'self');
-    dayBy65[d] = (completedFixed.length / fixedIds.length >= 0.65) && allSelf;
-  }
-
-  // 每天：有至少1个self任务（用于streak判断）
-  const dayHasSelf = {};
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${prefix}-${String(d).padStart(2,'0')}`;
-    const tasks = state.selfReport[dateStr];
-    dayHasSelf[d] = !!(tasks && Object.values(tasks).some(v => v === 'self'));
-  }
-
-  // 统计自律天数：65%条件 OR 连续7天每天有self
   let selfDays = 0;
   for (let d = 1; d <= lastDay; d++) {
-    if (dayBy65[d]) { selfDays++; continue; }
-    // 检查当天是否处于某个连续7天每天有self的窗口内
-    let inStreak = false;
-    const maxW = Math.min(d + 6, lastDay);
-    for (let w = Math.max(d, 7); w <= maxW; w++) {
-      let ok = true;
-      for (let k = w - 6; k <= w; k++) {
-        if (!dayHasSelf[k]) { ok = false; break; }
-      }
-      if (ok) { inStreak = true; break; }
-    }
-    if (inStreak) selfDays++;
+    const dateStr = `${prefix}-${String(d).padStart(2,'0')}`;
+    const tasks = state.selfReport[dateStr];
+    if (tasks && Object.values(tasks).some(v => v === 'self')) selfDays++;
   }
 
   const totalDays = lastDay;
