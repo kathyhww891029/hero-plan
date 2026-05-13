@@ -1,105 +1,53 @@
-/* ══════════════════════════════════════════════════════════════
-   英雄成长计划 · Service Worker
-   策略：index.html 网络优先（保证 PWA 始终获取最新版本）
-         JS/CSS 缓存优先（query string 版本控制）
-══════════════════════════════════════════════════════════════ */
-const CACHE_NAME = 'hero-plan-v115';
-const CACHE_DATE = '2026-05-14-v30';
+// Hero Plan Service Worker
+// 策略：网络优先生效 + 缓存离线兜底
+// 注册时由 index.html 传入 BUILD_VERSION query string 控制更新
 
-// 核心资源（按需缓存）
-const urlsToCache = [
-  './',
-  './index.html',
-  './style.css',
-  './data.js?v=3c',
-  './hero-constants.js?v=5f',
-  './hero-state.js?v=13f',
-  './app.js?v=30',
-  './firebase-sync.js?v=79f',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  './sounds/bonus.mp3',
-  './sounds/celebration.mp3',
-  './sounds/success.mp3',
-  './sounds/ta-da.mp3'
-];
+const CACHE_NAME = 'hero-plan-v31';
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      console.log('🦸 SW v110 安装中…');
-      return cache.addAll(urlsToCache).catch(err => {
-        console.warn('⚠️ 部分资源缓存失败（非致命）:', err);
-      });
-    })
-  );
+self.addEventListener('install', (event) => {
+  console.log('[SW] install');
   self.skipWaiting();
 });
 
-self.addEventListener('activate', event => {
+self.addEventListener('activate', (event) => {
+  console.log('[SW] activate');
   event.waitUntil(
-    caches.keys().then(cacheNames => {
+    caches.keys().then((names) => {
       return Promise.all(
-        cacheNames
-          .filter(name => name !== CACHE_NAME)
-          .map(name => {
-            console.log('🗑️ 清除旧缓存:', name);
-            return caches.delete(name);
-          })
+        names.filter(n => n !== CACHE_NAME).map(n => {
+          console.log('[SW] 删除旧缓存:', n);
+          return caches.delete(n);
+        })
       );
-    }).then(() => {
-      return self.clients.matchAll().then(clients => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'SW_VERSION',
-            cacheName: CACHE_NAME,
-            cacheDate: CACHE_DATE,
-            action: 'reload'
-          });
-        });
-      });
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// 拦截请求：index.html 网络优先，其他缓存优先
-self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
+self.addEventListener('fetch', (event) => {
+  // 跳过非 GET 请求
+  if (event.request.method !== 'GET') return;
+  // 跳过 chrome-extension 等非 http 请求
+  if (!event.request.url.startsWith('http')) return;
 
-  // index.html 和根路径：网络优先（保证 PWA 始终拿到最新版）
-  if (url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
+  event.respondWith(
+    fetch(event.request)
+      .then(response => {
+        // 只缓存成功响应
+        if (response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  // 其他资源：缓存优先 + 后台更新
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) {
-        // stale-while-revalidate
-        fetch(event.request).then(response => {
-          if (response && response.status === 200) {
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, response));
-          }
-        }).catch(() => {});
-        return cached;
-      }
-      return fetch(event.request).then(response => {
-        if (!response || response.status !== 200) return response;
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
         return response;
-      }).catch(() => caches.match('./index.html'));
-    })
+      })
+      .catch(() => {
+        // 网络不可用时回退缓存
+        return caches.match(event.request);
+      })
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
