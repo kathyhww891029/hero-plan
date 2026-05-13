@@ -5570,32 +5570,52 @@ function renderDisciplineBar() {
     barSegs += `<span style="display:inline-block;text-align:center;width:1.4em;">${ch}<br><span style="font-size:0.55rem;line-height:1;">${segNums[i]}</span></span>`;
   }
 
-  // ── 诊断信息 ──────────────────────────────────────────
+  // ── 增强诊断 ──────────────────────────────────────────
   const prefix = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const diag = [];
+  const fixedIds = DAILY_FIXED.map(t => t.id);
+  const todayDs = `${prefix}-${String(now.getDate()).padStart(2,'0')}`;
+
+  // 收集本月所有 selfReport 日期
+  const reportDates = [];
   for (let d = 1; d <= now.getDate(); d++) {
     const ds = `${prefix}-${String(d).padStart(2,'0')}`;
     const tasks = state.selfReport?.[ds];
-    if (tasks && Object.keys(tasks).length > 0) {
-      const fixedIds = DAILY_FIXED.map(t => t.id);
-      const hits = fixedIds.filter(id => _hasFixedTask(tasks, id));
-      const allSelf = hits.length > 0 && hits.every(id => _getFixedTaskValue(tasks, id) === 'self');
-      const pct = fixedIds.length > 0 ? Math.round(hits.length / fixedIds.length * 100) : 0;
-      diag.push(`${ds.slice(5)} ${hits.length}/${fixedIds.length}(${pct}%) ${allSelf ? '✓自主' : '✗'}`);
-    }
+    if (tasks && Object.keys(tasks).length > 0) reportDates.push(ds);
   }
-  // 🔍 诊断：显示今天 selfReport 原始数据
-  const todayDs = `${prefix}-${String(now.getDate()).padStart(2,'0')}`;
+
+  // 逐日详细诊断
+  const dayRows = [];
+  for (let d = 1; d <= now.getDate(); d++) {
+    const ds = `${prefix}-${String(d).padStart(2,'0')}`;
+    const tasks = state.selfReport?.[ds];
+    const hasData = tasks && Object.keys(tasks).length > 0;
+    const hits = hasData ? fixedIds.filter(id => _hasFixedTask(tasks, id)) : [];
+    const allSelf = hits.length > 0 && hits.every(id => _getFixedTaskValue(tasks, id) === 'self');
+    const pct = fixedIds.length > 0 ? Math.round(hits.length / fixedIds.length * 100) : 0;
+    const by65 = (() => {
+      if (!hasData) return false;
+      if (hits.length / fixedIds.length < 0.65) return false;
+      return allSelf;
+    })();
+    const hasSelfTask = hasData && Object.values(tasks).some(v => v === 'self');
+    // 找出具体任务键
+    const selfTaskKeys = hasData
+      ? Object.entries(tasks).filter(([k,v]) => v === 'self').map(([k]) => k.replace(/_.*?(mp\d|np\d|hw)/, '…$1').slice(-12))
+      : [];
+    const dailyMark = by65 ? '🟢' : (hasSelfTask ? '🟡' : (hasData ? '🔴' : '⚫'));
+    dayRows.push(`${dailyMark}${String(d).padStart(2,'0')}:${by65?'65%✓':'  '} hasSelf:${hasSelfTask?'✓':'✗'} hits:${hits.length}/${fixedIds.length}}`);
+  }
+
+  // 今天原始数据
   const todayTasks = state.selfReport?.[todayDs];
   const todayKeys = todayTasks ? Object.keys(todayTasks) : [];
   const rawDump = todayKeys.length > 0
-    ? todayKeys.map(k => `${k}=${todayTasks[k]}`).join(', ')
+    ? todayKeys.map(k => `${k.slice(-20)}=${todayTasks[k]}`).join(' | ')
     : '（空）';
-  const dumpHTML = `<div style="margin-top:4px;font-size:0.7rem;color:#888;font-family:monospace;">🔍 今天(${todayDs}) selfReport: ${rawDump}</div>`;
 
-  const diagHTML = diag.length > 0
-    ? `<div style="margin-top:8px;font-size:0.73rem;color:#999;font-family:monospace;line-height:1.4;">📋 ${diag.join(' | ')}</div>`
-    : '<div style="margin-top:8px;font-size:0.73rem;color:#e57373;">⚠️ selfReport 本月无数据 — 完成任务时请点「我自己想起来的」</div>';
+  const diagHTML = reportDates.length > 0
+    ? `<details style="margin-top:6px;font-size:0.68rem;color:#666;font-family:monospace;background:#f9f9f9;border-radius:8px;padding:8px;"><summary style="cursor:pointer;font-weight:600;">🔍 诊断（本月${reportDates.length}天有数据）</summary><div style="margin-top:4px;line-height:1.5;">${dayRows.join('<br>')}</div><div style="margin-top:4px;border-top:1px solid #eee;padding-top:4px;">今天 raw: ${rawDump}</div><div style="color:#888;">🟢=65%条件通过 | 🟡=有self但不足65% | 🔴=有数据但无self | ⚫=无数据</div></details>`
+    : '<div style="margin-top:8px;font-size:0.82rem;color:#e57373;font-weight:600;">⚠️ selfReport 本月无任何数据！<br><span style="font-weight:400;font-size:0.75rem;">完成任务时请务必选择「💪 我自己想起来的」或「👋 提醒了我」</span></div>';
 
   el.innerHTML = `
     <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
@@ -5618,7 +5638,6 @@ function renderDisciplineBar() {
           : '<div style="margin-top:8px;font-size:0.85rem;color:#aaa;">开始打卡，积累自律能量！</div>'
       }
       ${diagHTML}
-      ${dumpHTML}
     </div>
   `;
 }
