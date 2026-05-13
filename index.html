@@ -14,13 +14,33 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="英雄计划">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=3c">
+<link rel="stylesheet" href="style.css?v=4a">
 <script>
   // 注册 Service Worker（PWA离线支持）
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw-v118.js')
-        .then(reg => console.log('✅ SW 注册成功'))
+      navigator.serviceWorker.register('./sw-v121.js?v=2')
+        .then(reg => {
+          console.log('✅ SW 注册成功 v121');
+          // 监听 SW 接管（新 SW 激活时自动刷新）
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('🔄 SW 已切换，刷新页面…');
+            window.location.reload();
+          });
+          // 检测新版本
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('🔄 发现新版本，发送 skipWaiting…');
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                window.location.reload();
+              }
+            });
+          });
+          // 定期检查更新
+          setInterval(() => reg.update(), 300000);
+        })
         .catch(err => console.log('SW 注册失败:', err));
     });
   }
@@ -179,6 +199,9 @@
 
   <!-- 月历打卡记录 -->
   <div class="monthly-calendar" id="monthlyCalendar"></div>
+
+  <!-- 🏅 今日自律状态 -->
+  <div id="dailyDisciplineStatus"></div>
 
   <!-- 早晨英雄包 -->
   <div class="card-section">
@@ -365,9 +388,8 @@
 
 <!-- ═══ TAB: 爸爸妈妈要牢记 ═══ -->
 <div class="tab-content" id="tab-dad">
-  <div id="dadPage">
-    <div id="disciplineBar"></div>
-  </div>
+  <div id="dadPage"></div>
+  <div id="disciplineBar"></div>
 </div>
 
 <!-- ═══ TAB: 闪电侠速算 ═══ -->
@@ -660,6 +682,13 @@
   </div>
 </div>
 
+<!-- 弹窗：每周自律报告 -->
+<div class="modal-overlay" id="weeklyReportModal" style="display:none" onclick="closeWeeklyReport()">
+  <div class="modal-box" id="weeklyReportContent" onclick="event.stopPropagation()">
+    <!-- 由 JS 渲染 -->
+  </div>
+</div>
+
 <!-- 弹窗：任务卡详情 -->
 <div class="modal-overlay" id="cardModal" style="display:none">
   <div class="modal-box">
@@ -680,7 +709,7 @@
 <script src="data.js?v=3f"></script>
 <script src="hero-constants.js?v=5f"></script>
 <script src="hero-state.js?v=13f"></script>
-<script src="app.js?v=21"></script>
+<script src="app.js?v=26"></script>
 <script src="firebase-sync.js?v=77f"></script>
 </body>
 </html>
