@@ -5531,24 +5531,18 @@ function renderDisciplineBar() {
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const remainDays = daysInMonth - now.getDate();
   const unlocked = rate >= 85;
-  const filled = Math.round(rate / 10);
-  // 十个格子，每个带编号 ①-⑩
-  const segNums = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
-  let barSegs = '';
-  for (let i = 0; i < 10; i++) {
-    const ch = i < filled ? '█' : '░';
-    barSegs += `<span style="display:inline-block;text-align:center;width:1.4em;">${ch}<br><span style="font-size:0.55rem;line-height:1;">${segNums[i]}</span></span>`;
-  }
+  const needDays = Math.max(0, Math.ceil(totalDays * 0.85) - selfDays);
+  const monthName = (now.getMonth() + 1) + '月';
+  const barPct = Math.min(100, rate);
+  const barColor = rate >= 85 ? '#06D6A0' : rate >= 50 ? '#F9A825' : '#FF7043';
 
-  // ── 超级诊断 v2 ──────────────────────────────────────
+  // ── 超级诊断（家长专用）──────────────────────────────
   const prefix = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const fixedIds = DAILY_FIXED.map(t => t.id);
   const todayDs = `${prefix}-${String(now.getDate()).padStart(2,'0')}`;
 
-  // 全局统计
   const allDates = state.selfReport ? Object.keys(state.selfReport) : [];
-  let totalTaskEntries = 0;
-  let totalSelfEntries = 0;
+  let totalTaskEntries = 0, totalSelfEntries = 0;
   allDates.forEach(d => {
     const t = state.selfReport[d];
     if (t) {
@@ -5557,21 +5551,12 @@ function renderDisciplineBar() {
     }
   });
 
-  // 日期列表（按月份分组）
   const datesByMonth = {};
   allDates.sort().forEach(d => {
     const m = d.slice(0, 7);
     if (!datesByMonth[m]) datesByMonth[m] = [];
     datesByMonth[m].push(d);
   });
-
-  // 本月逐日诊断
-  const monthDates = [];
-  for (let d = 1; d <= now.getDate(); d++) {
-    const ds = `${prefix}-${String(d).padStart(2,'0')}`;
-    const tasks = state.selfReport?.[ds];
-    if (tasks && Object.keys(tasks).length > 0) monthDates.push(ds);
-  }
 
   const dayRows = [];
   for (let d = 1; d <= now.getDate(); d++) {
@@ -5586,14 +5571,12 @@ function renderDisciplineBar() {
     dayRows.push(`${dailyMark}${String(d).padStart(2,'0')}:${by65?'65%✓':'  '} hasSelf:${hasSelfTask?'✓':'✗'} hits:${hits.length}/${fixedIds.length}`);
   }
 
-  // 今天完整原始键值对
   const todayTasks = state.selfReport?.[todayDs];
   const todayKeys = todayTasks ? Object.keys(todayTasks) : [];
   const rawDump = todayKeys.length > 0
     ? todayKeys.map(k => `${k.slice(-25)}=${todayTasks[k]}`).join(', ')
     : '（空）';
 
-  // localStorage 状态
   let lsSize = '?';
   try {
     const raw = localStorage.getItem(STATE_KEY);
@@ -5602,46 +5585,54 @@ function renderDisciplineBar() {
 
   const monthSummary = datesByMonth[prefix] ? `${datesByMonth[prefix].length}天有数据` : '本月无数据';
   const diagHTML = allDates.length > 0
-    ? `<details style="margin-top:6px;font-size:0.65rem;color:#555;font-family:monospace;background:#fafafa;border-radius:8px;padding:8px;max-height:400px;overflow-y:auto;">
-      <summary style="cursor:pointer;font-weight:600;">🔍 超级诊断 | 全局:${allDates.length}日期 ${totalTaskEntries}条记录/${totalSelfEntries}自主 | ${monthSummary} | LS:${lsSize}</summary>
+    ? `<details style="margin-top:10px;font-size:0.65rem;color:#555;font-family:monospace;background:#fafafa;border-radius:8px;padding:8px;max-height:300px;overflow-y:auto;">
+      <summary style="cursor:pointer;font-weight:600;opacity:0.5;">🔍 家长诊断 | ${monthSummary} | LS:${lsSize}</summary>
       <div style="margin-top:4px;line-height:1.5;">
-        <b>📦 selfReport 全局：</b>${allDates.length}个日期，${totalTaskEntries}条记录，${totalSelfEntries}条自主<br>
-        <b>📅 月份分布：</b>${Object.keys(datesByMonth).map(m => m+':'+datesByMonth[m].length+'天').join(' ')}<br>
-        <b>本月逐日（${prefix}）：</b><br>${dayRows.join('<br>')}<br>
-        <b>🔑 今天(${todayDs}) raw keys:</b> ${rawDump}<br>
-        <span style="color:#888;">🟢=65%通过 🟡=有self不足65% 🔴=无self ⚫=无数据</span>
+        <b>📦 selfReport：</b>${allDates.length}日期 ${totalTaskEntries}条/${totalSelfEntries}自主<br>
+        <b>📅 分布：</b>${Object.keys(datesByMonth).map(m => m+':'+datesByMonth[m].length+'天').join(' ')}<br>
+        <b>本月（${prefix}）：</b><br>${dayRows.join('<br>')}<br>
+        <b>今天 keys:</b> ${rawDump}<br>
+        <span style="color:#888;">🟢=65%全自主 🟡=有自主不足 🔴=无自主 ⚫=无数据</span>
       </div>
       </details>`
-    : `<details style="margin-top:6px;font-size:0.65rem;color:#e57373;font-family:monospace;background:#fff5f5;border-radius:8px;padding:8px;">
-      <summary style="cursor:pointer;font-weight:700;color:#c62828;">⚠️ selfReport 全局为空！ | LS:${lsSize}</summary>
+    : `<details style="margin-top:10px;font-size:0.65rem;color:#e57373;font-family:monospace;background:#fff5f5;border-radius:8px;padding:8px;">
+      <summary style="cursor:pointer;font-weight:700;color:#c62828;opacity:0.5;">⚠️ 无数据 | LS:${lsSize}</summary>
       <div style="margin-top:4px;line-height:1.5;">
-        没有任何自律数据。请确认：<br>
-        1. 完成任务时是否弹出了「我自己想起来的/提醒了我」的弹窗？<br>
-        2. 是否点击了弹窗中的按钮？<br>
-        <button onclick="(function(){var t=state.selfReport||{};t['${todayDs}']={'test_write_'+Date.now().toString(36):'self'};state.selfReport=t;saveState();renderDisciplineBar();alert('测试写入完成，刷新诊断面板查看')})()" style="margin-top:4px;padding:4px 10px;font-size:0.7rem;border:1px solid #c62828;border-radius:4px;background:#fff;color:#c62828;">🩺 测试写入</button>
+        没有任何自律数据。<br>
+        <button onclick="(function(){var t=state.selfReport||{};t['${todayDs}']={'test_'+Date.now().toString(36):'self'};state.selfReport=t;saveState();renderDisciplineBar();alert('测试写入完成')})()" style="margin-top:4px;padding:4px 10px;font-size:0.7rem;border:1px solid #c62828;border-radius:4px;background:#fff;color:#c62828;">🩺 测试写入</button>
       </div>
       </details>`;
 
   el.innerHTML = `
-    <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style=\"font-size:0.65rem;color:#bbb;\">v121</span></span>
-        <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
+    <div class="discipline-bar-wrap" style="background:${unlocked?'linear-gradient(135deg,#e8fff5,#d4fceb)':'linear-gradient(135deg,#fff8e1,#fff3cd)'};border-radius:18px;padding:16px;margin:10px 0;border:2px solid ${unlocked?'#06D6A0':'#FFD54F'};box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:1.1rem;">⚡</span>
+        <span style="font-weight:800;font-size:1.05rem;color:#1a1a2e;">${monthName} 能量条</span>
+        <span style="font-size:1.3rem;font-weight:800;color:${barColor};">${rate}%</span>
       </div>
-      <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};line-height:1.5;">${barSegs}</div>
-      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.82rem;color:#888;">
-        <span>自律天数：${selfDays}/${totalDays}天</span>
-        <span>剩余：${remainDays}天</span>
+
+      <div style="background:#eee;border-radius:14px;height:22px;overflow:hidden;position:relative;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1);">
+        <div style="background:linear-gradient(90deg,#FF7043,#F9A825 40%,#66BB6A 70%,#06D6A0);height:100%;border-radius:14px;width:${barPct}%;transition:width 0.5s ease;box-shadow:0 0 10px ${barColor}55;"></div>
+        ${barPct > 0 && barPct < 100 ? `<div style="position:absolute;top:-2px;left:calc(${barPct}% - 10px);font-size:0.9rem;line-height:1;">🚀</div>` : ''}
+        ${barPct >= 100 ? `<div style="position:absolute;top:0;right:0;width:100%;text-align:center;line-height:22px;font-size:0.78rem;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.2);">🎉 满格！</div>` : ''}
       </div>
-      <div style="margin-top:6px;font-size:0.78rem;color:#aaa;">
-        达成条件：固定任务≥65%全自主 或 连续7天每天自主完成任务
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:0.9rem;">
+        <span style="font-weight:700;color:#1a1a2e;">
+          ⭐ <span style="color:#F9A825;font-size:1.2rem;">${selfDays}</span> 天自己完成
+        </span>
+        <span style="color:#aaa;font-size:0.75rem;">本月已过 ${totalDays} 天</span>
       </div>
-      ${unlocked
-        ? '<div style="margin-top:8px;font-size:0.88rem;color:#06D6A0;font-weight:700;">✨ 本月自律达标！大奖已解锁！</div>'
-        : rate > 0
-          ? `<div style="margin-top:8px;font-size:0.85rem;color:#F9A825;">还差${85-rate}%解锁本月大奖，加油！💪</div>`
-          : '<div style="margin-top:8px;font-size:0.85rem;color:#aaa;">开始打卡，积累自律能量！</div>'
-      }
+
+      <div style="margin-top:10px;font-size:0.82rem;text-align:center;line-height:1.6;">
+        ${unlocked
+          ? '<span style="display:inline-block;background:#e8fff5;border-radius:10px;padding:8px 16px;font-weight:700;color:#06D6A0;">🎁 宝藏屋大奖已解锁！你太棒了！🎉</span>'
+          : selfDays > 0
+            ? `<span style="display:inline-block;background:#fff8e1;border-radius:10px;padding:8px 16px;color:#E65100;font-weight:600;">🎁 再靠自己完成 <span style="font-size:1rem;color:#FF7043;">${needDays}</span> 天，宝藏屋就打开了！💪</span>`
+            : '<span style="color:#aaa;">每天自己完成任务，能量条就会慢慢涨起来！加油！⭐</span>'
+        }
+      </div>
+
       ${diagHTML}
     </div>
   `;
