@@ -804,7 +804,7 @@ function renderKidHeroHistory() {
   }
 
   let html = `<div style="padding:4px 0 8px">
-    <div style="font-size:15px;font-weight:700;color:#1a1a2e;padding:8px 4px 12px">🏅 爸妈眼中的你</div>`;
+    <div style="font-size:15px;font-weight:700;color:#1a1a2e;padding:8px 4px 12px">🏅 爸妈眼中的你 <button onclick="event.stopPropagation();var p=this.parentElement.parentElement;var t=p?p.textContent.replace(/\s+/g,' ').trim():'';if(t)speakText(t,this)" style="background:none;border:none;font-size:1.2rem;cursor:pointer;vertical-align:middle;" title="读给我听">🔈</button></div>`;
 
   // 每周评价板块
   if (praiseList.length > 0) {
