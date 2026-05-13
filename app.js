@@ -63,10 +63,10 @@ window._showDebugBar = function(msg) {
         var m = swURL.match(/sw-v(\d+)/);
         var ver = m ? 'v' + m[1] : '?';
         window._swVer = ver;
-        window._showDebugBar('🦸 v118-可见版 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
+        window._showDebugBar('🦸 v121-自律激励版 | SW:' + ver + ' | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | 独立窗口:' + standalone);
       } else {
         window._swVer = '?';
-        window._showDebugBar('🦸 v118-可见版 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
+        window._showDebugBar('🦸 v121-自律激励版 | SW:未激活 | ' + tcbStatus + ' | 数据:' + (hasState ? score+'分' : '无'));
       }
     });
   } catch(e) { window._swVer = '?'; }
@@ -74,12 +74,12 @@ window._showDebugBar = function(msg) {
   // 同时更新页面顶部 header subtitle 显示版本号
   var subtitleEl = document.getElementById('headerMotto');
   if (subtitleEl) {
-    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v118</span>';
+    subtitleEl.innerHTML = subtitleEl.innerHTML.replace(/<span[^>]*>.*?<\/span>$/, '') + ' <span style="font-size:0.65rem;color:#aaa;font-weight:normal;">v121</span>';
   }
 
-  console.log('🦸 启动诊断 v118 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
+  console.log('🦸 启动诊断 v121 | 独立窗口:' + standalone + ' | 有数据:' + hasState + ' | 积分:' + score + ' | ' + tcbStatus);
   if (!hasState || score === 0) {
-    window._showDebugBar('🦸 v118-可见版 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
+    window._showDebugBar('🦸 v121-自律激励版 | SW:' + swStatus + ' | 数据:' + (hasState ? score+'分' : '无') + ' | ' + tcbStatus + ' | 如数据丢失请点「📥导入」恢复');
   }
   setTimeout(function() {
     var bar = document.getElementById('debug-bar');
@@ -349,6 +349,7 @@ function renderAll() {
   renderAchievements();
   renderDisciplineBar();
   if (typeof renderKidHeroHistory === 'function') renderKidHeroHistory();
+  checkWeeklyReport();
 }
 
 // ── 渲染头部 ──────────────────────────────────────────────────
@@ -844,6 +845,7 @@ function streakBadge(key) {
 }
 
 function renderDaily() {
+  renderDailyDisciplineStatus();
   renderMorningPack();
   renderNightPack();
   renderHomeworkTask();
@@ -852,6 +854,71 @@ function renderDaily() {
   renderOptionalTasks();
   renderTempTasks();
   updateTodayScore();
+}
+
+// ── 今日自律状态行 ──────────────────────────────────────────
+function renderDailyDisciplineStatus() {
+  const el = document.getElementById('dailyDisciplineStatus');
+  if (!el) return;
+  const now = new Date();
+  const todayDs = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const todayTasks = state.selfReport?.[todayDs] || {};
+
+  // 统计今天固定任务完成情况
+  const fixedIds = DAILY_FIXED.map(t => t.id);
+  const completedFixed = fixedIds.filter(id => _hasFixedTask(todayTasks, id));
+  const completedCount = completedFixed.length;
+  const totalCount = fixedIds.length;
+  const selfCount = completedFixed.filter(id => _getFixedTaskValue(todayTasks, id) === 'self').length;
+
+  // 连续自主天数
+  let streak = 0;
+  const d = new Date(now);
+  for (let i = 0; i < 30; i++) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const tasks = state.selfReport?.[ds];
+    if (!tasks) break;
+    const hits = fixedIds.filter(id => _hasFixedTask(tasks, id));
+    const allSelf = hits.length > 0 && hits.every(id => _getFixedTaskValue(tasks, id) === 'self');
+    if (!allSelf) break;
+    streak++;
+    d.setDate(d.getDate() - 1);
+  }
+
+  let statusText, statusColor, statusBg, statusIcon;
+  if (completedCount === 0) {
+    statusText = '今天还没出击哦，完成一个任务开始记录自律吧！';
+    statusColor = '#999';
+    statusBg = '#f5f5f5';
+    statusIcon = '🥱';
+  } else if (selfCount < completedCount) {
+    statusText = `今天完成 ${completedCount}/${totalCount} 项，其中 ${selfCount} 项是自己想起来的`;
+    statusColor = '#F9A825';
+    statusBg = '#fff8e1';
+    statusIcon = '🌱';
+  } else if (streak >= 3 && completedCount >= Math.ceil(totalCount * 0.65)) {
+    statusText = `⚡ 连续 ${streak} 天全自主！你就是自己的英雄！🌟`;
+    statusColor = '#FF6F00';
+    statusBg = '#FFF3E0';
+    statusIcon = '⚡';
+  } else if (completedCount >= Math.ceil(totalCount * 0.65) && selfCount === completedCount) {
+    statusText = `今天全自主！${completedCount}/${totalCount} 项全部自己想起来 🔥`;
+    statusColor = '#06D6A0';
+    statusBg = '#e8fff5';
+    statusIcon = '🔥';
+  } else {
+    statusText = `今天完成 ${completedCount}/${totalCount} 项，其中 ${selfCount} 项是自己想起来的`;
+    statusColor = '#F9A825';
+    statusBg = '#fff8e1';
+    statusIcon = '🌱';
+  }
+
+  el.innerHTML = `
+    <div style="background:${statusBg};border-radius:12px;padding:10px 14px;margin-bottom:8px;border:1.5px solid ${statusColor};display:flex;align-items:center;gap:10px;">
+      <span style="font-size:1.4rem;">${statusIcon}</span>
+      <span style="font-size:0.85rem;font-weight:600;color:${statusColor};flex:1;">${statusText}</span>
+      ${streak >= 3 ? `<span style="font-size:0.75rem;background:${statusColor};color:#fff;padding:2px 8px;border-radius:20px;">连续${streak}天</span>` : ''}
+    </div>`;
 }
 
 // 渲染早晨英雄包
@@ -3484,30 +3551,42 @@ function renderShop() {
   const el = document.getElementById('shopContent');
   const bUnlocked = isBRewardUnlocked();
 
-  // 自律能量条
+  // 🏅 自律能量条（增强版：10格编号+成就提示+达标庆祝）
   const now = new Date();
   const { rate, selfDays, totalDays } = calcMonthlyDisciplineRate(now.getFullYear(), now.getMonth() + 1);
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const remainDays = daysInMonth - now.getDate();
-  const filled = Math.min(10, Math.round(rate / 10));
-  const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+  const filled = Math.round(rate / 10);
+  const segNums = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+  let barSegs = '';
+  const milestoneMsgs = {1:'起步！', 3:'③过半在望', 5:'⑤半程达成！', 7:'⑦即将解锁', 8:'⑧只差一格！', 10:'⑩完美自律！'};
+  for (let i = 0; i < 10; i++) {
+    const ch = i < filled ? '█' : '░';
+    const isMilestone = i < filled && milestoneMsgs[i+1];
+    barSegs += `<span style="display:inline-block;text-align:center;width:1.5em;${i<filled?'animation: pulseBar 0.6s ease-in-out;':''}">${ch}<br><span style="font-size:0.5rem;line-height:1;">${segNums[i]}</span>${isMilestone?`<br><span style="font-size:0.45rem;color:#06D6A0;">${milestoneMsgs[i+1]}</span>`:''}</span>`;
+  }
   const barHtml = `
-    <div style="background:${bUnlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin-bottom:16px;border:1.5px solid ${bUnlocked?'#06D6A0':'#FFD54F'};">
+    <div style="background:${bUnlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin-bottom:16px;border:1.5px solid ${bUnlocked?'#06D6A0':'#FFD54F'};${bUnlocked?'box-shadow:0 0 20px rgba(6,214,160,0.3);':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条</span>
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条${bUnlocked?' 🎉':''}</span>
         <span style="font-size:1rem;font-weight:700;color:${bUnlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
       </div>
-      <div style="font-family:monospace;font-size:1.15rem;color:${bUnlocked?'#00897B':'#F57F17'};letter-spacing:2px;">${bar}</div>
+      <div style="font-family:monospace;font-size:1.1rem;color:${bUnlocked?'#00897B':'#F57F17'};line-height:1.5;">${barSegs}</div>
       <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.8rem;color:#888;">
         <span>自律天数 ${selfDays}/${totalDays}天</span>
         <span>剩余${remainDays}天</span>
       </div>
       ${bUnlocked
-        ? '<div style="margin-top:6px;font-size:0.88rem;color:#06D6A0;font-weight:700;">✨ 本月自律达标！🔓 自律大奖已解锁！</div>'
-        : rate >= 50
-          ? `<div style="margin-top:6px;font-size:0.82rem;color:#F9A825;">还差${85-rate}%解锁本月自律大奖 💪</div>`
-          : '<div style="margin-top:6px;font-size:0.82rem;color:#aaa;">每天自己主动完成任务，积累自律能量！</div>'
+        ? '<div style="margin-top:8px;padding:8px 12px;background:linear-gradient(135deg,#06D6A0,#00BFA5);color:#fff;border-radius:10px;font-size:0.88rem;font-weight:700;text-align:center;animation: celebratePulse 1s ease-in-out infinite alternate;">🎉 本月自律达标！🔓 自律大奖已解锁！快去兑换吧！</div>'
+        : rate >= 70
+          ? `<div style="margin-top:6px;font-size:0.85rem;color:#F9A825;font-weight:600;">🔥 冲刺阶段！还差${85-rate}%解锁自律大奖！</div>`
+          : rate >= 50
+            ? `<div style="margin-top:6px;font-size:0.82rem;color:#F9A825;">还差${85-rate}%解锁本月自律大奖 💪</div>`
+            : rate > 0
+              ? `<div style="margin-top:6px;font-size:0.82rem;color:#aaa;">每天自己主动完成任务，积累自律能量！已解锁 ${rate}%</div>`
+              : '<div style="margin-top:6px;font-size:0.82rem;color:#aaa;">每天自己主动完成任务，积累自律能量！</div>'
       }
+      <div style="margin-top:8px;text-align:right;font-size:0.75rem;"><a href="javascript:void(0)" onclick="showWeeklyReport()" style="color:#7C3AED;text-decoration:none;">📊 本周自律报告 →</a></div>
     </div>
   `;
 
@@ -5450,19 +5529,20 @@ function calcMonthlyDisciplineRate(year, month) {
   }
 
   // 统计自律天数：65%条件 OR 连续7天每天有self
-  const counted = {};
   let selfDays = 0;
   for (let d = 1; d <= lastDay; d++) {
-    if (counted[d]) continue;
-    if (dayBy65[d]) { selfDays++; counted[d] = true; continue; }
-    let streakOk = d >= 7;
-    for (let k = d - 6; k <= d; k++) {
-      if (!dayHasSelf[k]) { streakOk = false; break; }
+    if (dayBy65[d]) { selfDays++; continue; }
+    // 检查当天是否处于某个连续7天每天有self的窗口内
+    let inStreak = false;
+    const maxW = Math.min(d + 6, lastDay);
+    for (let w = Math.max(d, 7); w <= maxW; w++) {
+      let ok = true;
+      for (let k = w - 6; k <= w; k++) {
+        if (!dayHasSelf[k]) { ok = false; break; }
+      }
+      if (ok) { inStreak = true; break; }
     }
-    if (streakOk) {
-      for (let k = d - 6; k <= d; k++) counted[k] = true;
-      selfDays += 7;
-    }
+    if (inStreak) selfDays++;
   }
 
   const totalDays = lastDay;
@@ -5490,28 +5570,92 @@ function renderDisciplineBar() {
     barSegs += `<span style="display:inline-block;text-align:center;width:1.4em;">${ch}<br><span style="font-size:0.55rem;line-height:1;">${segNums[i]}</span></span>`;
   }
 
-  // ── 诊断信息 ──────────────────────────────────────────
+  // ── 超级诊断 v2 ──────────────────────────────────────
   const prefix = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const diag = [];
+  const fixedIds = DAILY_FIXED.map(t => t.id);
+  const todayDs = `${prefix}-${String(now.getDate()).padStart(2,'0')}`;
+
+  // 全局统计
+  const allDates = state.selfReport ? Object.keys(state.selfReport) : [];
+  let totalTaskEntries = 0;
+  let totalSelfEntries = 0;
+  allDates.forEach(d => {
+    const t = state.selfReport[d];
+    if (t) {
+      totalTaskEntries += Object.keys(t).length;
+      totalSelfEntries += Object.values(t).filter(v => v === 'self').length;
+    }
+  });
+
+  // 日期列表（按月份分组）
+  const datesByMonth = {};
+  allDates.sort().forEach(d => {
+    const m = d.slice(0, 7);
+    if (!datesByMonth[m]) datesByMonth[m] = [];
+    datesByMonth[m].push(d);
+  });
+
+  // 本月逐日诊断
+  const monthDates = [];
   for (let d = 1; d <= now.getDate(); d++) {
     const ds = `${prefix}-${String(d).padStart(2,'0')}`;
     const tasks = state.selfReport?.[ds];
-    if (tasks && Object.keys(tasks).length > 0) {
-      const fixedIds = DAILY_FIXED.map(t => t.id);
-      const hits = fixedIds.filter(id => _hasFixedTask(tasks, id));
-      const allSelf = hits.length > 0 && hits.every(id => _getFixedTaskValue(tasks, id) === 'self');
-      const pct = fixedIds.length > 0 ? Math.round(hits.length / fixedIds.length * 100) : 0;
-      diag.push(`${ds.slice(5)} ${hits.length}/${fixedIds.length}(${pct}%) ${allSelf ? '✓自主' : '✗'}`);
-    }
+    if (tasks && Object.keys(tasks).length > 0) monthDates.push(ds);
   }
-  const diagHTML = diag.length > 0
-    ? `<div style="margin-top:8px;font-size:0.73rem;color:#999;font-family:monospace;line-height:1.4;">📋 ${diag.join(' | ')}</div>`
-    : '<div style="margin-top:8px;font-size:0.73rem;color:#e57373;">⚠️ selfReport 本月无数据 — 完成任务时请点「我自己想起来的」</div>';
+
+  const dayRows = [];
+  for (let d = 1; d <= now.getDate(); d++) {
+    const ds = `${prefix}-${String(d).padStart(2,'0')}`;
+    const tasks = state.selfReport?.[ds];
+    const hasData = tasks && Object.keys(tasks).length > 0;
+    const hits = hasData ? fixedIds.filter(id => _hasFixedTask(tasks, id)) : [];
+    const allSelf = hits.length > 0 && hits.every(id => _getFixedTaskValue(tasks, id) === 'self');
+    const by65 = hasData && hits.length / fixedIds.length >= 0.65 && allSelf;
+    const hasSelfTask = hasData && Object.values(tasks).some(v => v === 'self');
+    const dailyMark = by65 ? '🟢' : (hasSelfTask ? '🟡' : (hasData ? '🔴' : '⚫'));
+    dayRows.push(`${dailyMark}${String(d).padStart(2,'0')}:${by65?'65%✓':'  '} hasSelf:${hasSelfTask?'✓':'✗'} hits:${hits.length}/${fixedIds.length}`);
+  }
+
+  // 今天完整原始键值对
+  const todayTasks = state.selfReport?.[todayDs];
+  const todayKeys = todayTasks ? Object.keys(todayTasks) : [];
+  const rawDump = todayKeys.length > 0
+    ? todayKeys.map(k => `${k.slice(-25)}=${todayTasks[k]}`).join(', ')
+    : '（空）';
+
+  // localStorage 状态
+  let lsSize = '?';
+  try {
+    const raw = localStorage.getItem(STATE_KEY);
+    lsSize = raw ? (raw.length / 1024).toFixed(1) + 'KB' : '不存在';
+  } catch(e) { lsSize = 'err'; }
+
+  const monthSummary = datesByMonth[prefix] ? `${datesByMonth[prefix].length}天有数据` : '本月无数据';
+  const diagHTML = allDates.length > 0
+    ? `<details style="margin-top:6px;font-size:0.65rem;color:#555;font-family:monospace;background:#fafafa;border-radius:8px;padding:8px;max-height:400px;overflow-y:auto;">
+      <summary style="cursor:pointer;font-weight:600;">🔍 超级诊断 | 全局:${allDates.length}日期 ${totalTaskEntries}条记录/${totalSelfEntries}自主 | ${monthSummary} | LS:${lsSize}</summary>
+      <div style="margin-top:4px;line-height:1.5;">
+        <b>📦 selfReport 全局：</b>${allDates.length}个日期，${totalTaskEntries}条记录，${totalSelfEntries}条自主<br>
+        <b>📅 月份分布：</b>${Object.keys(datesByMonth).map(m => m+':'+datesByMonth[m].length+'天').join(' ')}<br>
+        <b>本月逐日（${prefix}）：</b><br>${dayRows.join('<br>')}<br>
+        <b>🔑 今天(${todayDs}) raw keys:</b> ${rawDump}<br>
+        <span style="color:#888;">🟢=65%通过 🟡=有self不足65% 🔴=无self ⚫=无数据</span>
+      </div>
+      </details>`
+    : `<details style="margin-top:6px;font-size:0.65rem;color:#e57373;font-family:monospace;background:#fff5f5;border-radius:8px;padding:8px;">
+      <summary style="cursor:pointer;font-weight:700;color:#c62828;">⚠️ selfReport 全局为空！ | LS:${lsSize}</summary>
+      <div style="margin-top:4px;line-height:1.5;">
+        没有任何自律数据。请确认：<br>
+        1. 完成任务时是否弹出了「我自己想起来的/提醒了我」的弹窗？<br>
+        2. 是否点击了弹窗中的按钮？<br>
+        <button onclick="(function(){var t=state.selfReport||{};t['${todayDs}']={'test_write_'+Date.now().toString(36):'self'};state.selfReport=t;saveState();renderDisciplineBar();alert('测试写入完成，刷新诊断面板查看')})()" style="margin-top:4px;padding:4px 10px;font-size:0.7rem;border:1px solid #c62828;border-radius:4px;background:#fff;color:#c62828;">🩺 测试写入</button>
+      </div>
+      </details>`;
 
   el.innerHTML = `
     <div class="discipline-bar-wrap" style="background:${unlocked?'#e8fff5':'#fff8e1'};border-radius:14px;padding:14px 16px;margin:10px 0;border:1.5px solid ${unlocked?'#06D6A0':'#FFD54F'};">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style="font-size:0.65rem;color:#bbb;">v118</span></span>
+        <span style="font-weight:700;font-size:0.95rem;color:#1a1a2e;">🏅 本月自律能量条 <span style=\"font-size:0.65rem;color:#bbb;\">v121</span></span>
         <span style="font-size:1rem;font-weight:700;color:${unlocked?'#06D6A0':'#F9A825'};">${rate}%</span>
       </div>
       <div style="font-family:monospace;font-size:1.1rem;color:${unlocked?'#00897B':'#F57F17'};line-height:1.5;">${barSegs}</div>
@@ -5531,6 +5675,109 @@ function renderDisciplineBar() {
       ${diagHTML}
     </div>
   `;
+}
+
+// ── 每周自律报告 ────────────────────────────────────────────
+function showWeeklyReport() {
+  const modal = document.getElementById('weeklyReportModal');
+  if (!modal) return;
+  renderWeeklyReportContent();
+  modal.style.display = 'flex';
+}
+function closeWeeklyReport() {
+  const modal = document.getElementById('weeklyReportModal');
+  if (modal) modal.style.display = 'none';
+}
+function renderWeeklyReportContent() {
+  const el = document.getElementById('weeklyReportContent');
+  if (!el) return;
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=周日
+  // 本周一
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  // 上周一
+  const lastMonday = new Date(monday);
+  lastMonday.setDate(monday.getDate() - 7);
+
+  const fixedIds = DAILY_FIXED.map(t => t.id);
+  function dayStats(d) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const tasks = state.selfReport?.[ds] || {};
+    const hits = fixedIds.filter(id => _hasFixedTask(tasks, id));
+    const selfCount = hits.filter(id => _getFixedTaskValue(tasks, id) === 'self').length;
+    return { total: fixedIds.length, done: hits.length, self: selfCount, allSelf: hits.length > 0 && selfCount === hits.length };
+  }
+
+  // 本周统计
+  let thisWeekSelfDays = 0, thisWeekBestDay = null, thisWeekBestSelf = 0;
+  const thisWeekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    if (d > now) break;
+    const s = dayStats(d);
+    thisWeekDays.push({ date: d, ...s });
+    if (s.allSelf) thisWeekSelfDays++;
+    if (s.self > thisWeekBestSelf) { thisWeekBestSelf = s.self; thisWeekBestDay = d; }
+  }
+  const totalDays = thisWeekDays.length;
+
+  // 上周统计
+  let lastWeekSelfDays = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(lastMonday);
+    d.setDate(lastMonday.getDate() + i);
+    const s = dayStats(d);
+    if (s.allSelf) lastWeekSelfDays++;
+  }
+
+  const diff = thisWeekSelfDays - lastWeekSelfDays;
+  const trendEmoji = diff > 0 ? '📈' : diff < 0 ? '📉' : '➡️';
+  const trendText = diff > 0 ? `比上周多 ${diff} 天` : diff < 0 ? `比上周少 ${Math.abs(diff)} 天` : '和上周一样';
+
+  const dayLabels = ['日','一','二','三','四','五','六'];
+  const daysHTML = thisWeekDays.map(s => {
+    const isToday = s.date.toDateString() === now.toDateString();
+    const bg = s.allSelf ? '#e8fff5' : s.self > 0 ? '#fff8e1' : '#f5f5f5';
+    const edge = s.allSelf ? '#06D6A0' : s.self > 0 ? '#F9A825' : '#ddd';
+    return `<div style="background:${bg};border:1.5px solid ${edge};border-radius:10px;padding:8px;text-align:center;${isToday?'font-weight:700;':''}">
+      <div style="font-size:0.7rem;color:#888;">${dayLabels[s.date.getDay()]}${isToday?'⭐':''}</div>
+      <div style="font-size:1.1rem;">${s.allSelf ? '🔥' : s.self > 0 ? '💪' : '—'}</div>
+      <div style="font-size:0.7rem;color:#888;">${s.self}/${s.total}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="text-align:center;padding:4px 0 12px;">
+      <div style="font-size:1.5rem;margin-bottom:4px;">📊</div>
+      <div style="font-weight:700;font-size:1.05rem;color:#1a1a2e;">本周自律报告</div>
+      <div style="font-size:0.78rem;color:#aaa;">${monday.getMonth()+1}/${monday.getDate()} - ${now.getMonth()+1}/${now.getDate()}</div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;">${daysHTML}</div>
+    <div style="background:#f8f4ff;border-radius:12px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.85rem;color:#555;">🏅 本周全自主天数</span>
+        <span style="font-size:1.3rem;font-weight:700;color:#7C3AED;">${thisWeekSelfDays}<span style="font-size:0.8rem;color:#aaa;">/${totalDays}天</span></span>
+      </div>
+      <div style="margin-top:4px;font-size:0.78rem;color:#999;">${trendEmoji} ${trendText}</div>
+    </div>
+    ${thisWeekBestDay ? `
+    <div style="background:#e8fff5;border-radius:12px;padding:12px 14px;margin-bottom:10px;">
+      <span style="font-size:0.85rem;color:#555;">⭐ 本周最佳</span>
+      <div style="font-size:0.95rem;font-weight:600;color:#06D6A0;">${thisWeekBestDay.getMonth()+1}/${thisWeekBestDay.getDate()} · ${thisWeekBestSelf}/${fixedIds.length} 项全自主</div>
+    </div>` : ''}
+    <div style="font-size:0.78rem;color:#aaa;text-align:center;margin-bottom:8px;">每天自己想起来完成任务，自律能量就会增长！</div>
+    <button onclick="closeWeeklyReport()" style="width:100%;padding:12px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:0.95rem;font-weight:600;">知道了，继续加油！💪</button>
+  `;
+}
+function checkWeeklyReport() {
+  const now = new Date();
+  if (now.getDay() !== 0) return; // 仅周日自动弹出
+  if (state._lastWeeklyReportDate === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`) return;
+  state._lastWeeklyReportDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  saveState();
+  setTimeout(() => showWeeklyReport(), 1200);
 }
 
 
