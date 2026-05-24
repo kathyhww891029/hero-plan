@@ -2,7 +2,9 @@
 // 策略：网络优先生效 + 缓存离线兜底
 // 注册时由 index.html 传入 BUILD_VERSION query string 控制更新
 
-const CACHE_NAME = 'hero-plan-v31';
+// 从注册 URL 的 query string 自动提取版本号（如 sw.js?v=31 → v31）
+// BUILD_VERSION 变更时 CACHE_NAME 自动跟随，无需手动同步
+const CACHE_NAME = 'hero-plan-' + ((self.location.search.match(/[?&]v=([^&]+)/) || [])[1] || 'v0');
 
 self.addEventListener('install', (event) => {
   console.log('[SW] install');

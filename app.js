@@ -3166,7 +3166,8 @@ function bindEvents() {
       state.focusSeconds = 0;
       state.focusTimerRunning = false;
       if (_focusTimer) { clearInterval(_focusTimer); _focusTimer = null; }
-      state.selfReport = {};
+      // 只清除今天的自律记录，保留历史数据（否则月度自律率统计会崩）
+      if (state.selfReport) delete state.selfReport[today];
       // 同步清除 Firebase 上当天的 pending 记录
       if (isFirebaseReady() && typeof clearPendingByDate === 'function') {
         clearPendingByDate(today);
